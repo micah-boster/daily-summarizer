@@ -45,11 +45,11 @@ Plans:
   2. The daily output includes all Google Calendar events for the target date with title, time, attendees, and duration
   3. The output file is scannable in under 2 minutes (calendar-only days have less content)
   4. The Pydantic data models (NormalizedEvent, DailySynthesis) validate and serialize correctly
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: Project scaffolding, data models, and output writer
-- [ ] 01-02: Google Calendar ingestion module
+- [ ] 01-01-PLAN.md — Pydantic data models, Jinja2 output writer, YAML config, CLI entry point
+- [ ] 01-02-PLAN.md — Google Calendar ingestion module with event normalization and end-to-end pipeline wiring
 
 ### Phase 2: Transcript Ingestion and Normalization
 **Goal**: Ingest meeting transcripts from both sources and link them to calendar events so synthesis has complete, deduplicated, noise-filtered input data
