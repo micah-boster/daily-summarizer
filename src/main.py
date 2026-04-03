@@ -258,6 +258,7 @@ def run_daily(args: argparse.Namespace) -> None:
                 )
             else:
                 # No credentials: produce empty summary
+                extractions = []
                 synthesis = DailySynthesis(
                     date=current,
                     generated_at=datetime.now(timezone.utc),
@@ -306,6 +307,15 @@ def run_daily(args: argparse.Namespace) -> None:
                 logger.info("Saved raw output -> %s", raw_path)
             except Exception as e:
                 logger.warning("Quality tracking (save) failed: %s", e)
+
+            # JSON sidecar: structured data output for downstream tools
+            try:
+                from src.output.writer import write_daily_sidecar
+
+                sidecar_path = write_daily_sidecar(synthesis, extractions, output_dir)
+                logger.info("Wrote JSON sidecar -> %s", sidecar_path)
+            except Exception as e:
+                logger.warning("Sidecar generation failed: %s. Daily summary still written.", e)
 
         except Exception as e:
             logger.error("Failed to process %s: %s", current, e)
