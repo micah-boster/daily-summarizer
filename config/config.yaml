@@ -27,3 +27,8 @@ transcripts:
     include_unmatched_events: true
   preprocessing:
     strip_filler: true
+
+synthesis:
+  model: "claude-sonnet-4-20250514"
+  extraction_max_output_tokens: 4096
+  synthesis_max_output_tokens: 8192

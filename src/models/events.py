@@ -59,6 +59,9 @@ class DailySynthesis(BaseModel):
     declined_events: list[NormalizedEvent] = Field(default_factory=list)
     cancelled_events: list[NormalizedEvent] = Field(default_factory=list)
     unmatched_transcripts: list[dict] = Field(default_factory=list)
+    executive_summary: str | None = None
+    extractions: list = Field(default_factory=list)  # List of MeetingExtraction objects
+    meetings_without_transcripts: list[NormalizedEvent] = Field(default_factory=list)
     substance: Section = Field(default_factory=lambda: Section(title="Substance"))
     decisions: Section = Field(default_factory=lambda: Section(title="Decisions"))
     commitments: Section = Field(default_factory=lambda: Section(title="Commitments"))

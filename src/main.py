@@ -137,6 +137,39 @@ def main() -> None:
                     1 for e in active_events if e.transcript_text is not None
                 )
 
+                # --- Stage 1: Per-meeting extraction ---
+                extractions: list = []
+                try:
+                    from src.synthesis.extractor import extract_all_meetings
+
+                    events_with_transcripts = [e for e in active_events if e.transcript_text]
+                    if events_with_transcripts:
+                        extractions = extract_all_meetings(events_with_transcripts, config)
+                        logger.info("Extracted %d meetings", len(extractions))
+                except Exception as e:
+                    logger.warning("Extraction failed: %s. Continuing without synthesis.", e)
+
+                # --- Stage 2: Daily synthesis ---
+                synthesis_result: dict = {
+                    "substance": [],
+                    "decisions": [],
+                    "commitments": [],
+                    "executive_summary": None,
+                }
+                try:
+                    from src.synthesis.synthesizer import synthesize_daily
+
+                    if extractions:
+                        synthesis_result = synthesize_daily(extractions, current, config)
+                        logger.info("Daily synthesis complete")
+                except Exception as e:
+                    logger.warning("Synthesis failed: %s. Continuing with empty synthesis.", e)
+
+                # --- Build meetings without transcripts list ---
+                meetings_without_transcripts = [
+                    e for e in active_events if e.transcript_text is None
+                ]
+
                 synthesis = DailySynthesis(
                     date=current,
                     generated_at=datetime.now(timezone.utc),
@@ -148,9 +181,21 @@ def main() -> None:
                     declined_events=categorized["declined_events"],
                     cancelled_events=categorized["cancelled_events"],
                     unmatched_transcripts=unmatched,
-                    substance=Section(title="Substance"),
-                    decisions=Section(title="Decisions"),
-                    commitments=Section(title="Commitments"),
+                    executive_summary=synthesis_result.get("executive_summary"),
+                    extractions=extractions,
+                    meetings_without_transcripts=meetings_without_transcripts,
+                    substance=Section(
+                        title="Substance",
+                        items=synthesis_result.get("substance", []),
+                    ),
+                    decisions=Section(
+                        title="Decisions",
+                        items=synthesis_result.get("decisions", []),
+                    ),
+                    commitments=Section(
+                        title="Commitments",
+                        items=synthesis_result.get("commitments", []),
+                    ),
                 )
             else:
                 # No credentials: produce empty summary

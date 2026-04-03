@@ -82,9 +82,12 @@ def write_daily_summary(
         timed_events=synthesis.timed_events,
         declined_events=synthesis.declined_events,
         cancelled_events=synthesis.cancelled_events,
+        executive_summary=synthesis.executive_summary,
         substance=synthesis.substance,
         decisions=synthesis.decisions,
         commitments=synthesis.commitments,
+        meetings_without_transcripts=synthesis.meetings_without_transcripts,
+        extractions=synthesis.extractions,
     )
 
     # Build output path: output_dir/daily/YYYY/MM/YYYY-MM-DD.md

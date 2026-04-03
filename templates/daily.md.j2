@@ -12,6 +12,53 @@
 
 {% endfor %}
 {% endif %}
+{% if executive_summary %}
+## Executive Summary
+
+{{ executive_summary }}
+
+{% endif %}
+## Substance
+
+{% if substance.items %}
+{% for item in substance.items %}
+- {{ item }}
+
+{% endfor %}
+{% else %}
+No transcript data available yet.
+
+{% endif %}
+## Decisions
+
+{% if decisions.items %}
+{% for item in decisions.items %}
+- {{ item }}
+
+{% endfor %}
+{% else %}
+No transcript data available yet.
+
+{% endif %}
+## Commitments
+
+{% if commitments.items %}
+{% for item in commitments.items %}
+- {{ item }}
+
+{% endfor %}
+{% else %}
+No transcript data available yet.
+
+{% endif %}
+{% if meetings_without_transcripts %}
+## Meetings Without Transcripts
+
+{% for event in meetings_without_transcripts %}
+**{{ event.title }}**, {{ event.start_time|format_time }}–{{ event.end_time|format_time }} ({{ event.duration_minutes|format_duration }}).{% if event.attendees|format_attendees %} With {{ event.attendees|format_attendees }}.{% endif %}
+
+{% endfor %}
+{% endif %}
 ## Calendar
 
 {% if timed_events %}
@@ -39,38 +86,42 @@ No timed events for this day.
 
 {% endfor %}
 {% endif %}
-## Substance
+{% if extractions %}
+---
 
-{% if substance.items %}
-{% for item in substance.items %}
-{{ item }}
+## Per-Meeting Extractions
 
+{% for ext in extractions %}
+{% if not ext.low_signal %}
+### {{ ext.meeting_title }} ({{ ext.meeting_time }})
+
+{% if ext.decisions %}**Decisions:**
+{% for d in ext.decisions %}- {{ d.content }}{% if d.participants %} ({{ d.participants|join(', ') }}){% endif %}{% if d.rationale %} — {{ d.rationale }}{% endif %}
 {% endfor %}
-{% else %}
-No transcript data available yet.
 
 {% endif %}
-## Decisions
-
-{% if decisions.items %}
-{% for item in decisions.items %}
-{{ item }}
-
+{% if ext.commitments %}**Commitments:**
+{% for c in ext.commitments %}- {{ c.content }}{% if c.participants %} ({{ c.participants|join(', ') }}){% endif %}{% if c.rationale %} — {{ c.rationale }}{% endif %}
 {% endfor %}
-{% else %}
-No transcript data available yet.
 
 {% endif %}
-## Commitments
-
-{% if commitments.items %}
-{% for item in commitments.items %}
-{{ item }}
-
+{% if ext.substance %}**Substance:**
+{% for s in ext.substance %}- {{ s.content }}{% if s.participants %} ({{ s.participants|join(', ') }}){% endif %}
 {% endfor %}
-{% else %}
-No transcript data available yet.
 
+{% endif %}
+{% if ext.open_questions %}**Open Questions:**
+{% for q in ext.open_questions %}- {{ q.content }}{% if q.participants %} ({{ q.participants|join(', ') }}){% endif %}
+{% endfor %}
+
+{% endif %}
+{% if ext.tensions %}**Tensions:**
+{% for t in ext.tensions %}- {{ t.content }}{% if t.participants %} ({{ t.participants|join(', ') }}){% endif %}{% if t.rationale %} — {{ t.rationale }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% endif %}
+{% endfor %}
 {% endif %}
 ---
 
