@@ -298,7 +298,7 @@ def _parse_thread_section(
             tags_str = stripped.split(":", 1)[1].strip().strip("*").strip()
             tags = [t.strip() for t in tags_str.split(",") if t.strip()]
 
-        elif stripped.startswith("- **") and ":**" in stripped:
+        elif stripped.startswith("- **") and "):" in stripped:
             # Entry: "- **Monday, April 3** (decision): Content here"
             entry = _parse_thread_entry(stripped, summaries)
             if entry:

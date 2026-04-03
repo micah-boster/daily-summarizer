@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import calendar
+import os
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
@@ -37,8 +39,22 @@ def _format_duration(minutes: int | None) -> str:
     return f"{minutes} min"
 
 
+def _format_date(d) -> str:
+    """Format date to 'Mon, Apr 3' style string."""
+    if d is None:
+        return ""
+    return d.strftime("%a, %b %-d")
+
+
+def _format_month_name(month_num) -> str:
+    """Convert month number (1-12) to full month name."""
+    if month_num is None or not isinstance(month_num, int):
+        return ""
+    return calendar.month_name[month_num]
+
+
 def create_jinja_env(template_dir: Path) -> Environment:
-    """Create Jinja2 environment with custom filters for daily summary rendering."""
+    """Create Jinja2 environment with custom filters for summary rendering."""
     env = Environment(
         loader=FileSystemLoader(str(template_dir)),
         trim_blocks=True,
@@ -48,6 +64,8 @@ def create_jinja_env(template_dir: Path) -> Environment:
     env.filters["format_time"] = _format_time
     env.filters["format_attendees"] = _format_attendees
     env.filters["format_duration"] = _format_duration
+    env.filters["format_date"] = _format_date
+    env.filters["format_month_name"] = _format_month_name
     return env
 
 
@@ -98,3 +116,127 @@ def write_daily_summary(
 
     file_path.write_text(rendered, encoding="utf-8")
     return file_path
+
+
+def write_weekly_summary(
+    synthesis,
+    output_dir: Path,
+    template_dir: Path,
+) -> Path:
+    """Render a WeeklySynthesis to markdown and write to the output directory.
+
+    Creates directory structure: output_dir/weekly/YYYY/YYYY-WXX.md
+    Overwrites if file exists (latest run wins).
+
+    Args:
+        synthesis: The WeeklySynthesis data to render.
+        output_dir: Base output directory.
+        template_dir: Directory containing Jinja2 templates.
+
+    Returns:
+        Path to the written markdown file.
+    """
+    env = create_jinja_env(template_dir)
+    template = env.get_template("weekly.md.j2")
+
+    rendered = template.render(
+        week_number=synthesis.week_number,
+        year=synthesis.year,
+        start_date=synthesis.start_date,
+        end_date=synthesis.end_date,
+        generated_at=synthesis.generated_at,
+        daily_count=synthesis.daily_count,
+        is_partial=synthesis.is_partial,
+        meeting_count=synthesis.meeting_count,
+        total_meeting_hours=synthesis.total_meeting_hours,
+        threads=synthesis.threads,
+        single_day_items=synthesis.single_day_items,
+        still_open=synthesis.still_open,
+    )
+
+    file_dir = output_dir / "weekly" / str(synthesis.year)
+    file_dir.mkdir(parents=True, exist_ok=True)
+    file_path = file_dir / f"{synthesis.year}-W{synthesis.week_number:02d}.md"
+
+    file_path.write_text(rendered, encoding="utf-8")
+    return file_path
+
+
+def write_monthly_summary(
+    synthesis,
+    output_dir: Path,
+    template_dir: Path,
+) -> Path:
+    """Render a MonthlySynthesis to markdown and write to the output directory.
+
+    Creates directory structure: output_dir/monthly/YYYY/YYYY-MM.md
+    Overwrites if file exists (latest run wins).
+
+    Args:
+        synthesis: The MonthlySynthesis data to render.
+        output_dir: Base output directory.
+        template_dir: Directory containing Jinja2 templates.
+
+    Returns:
+        Path to the written markdown file.
+    """
+    env = create_jinja_env(template_dir)
+    template = env.get_template("monthly.md.j2")
+
+    rendered = template.render(
+        month=synthesis.month,
+        month_name=calendar.month_name[synthesis.month],
+        year=synthesis.year,
+        generated_at=synthesis.generated_at,
+        weekly_count=synthesis.weekly_count,
+        thematic_arcs=synthesis.thematic_arcs,
+        strategic_shifts=synthesis.strategic_shifts,
+        emerging_risks=synthesis.emerging_risks,
+        metrics=synthesis.metrics,
+        still_open=synthesis.still_open,
+    )
+
+    file_dir = output_dir / "monthly" / str(synthesis.year)
+    file_dir.mkdir(parents=True, exist_ok=True)
+    file_path = file_dir / f"{synthesis.year}-{synthesis.month:02d}.md"
+
+    file_path.write_text(rendered, encoding="utf-8")
+    return file_path
+
+
+def insert_weekly_backlinks(weekly_path: Path, daily_paths: list[Path]) -> int:
+    """Insert backlinks from daily files to their parent weekly summary.
+
+    Idempotent: checks if backlink already exists before inserting.
+
+    Args:
+        weekly_path: Path to the weekly summary file.
+        daily_paths: List of paths to daily summary files.
+
+    Returns:
+        Count of backlinks inserted (0 if all already present).
+    """
+    inserted = 0
+
+    for daily_path in daily_paths:
+        if not daily_path.exists():
+            continue
+
+        content = daily_path.read_text(encoding="utf-8")
+
+        # Check if backlink already exists
+        if "Part of [Weekly" in content:
+            continue
+
+        # Compute relative path from daily file to weekly file
+        rel_path = os.path.relpath(weekly_path, daily_path.parent)
+
+        # Get week identifier from weekly filename
+        week_name = weekly_path.stem  # e.g., "2026-W14"
+
+        backlink = f"> Part of [Weekly {week_name}]({rel_path})\n\n"
+        content = backlink + content
+        daily_path.write_text(content, encoding="utf-8")
+        inserted += 1
+
+    return inserted

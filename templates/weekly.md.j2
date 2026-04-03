@@ -1,0 +1,51 @@
+# Weekly Summary: Week {{ week_number }}, {{ year }}
+
+**{{ start_date|format_date }} – {{ end_date|format_date }}**
+
+{% if is_partial %}
+> **Partial week:** {{ daily_count }} of 5 business days
+
+{% endif %}
+## Overview
+
+{{ daily_count }} daily summaries, {{ meeting_count }} meeting{{ "s" if meeting_count != 1 else "" }}, {{ "%.1f"|format(total_meeting_hours) }} hours of meetings.
+
+{% if threads %}
+{% for thread in threads %}
+## {{ thread.title }}
+
+**Significance:** {{ thread.significance }} | **Status:** {{ thread.status }}
+{% if thread.tags %}**Tags:** {{ thread.tags|join(", ") }}{% endif %}
+
+{% for entry in thread.entries %}
+- **{{ entry.date|format_date }}** ({{ entry.category }}): {{ entry.content }}
+{% endfor %}
+
+{% if thread.progression %}
+**Progression:** {{ thread.progression }}
+{% endif %}
+
+{% endfor %}
+{% else %}
+No threads detected this week.
+
+{% endif %}
+{% if single_day_items %}
+## Other Notable Items
+
+{% for item in single_day_items %}
+- **{{ item.date|format_date }}** ({{ item.category }}): {{ item.content }}
+{% endfor %}
+
+{% endif %}
+{% if still_open %}
+## Still Open
+
+{% for item in still_open %}
+- {{ item.content }}{% if item.get("owner") %} | **Owner:** {{ item.owner }}{% endif %}{% if item.get("since") %} | **Since:** {{ item.since }}{% endif %}
+{% endfor %}
+
+{% endif %}
+---
+
+*Generated: {{ generated_at }}*

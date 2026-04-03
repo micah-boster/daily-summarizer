@@ -32,3 +32,5 @@ synthesis:
   model: "claude-sonnet-4-20250514"
   extraction_max_output_tokens: 4096
   synthesis_max_output_tokens: 8192
+  weekly_max_output_tokens: 8192
+  monthly_max_output_tokens: 8192
