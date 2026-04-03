@@ -61,12 +61,12 @@ Plans:
   3. Unmatched transcripts (no calendar event) and unmatched calendar events (no transcript) are surfaced explicitly in the normalized output rather than silently dropped
   4. Duplicate events from overlapping sources are merged into single normalized records
   5. Raw ingestion data is cached to `output/raw/` for debugging and reprocessing
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: Gmail transcript ingestion (Gemini format)
-- [ ] 02-02: Gong transcript ingestion (email fallback)
-- [ ] 02-03: Normalization pipeline with calendar-transcript linking
+- [ ] 02-01-PLAN.md — Gmail API utilities, Gemini transcript parser, filler stripping
+- [ ] 02-02-PLAN.md — Gong transcript parser, combined fetch function
+- [ ] 02-03-PLAN.md — Normalization pipeline with calendar-transcript linking, deduplication, pipeline wiring
 
 ### Phase 3: Two-Stage Synthesis Pipeline
 **Goal**: Deliver the core daily intelligence brief that answers the three synthesis questions with source-attributed evidence and no evaluative language
