@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-23)
 
 **Core value:** Every morning I open a structured daily summary of yesterday's work and find it accurate, useful, and worth 5 minutes of my time -- without having produced it manually.
-**Current focus:** Phase 0: Execution Model Validation
+**Current focus:** Phase 1: Foundation and Calendar Ingestion
 
 ## Current Position
 
-Phase: 0 of 5 (Execution Model Validation) -- COMPLETE
-Plan: 2 of 2 in current phase (all plans complete)
-Status: Phase Complete
-Last activity: 2026-04-02 -- Completed 00-02-PLAN.md (operational docs and execution model validation)
+Phase: 1 of 5 (Foundation and Calendar Ingestion)
+Plan: 1 of 2 in current phase
+Status: In Progress
+Last activity: 2026-04-03 -- Completed 01-01-PLAN.md (foundation models, writer, config, CLI)
 
-Progress: [██░░░░░░░░] 14%
+Progress: [███░░░░░░░] 28%
 
 ## Performance Metrics
 
@@ -49,6 +49,7 @@ Progress: [██░░░░░░░░] 14%
 *Updated after each plan completion*
 | Phase 00 P01 | multi-session | 2 tasks | 12 files |
 | Phase 00 P02 | multi-session | 2 tasks | 2 files |
+| Phase 01 P01 | 4 min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02
-Stopped at: Completed 00-02-PLAN.md (Phase 0 complete)
+Last session: 2026-04-03
+Stopped at: Completed 01-01-PLAN.md (continuing to 01-02)
 Resume file: None

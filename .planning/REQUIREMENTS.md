@@ -49,7 +49,7 @@
 | SYNTH-02 | Phase 3 | Pending |
 | SYNTH-03 | Phase 3 | Pending |
 | SYNTH-04 | Phase 3 | Pending |
-| OUT-01 | Phase 1 | Pending |
+| OUT-01 | Phase 1 | Complete |
 | OUT-02 | Phase 3 | Pending |
 | TEMP-01 | Phase 4 | Pending |
 | TEMP-02 | Phase 4 | Pending |
