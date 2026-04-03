@@ -95,11 +95,11 @@ Plans:
   2. The weekly roll-up identifies the 3-5 most significant threads of the week with progression from first mention to current status
   3. A monthly narrative synthesizes 4 weekly summaries into thematic arcs, emerging risks, and strategic shifts -- not a longer list of everything
   4. Roll-up structure is consistent with daily structure (same categories, different granularity)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: Weekly roll-up pipeline with thread tracking
-- [ ] 04-02: Monthly narrative synthesis
+- [ ] 04-01-PLAN.md -- Weekly roll-up pipeline: thread detection, weekly template, CLI subcommand, backlinks
+- [ ] 04-02-PLAN.md -- Monthly narrative synthesis: thematic arcs, metrics, CLI subcommand
 
 ### Phase 5: Feedback and Refinement
 **Goal**: The pipeline improves over time through explicit priority configuration, quality tracking, and structured data output for downstream use
