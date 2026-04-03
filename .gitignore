@@ -1,0 +1,18 @@
+# Credentials and secrets
+.credentials/
+.env
+
+# Output data
+output/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# UV
+uv.lock
+
+# OS
+.DS_Store

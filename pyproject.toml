@@ -1,0 +1,13 @@
+[project]
+name = "daily-summarizer"
+version = "0.1.0"
+description = "Work intelligence pipeline: daily summaries from calendar, email, and meeting data"
+requires-python = ">=3.12"
+dependencies = [
+    "google-api-python-client>=2.193.0",
+    "google-auth>=2.49.1",
+    "google-auth-httplib2>=0.3.1",
+    "google-auth-oauthlib>=1.3.1",
+    "httpx>=0.28.1",
+    "python-dateutil>=2.9.0.post0",
+]
