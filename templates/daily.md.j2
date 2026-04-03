@@ -1,0 +1,77 @@
+# Daily Summary: {{ date }}
+
+## Overview
+
+{{ meeting_count }} meeting{{ "s" if meeting_count != 1 else "" }}, {{ "%.1f"|format(total_meeting_hours) }} hours of meetings, {{ transcript_count }} transcript{{ "s" if transcript_count != 1 else "" }} available.
+
+{% if all_day_events %}
+## All-Day Events
+
+{% for event in all_day_events %}
+**{{ event.title }}**{% if event.event_type != "default" %} ({{ event.event_type }}){% endif %}.{% if event.description %} {{ event.description[:200] }}{% endif %}
+
+{% endfor %}
+{% endif %}
+## Calendar
+
+{% if timed_events %}
+{% for event in timed_events %}
+**{{ event.title }}**, {{ event.start_time|format_time }}–{{ event.end_time|format_time }} ({{ event.duration_minutes|format_duration }}).{% if event.attendees|format_attendees %} With {{ event.attendees|format_attendees }}.{% endif %}{% if event.is_recurring %} [Recurring]{% endif %}{% if event.description %} {{ event.description[:200] }}{% endif %}{% if event.meeting_link %} Meeting link: {{ event.meeting_link }}{% endif %}
+
+{% endfor %}
+{% else %}
+No timed events for this day.
+
+{% endif %}
+{% if declined_events %}
+## Declined
+
+{% for event in declined_events %}
+**{{ event.title }}**, {{ event.start_time|format_time }}–{{ event.end_time|format_time }} ({{ event.duration_minutes|format_duration }}).{% if event.attendees|format_attendees %} With {{ event.attendees|format_attendees }}.{% endif %}{% if event.is_recurring %} [Recurring]{% endif %}
+
+{% endfor %}
+{% endif %}
+{% if cancelled_events %}
+## Cancelled
+
+{% for event in cancelled_events %}
+**{{ event.title }}**{% if event.start_time %}, {{ event.start_time|format_time }}–{{ event.end_time|format_time }}{% endif %}.{% if event.is_recurring %} [Recurring]{% endif %}
+
+{% endfor %}
+{% endif %}
+## Substance
+
+{% if substance.items %}
+{% for item in substance.items %}
+{{ item }}
+
+{% endfor %}
+{% else %}
+No transcript data available yet.
+
+{% endif %}
+## Decisions
+
+{% if decisions.items %}
+{% for item in decisions.items %}
+{{ item }}
+
+{% endfor %}
+{% else %}
+No transcript data available yet.
+
+{% endif %}
+## Commitments
+
+{% if commitments.items %}
+{% for item in commitments.items %}
+{{ item }}
+
+{% endfor %}
+{% else %}
+No transcript data available yet.
+
+{% endif %}
+---
+
+*Generated: {{ generated_at }}*

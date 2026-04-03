@@ -1,0 +1,8 @@
+pipeline:
+  timezone: "America/New_York"
+  output_dir: "output"
+
+calendars:
+  ids:
+    - "primary"
+  exclude_patterns: []

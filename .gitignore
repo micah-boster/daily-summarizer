@@ -3,7 +3,7 @@
 .env
 
 # Output data
-output/
+/output/
 
 # Python
 __pycache__/
