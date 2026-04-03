@@ -79,12 +79,12 @@ Plans:
   4. The daily summary answers "What tasks/commitments were created, completed, or deferred?" with owners and deadlines where stated
   5. Every summary item traces back to a specific meeting via inline source citation (meeting title + date)
   6. The output contains zero evaluative language about individuals -- only actions, quotes, outcomes, and timestamps
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: Per-meeting extraction prompts and pipeline
-- [ ] 03-02: Daily cross-meeting synthesis prompts and pipeline
-- [ ] 03-03: Evidence-only validation and source attribution enforcement
+- [ ] 03-01-PLAN.md — Per-meeting extraction models, prompts, and extractor module with Claude API integration
+- [ ] 03-02-PLAN.md — Evidence-only language validator with banned pattern detection and source attribution checking
+- [ ] 03-03-PLAN.md — Daily cross-meeting synthesizer, template update with appendix, and full pipeline wiring
 
 ### Phase 4: Temporal Roll-Ups
 **Goal**: Users can review weekly and monthly intelligence that traces threads across days rather than just concatenating summaries
