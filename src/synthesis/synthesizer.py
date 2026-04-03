@@ -32,6 +32,8 @@ Number of meetings with transcripts: {transcript_count}
 
 {extractions_text}
 
+{priority_context}
+
 Produce a daily summary with these exact sections:
 
 {executive_summary_instruction}## Substance
@@ -223,11 +225,24 @@ def synthesize_daily(
     if transcript_count >= 5:
         exec_instruction = EXECUTIVE_SUMMARY_INSTRUCTION
 
+    # Build priority context for prompt injection
+    priority_context = ""
+    try:
+        from src.priorities import build_priority_context, load_priorities
+
+        priorities = load_priorities()
+        priority_context = build_priority_context(priorities, substantive)
+        if priority_context:
+            logger.info("Priority context injected into synthesis prompt")
+    except Exception as e:
+        logger.warning("Priority loading failed: %s. Continuing without priorities.", e)
+
     prompt = SYNTHESIS_PROMPT.format(
         date=target_date.isoformat(),
         transcript_count=transcript_count,
         extractions_text=extractions_text,
         executive_summary_instruction=exec_instruction,
+        priority_context=priority_context,
     )
 
     # Get model settings from config

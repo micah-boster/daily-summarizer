@@ -269,6 +269,25 @@ def run_daily(args: argparse.Namespace) -> None:
                     commitments=Section(title="Commitments"),
                 )
 
+            # Quality tracking: detect edits on previous raw output before overwriting
+            try:
+                from src.quality import detect_edits, save_raw_output, update_quality_report
+
+                edit_result = detect_edits(current, output_dir)
+                if edit_result is not None:
+                    report_path = update_quality_report(edit_result, output_dir)
+                    if edit_result["edited"]:
+                        logger.info(
+                            "Edit detected for %s: similarity=%.0f%%, sections=%s",
+                            current,
+                            edit_result["similarity"] * 100,
+                            ", ".join(edit_result["sections_changed"]) or "none",
+                        )
+                    else:
+                        logger.info("No edits detected for %s", current)
+            except Exception as e:
+                logger.warning("Quality tracking (detect) failed: %s", e)
+
             path = write_daily_summary(synthesis, output_dir, template_dir)
             logger.info(
                 "Wrote daily summary for %s -> %s (%d meetings, %.1fh)",
@@ -277,6 +296,16 @@ def run_daily(args: argparse.Namespace) -> None:
                 synthesis.meeting_count,
                 synthesis.total_meeting_hours,
             )
+
+            # Quality tracking: save raw output for future comparison
+            try:
+                from src.quality import save_raw_output
+
+                raw_content = path.read_text(encoding="utf-8")
+                raw_path = save_raw_output(raw_content, current, output_dir)
+                logger.info("Saved raw output -> %s", raw_path)
+            except Exception as e:
+                logger.warning("Quality tracking (save) failed: %s", e)
 
         except Exception as e:
             logger.error("Failed to process %s: %s", current, e)

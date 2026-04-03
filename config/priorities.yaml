@@ -1,0 +1,15 @@
+projects:
+  - "Project Alpha"
+  - "Q2 Planning"
+
+people:
+  - "Sarah Chen"
+  - "Mike Johnson"
+
+topics:
+  - "hiring"
+  - "budget"
+
+suppress:
+  - "Daily Standup"
+  - "All Hands"
