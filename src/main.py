@@ -53,14 +53,18 @@ def main() -> None:
     output_dir = Path(config.get("pipeline", {}).get("output_dir", "output"))
     template_dir = Path("templates")
 
-    # Try to load OAuth credentials for calendar ingestion
-    service = None
+    # Try to load OAuth credentials for calendar + gmail ingestion
+    calendar_service = None
+    gmail_service = None
     user_email = None
     try:
         from google.auth.transport.requests import Request
 
         from src.auth.google_oauth import load_credentials, save_credentials
         from src.ingest.calendar import build_calendar_service, cache_raw_response, fetch_events_for_date
+        from src.ingest.gmail import build_gmail_service, cache_raw_emails
+        from src.ingest.normalizer import build_normalized_output
+        from src.ingest.transcripts import fetch_all_transcripts
 
         creds = load_credentials()
         if creds is None:
@@ -74,11 +78,12 @@ def main() -> None:
                 creds.refresh(Request())
                 save_credentials(creds)
 
-            service = build_calendar_service(creds)
+            calendar_service = build_calendar_service(creds)
+            gmail_service = build_gmail_service(creds)
 
             # Get user email for attendee matching (declined detection)
             try:
-                primary_cal = service.calendarList().get(calendarId="primary").execute()
+                primary_cal = calendar_service.calendarList().get(calendarId="primary").execute()
                 user_email = primary_cal.get("id")
                 logger.info("Authenticated as: %s", user_email)
             except Exception as e:
@@ -90,14 +95,35 @@ def main() -> None:
     current = from_date
     while current <= to_date:
         try:
-            if service is not None:
+            if calendar_service is not None:
                 # Full pipeline: fetch real calendar data
                 categorized, raw_events = fetch_events_for_date(
-                    service, current, config, user_email
+                    calendar_service, current, config, user_email
                 )
 
-                # Cache raw response
+                # Cache raw calendar response
                 cache_raw_response(raw_events, current, output_dir)
+
+                # Fetch and link transcripts
+                transcripts: list[dict] = []
+                unmatched: list[dict] = []
+                try:
+                    if gmail_service is not None:
+                        transcripts = fetch_all_transcripts(gmail_service, current, config)
+
+                        if transcripts:
+                            # Cache raw transcript emails
+                            raw_emails = [t["raw_email"] for t in transcripts]
+                            cache_raw_emails(raw_emails, "transcripts", current, output_dir)
+
+                        # Normalize: match transcripts to events, deduplicate
+                        categorized, unmatched = build_normalized_output(
+                            categorized, transcripts, config
+                        )
+                except Exception as e:
+                    logger.warning("Transcript ingestion failed: %s. Continuing with calendar only.", e)
+                    transcripts = []
+                    unmatched = []
 
                 # Compute stats
                 active_events = categorized["timed_events"] + categorized["all_day_events"]
@@ -106,16 +132,22 @@ def main() -> None:
                     (e.duration_minutes or 0) for e in categorized["timed_events"]
                 ) / 60.0
 
+                # Count events that have transcripts attached
+                transcript_count = sum(
+                    1 for e in active_events if e.transcript_text is not None
+                )
+
                 synthesis = DailySynthesis(
                     date=current,
                     generated_at=datetime.now(timezone.utc),
                     meeting_count=meeting_count,
                     total_meeting_hours=total_meeting_hours,
-                    transcript_count=0,
+                    transcript_count=transcript_count,
                     all_day_events=categorized["all_day_events"],
                     timed_events=categorized["timed_events"],
                     declined_events=categorized["declined_events"],
                     cancelled_events=categorized["cancelled_events"],
+                    unmatched_transcripts=unmatched,
                     substance=Section(title="Substance"),
                     decisions=Section(title="Decisions"),
                     commitments=Section(title="Commitments"),
