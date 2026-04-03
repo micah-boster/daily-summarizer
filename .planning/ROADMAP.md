@@ -12,12 +12,12 @@ This roadmap delivers a personal daily intelligence pipeline in six phases, buil
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 0: Execution Model Validation** - Prove Cowork scheduling, Google OAuth, and Claude Code session reliability before building anything
-- [ ] **Phase 1: Foundation and Calendar Ingestion** - Data models, markdown output writer, Google Calendar ingestion, and project scaffolding
-- [ ] **Phase 2: Transcript Ingestion and Normalization** - Gemini and Gong transcript parsing, calendar-transcript linking, noise filtering, deduplication
-- [ ] **Phase 3: Two-Stage Synthesis Pipeline** - Per-meeting extraction and daily cross-meeting synthesis answering the three core questions with source attribution
-- [ ] **Phase 4: Temporal Roll-Ups** - Weekly summaries from accumulated dailies and monthly narrative with themes and progression arcs
-- [ ] **Phase 5: Feedback and Refinement** - Priority configuration, quality tracking, structured data sidecar, and prompt tuning informed by accumulated output
+- [x] **Phase 0: Execution Model Validation** - Prove Cowork scheduling, Google OAuth, and Claude Code session reliability before building anything
+- [x] **Phase 1: Foundation and Calendar Ingestion** - Data models, markdown output writer, Google Calendar ingestion, and project scaffolding
+- [x] **Phase 2: Transcript Ingestion and Normalization** - Gemini and Gong transcript parsing, calendar-transcript linking, noise filtering, deduplication
+- [x] **Phase 3: Two-Stage Synthesis Pipeline** - Per-meeting extraction and daily cross-meeting synthesis answering the three core questions with source attribution
+- [x] **Phase 4: Temporal Roll-Ups** - Weekly summaries from accumulated dailies and monthly narrative with themes and progression arcs
+- [x] **Phase 5: Feedback and Refinement** - Priority configuration, quality tracking, structured data sidecar, and prompt tuning informed by accumulated output
 
 ## Phase Details
 
@@ -33,8 +33,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 00-01-PLAN.md -- Project scaffolding, OAuth module, Slack notifications, validation script with retry logic
-- [ ] 00-02-PLAN.md -- Operational docs (re-auth procedure, Cowork setup guide) and 5-day scheduled validation
+- [x] 00-01-PLAN.md -- Project scaffolding, OAuth module, Slack notifications, validation script with retry logic
+- [x] 00-02-PLAN.md -- Operational docs (re-auth procedure, Cowork setup guide) and 5-day scheduled validation
 
 ### Phase 1: Foundation and Calendar Ingestion
 **Goal**: Establish the data models, output format, and first data source so the pipeline skeleton is testable end-to-end with real calendar data
@@ -48,8 +48,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Pydantic data models, Jinja2 output writer, YAML config, CLI entry point
-- [ ] 01-02-PLAN.md — Google Calendar ingestion module with event normalization and end-to-end pipeline wiring
+- [x] 01-01-PLAN.md — Pydantic data models, Jinja2 output writer, YAML config, CLI entry point
+- [x] 01-02-PLAN.md — Google Calendar ingestion module with event normalization and end-to-end pipeline wiring
 
 ### Phase 2: Transcript Ingestion and Normalization
 **Goal**: Ingest meeting transcripts from both sources and link them to calendar events so synthesis has complete, deduplicated, noise-filtered input data
@@ -64,9 +64,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Gmail API utilities, Gemini transcript parser, filler stripping
-- [ ] 02-02-PLAN.md — Gong transcript parser, combined fetch function
-- [ ] 02-03-PLAN.md — Normalization pipeline with calendar-transcript linking, deduplication, pipeline wiring
+- [x] 02-01-PLAN.md — Gmail API utilities, Gemini transcript parser, filler stripping
+- [x] 02-02-PLAN.md — Gong transcript parser, combined fetch function
+- [x] 02-03-PLAN.md — Normalization pipeline with calendar-transcript linking, deduplication, pipeline wiring
 
 ### Phase 3: Two-Stage Synthesis Pipeline
 **Goal**: Deliver the core daily intelligence brief that answers the three synthesis questions with source-attributed evidence and no evaluative language
@@ -82,9 +82,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Per-meeting extraction models, prompts, and extractor module with Claude API integration
-- [ ] 03-02-PLAN.md — Evidence-only language validator with banned pattern detection and source attribution checking
-- [ ] 03-03-PLAN.md — Daily cross-meeting synthesizer, template update with appendix, and full pipeline wiring
+- [x] 03-01-PLAN.md — Per-meeting extraction models, prompts, and extractor module with Claude API integration
+- [x] 03-02-PLAN.md — Evidence-only language validator with banned pattern detection and source attribution checking
+- [x] 03-03-PLAN.md — Daily cross-meeting synthesizer, template update with appendix, and full pipeline wiring
 
 ### Phase 4: Temporal Roll-Ups
 **Goal**: Users can review weekly and monthly intelligence that traces threads across days rather than just concatenating summaries
@@ -98,8 +98,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 04-01-PLAN.md -- Weekly roll-up pipeline: thread detection, weekly template, CLI subcommand, backlinks
-- [ ] 04-02-PLAN.md -- Monthly narrative synthesis: thematic arcs, metrics, CLI subcommand
+- [x] 04-01-PLAN.md -- Weekly roll-up pipeline: thread detection, weekly template, CLI subcommand, backlinks
+- [x] 04-02-PLAN.md -- Monthly narrative synthesis: thematic arcs, metrics, CLI subcommand
 
 ### Phase 5: Feedback and Refinement
 **Goal**: The pipeline improves over time through explicit priority configuration, quality tracking, and structured data output for downstream use
@@ -112,8 +112,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Priority configuration (projects, people, topics, suppress) and diff-based quality metrics tracking
-- [ ] 05-02-PLAN.md — JSON sidecar output for programmatic task extraction and decision metadata
+- [x] 05-01-PLAN.md — Priority configuration (projects, people, topics, suppress) and diff-based quality metrics tracking
+- [x] 05-02-PLAN.md — JSON sidecar output for programmatic task extraction and decision metadata
 
 ## Progress
 
@@ -122,9 +122,9 @@ Phases execute in numeric order: 0 -> 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Execution Model Validation | 0/2 | Not started | - |
-| 1. Foundation and Calendar Ingestion | 0/2 | Not started | - |
-| 2. Transcript Ingestion and Normalization | 0/3 | Not started | - |
-| 3. Two-Stage Synthesis Pipeline | 0/3 | Not started | - |
-| 4. Temporal Roll-Ups | 0/2 | Not started | - |
-| 5. Feedback and Refinement | 0/2 | Not started | - |
+| 0. Execution Model Validation | 2/2 | Complete | 2026-04-02 |
+| 1. Foundation and Calendar Ingestion | 2/2 | Complete | 2026-04-02 |
+| 2. Transcript Ingestion and Normalization | 3/3 | Complete | 2026-04-02 |
+| 3. Two-Stage Synthesis Pipeline | 3/3 | Complete | 2026-04-02 |
+| 4. Temporal Roll-Ups | 2/2 | Complete | 2026-04-03 |
+| 5. Feedback and Refinement | 2/2 | Complete | 2026-04-03 |
