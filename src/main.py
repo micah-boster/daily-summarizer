@@ -53,21 +53,97 @@ def main() -> None:
     output_dir = Path(config.get("pipeline", {}).get("output_dir", "output"))
     template_dir = Path("templates")
 
+    # Try to load OAuth credentials for calendar ingestion
+    service = None
+    user_email = None
+    try:
+        from google.auth.transport.requests import Request
+
+        from src.auth.google_oauth import load_credentials, save_credentials
+        from src.ingest.calendar import build_calendar_service, cache_raw_response, fetch_events_for_date
+
+        creds = load_credentials()
+        if creds is None:
+            logger.warning(
+                "No valid credentials found. Run `python -m src.auth.google_oauth` to authenticate. "
+                "Producing empty summary."
+            )
+        else:
+            # Refresh if expired
+            if creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+                save_credentials(creds)
+
+            service = build_calendar_service(creds)
+
+            # Get user email for attendee matching (declined detection)
+            try:
+                primary_cal = service.calendarList().get(calendarId="primary").execute()
+                user_email = primary_cal.get("id")
+                logger.info("Authenticated as: %s", user_email)
+            except Exception as e:
+                logger.warning("Could not fetch user email: %s", e)
+
+    except Exception as e:
+        logger.warning("Calendar ingestion unavailable: %s. Producing empty summaries.", e)
+
     current = from_date
     while current <= to_date:
-        synthesis = DailySynthesis(
-            date=current,
-            generated_at=datetime.now(timezone.utc),
-            meeting_count=0,
-            total_meeting_hours=0.0,
-            transcript_count=0,
-            substance=Section(title="Substance"),
-            decisions=Section(title="Decisions"),
-            commitments=Section(title="Commitments"),
-        )
+        try:
+            if service is not None:
+                # Full pipeline: fetch real calendar data
+                categorized, raw_events = fetch_events_for_date(
+                    service, current, config, user_email
+                )
 
-        path = write_daily_summary(synthesis, output_dir, template_dir)
-        logger.info("Wrote daily summary for %s -> %s", current, path)
+                # Cache raw response
+                cache_raw_response(raw_events, current, output_dir)
+
+                # Compute stats
+                active_events = categorized["timed_events"] + categorized["all_day_events"]
+                meeting_count = len(active_events)
+                total_meeting_hours = sum(
+                    (e.duration_minutes or 0) for e in categorized["timed_events"]
+                ) / 60.0
+
+                synthesis = DailySynthesis(
+                    date=current,
+                    generated_at=datetime.now(timezone.utc),
+                    meeting_count=meeting_count,
+                    total_meeting_hours=total_meeting_hours,
+                    transcript_count=0,
+                    all_day_events=categorized["all_day_events"],
+                    timed_events=categorized["timed_events"],
+                    declined_events=categorized["declined_events"],
+                    cancelled_events=categorized["cancelled_events"],
+                    substance=Section(title="Substance"),
+                    decisions=Section(title="Decisions"),
+                    commitments=Section(title="Commitments"),
+                )
+            else:
+                # No credentials: produce empty summary
+                synthesis = DailySynthesis(
+                    date=current,
+                    generated_at=datetime.now(timezone.utc),
+                    meeting_count=0,
+                    total_meeting_hours=0.0,
+                    transcript_count=0,
+                    substance=Section(title="Substance"),
+                    decisions=Section(title="Decisions"),
+                    commitments=Section(title="Commitments"),
+                )
+
+            path = write_daily_summary(synthesis, output_dir, template_dir)
+            logger.info(
+                "Wrote daily summary for %s -> %s (%d meetings, %.1fh)",
+                current,
+                path,
+                synthesis.meeting_count,
+                synthesis.total_meeting_hours,
+            )
+
+        except Exception as e:
+            logger.error("Failed to process %s: %s", current, e)
 
         current += timedelta(days=1)
 
