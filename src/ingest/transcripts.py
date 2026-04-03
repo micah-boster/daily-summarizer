@@ -282,27 +282,66 @@ def fetch_gong_transcripts(
     return transcripts
 
 
+SOURCE_PRIORITY = {"gemini_drive": 0, "gemini": 1, "gong": 2}
+
+
+def _deduplicate_transcripts(transcripts: list[dict]) -> list[dict]:
+    """Remove duplicate transcripts for the same meeting.
+
+    If same meeting has both Drive and Gmail transcript, keep the higher-priority source.
+    Deduplicates by normalized title.
+    """
+    seen: dict[str, dict] = {}
+
+    for t in transcripts:
+        title_key = t.get("title", "").lower().strip()
+        if title_key in seen:
+            existing = seen[title_key]
+            existing_pri = SOURCE_PRIORITY.get(existing.get("source", ""), 99)
+            new_pri = SOURCE_PRIORITY.get(t.get("source", ""), 99)
+            if new_pri < existing_pri:
+                seen[title_key] = t
+        else:
+            seen[title_key] = t
+
+    return list(seen.values())
+
+
 def fetch_all_transcripts(
-    service, target_date: date, config: dict
+    service, target_date: date, config: dict, creds=None
 ) -> list[dict]:
-    """Fetch transcripts from all configured sources (Gemini + Gong).
+    """Fetch transcripts from all configured sources (Drive + Gemini email + Gong).
 
     Args:
         service: Gmail API service instance.
         target_date: The date to search for transcripts.
         config: Pipeline configuration dict.
+        creds: Google OAuth credentials for Drive API access (optional).
 
     Returns:
-        Combined list of transcript dicts from all sources.
+        Combined, deduplicated list of transcript dicts from all sources.
     """
+    # Drive-based Gemini transcripts (highest priority)
+    drive_transcripts: list[dict] = []
+    if creds is not None:
+        try:
+            from src.ingest.drive import fetch_gemini_drive_transcripts
+
+            drive_transcripts = fetch_gemini_drive_transcripts(creds, target_date, config)
+        except Exception as e:
+            logger.warning("Drive transcript fetch failed: %s. Falling back to Gmail only.", e)
+
     gemini = fetch_gemini_transcripts(service, target_date, config)
     gong = fetch_gong_transcripts(service, target_date, config)
 
-    combined = gemini + gong
+    combined = drive_transcripts + gemini + gong
+    combined = _deduplicate_transcripts(combined)
+
     logger.info(
-        "Total transcripts for %s: %d (%d Gemini, %d Gong)",
+        "Total transcripts for %s: %d (%d Drive, %d Gemini-email, %d Gong)",
         target_date,
         len(combined),
+        len(drive_transcripts),
         len(gemini),
         len(gong),
     )

@@ -104,10 +104,12 @@ def match_transcripts_to_events(
     unmatched: list[dict] = []
     matched_count = 0
 
-    # Sort transcripts: Gemini first so it gets priority in case of conflicts
+    # Priority: gemini_drive > gemini (email) > gong
+    _SOURCE_PRIORITY = {"gemini_drive": 0, "gemini": 1, "gong": 2}
+
     sorted_transcripts = sorted(
         transcripts,
-        key=lambda t: 0 if t.get("source") == "gemini" else 1,
+        key=lambda t: _SOURCE_PRIORITY.get(t.get("source", ""), 99),
     )
 
     for transcript in sorted_transcripts:
@@ -117,15 +119,17 @@ def match_transcripts_to_events(
             unmatched.append(transcript)
             continue
 
-        # Check source priority: Gemini wins over Gong
+        # Check source priority: higher-priority source wins
         existing_source = match.transcript_source
         new_source = transcript.get("source", "")
 
-        if existing_source == "gemini" and new_source == "gong":
-            # Gemini already attached — Gong loses, becomes unmatched
+        existing_priority = _SOURCE_PRIORITY.get(existing_source or "", 99)
+        new_priority = _SOURCE_PRIORITY.get(new_source, 99)
+
+        if existing_source is not None and existing_priority <= new_priority:
             logger.debug(
-                "Skipping Gong transcript for '%s' — Gemini already attached",
-                match.title,
+                "Skipping %s transcript for '%s' — %s already attached",
+                new_source, match.title, existing_source,
             )
             unmatched.append(transcript)
             continue

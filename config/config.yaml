@@ -8,6 +8,8 @@ calendars:
   exclude_patterns: []
 
 transcripts:
+  gemini_drive:
+    enabled: true
   gemini:
     sender_patterns:
       - "calendar-notification@google.com"

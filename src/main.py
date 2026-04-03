@@ -5,6 +5,10 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
 from src.config import load_config
 from src.models.events import DailySynthesis, Section
 from src.output.writer import write_daily_summary
@@ -168,7 +172,7 @@ def run_daily(args: argparse.Namespace) -> None:
                 unmatched: list[dict] = []
                 try:
                     if gmail_service is not None:
-                        transcripts = fetch_all_transcripts(gmail_service, current, config)
+                        transcripts = fetch_all_transcripts(gmail_service, current, config, creds=creds)
 
                         if transcripts:
                             # Cache raw transcript emails
@@ -316,6 +320,15 @@ def run_daily(args: argparse.Namespace) -> None:
                 logger.info("Wrote JSON sidecar -> %s", sidecar_path)
             except Exception as e:
                 logger.warning("Sidecar generation failed: %s. Daily summary still written.", e)
+
+            # Slack notification: post full summary
+            try:
+                from src.notifications.slack import send_slack_summary
+
+                summary_content = path.read_text(encoding="utf-8")
+                send_slack_summary(summary_content, current)
+            except Exception as e:
+                logger.warning("Slack notification failed: %s", e)
 
         except Exception as e:
             logger.error("Failed to process %s: %s", current, e)
