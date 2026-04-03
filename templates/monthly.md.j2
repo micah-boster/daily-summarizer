@@ -1,0 +1,65 @@
+# Monthly Intelligence Brief: {{ month_name }} {{ year }}
+
+## Overview
+
+{{ weekly_count }} week{{ "s" if weekly_count != 1 else "" }} summarized. {{ metrics.total_meetings }} meetings, {{ "%.1f"|format(metrics.total_hours) }} hours, {{ metrics.total_decisions }} decision{{ "s" if metrics.total_decisions != 1 else "" }} recorded.
+
+{% if thematic_arcs %}
+{% for arc in thematic_arcs %}
+## {{ arc.title }}
+
+**Trajectory:** {{ arc.trajectory }}{% if arc.weeks_active %} | **Active Weeks:** {{ arc.weeks_active|join(", ") }}{% endif %}
+
+{{ arc.description }}
+
+{% if arc.key_moments %}
+Key moments:
+{% for moment in arc.key_moments %}
+- {{ moment }}
+{% endfor %}
+{% endif %}
+
+{% endfor %}
+{% else %}
+No thematic arcs identified this month.
+
+{% endif %}
+{% if strategic_shifts %}
+## Strategic Shifts
+
+{% for shift in strategic_shifts %}
+- {{ shift }}
+{% endfor %}
+
+{% endif %}
+{% if emerging_risks %}
+## Emerging Risks
+
+{% for risk in emerging_risks %}
+- {{ risk }}
+{% endfor %}
+
+{% endif %}
+## Month at a Glance
+
+| Metric | Value |
+|--------|-------|
+| Total Meetings | {{ metrics.total_meetings }} |
+| Total Hours | {{ "%.1f"|format(metrics.total_hours) }} |
+| Decisions Recorded | {{ metrics.total_decisions }} |
+{% if metrics.top_attendees %}| Top Attendees | {{ metrics.top_attendees[:5]|join(", ") }} |
+{% endif %}
+{% if metrics.weekly_meeting_counts %}| Weekly Trend | {{ metrics.weekly_meeting_counts|join(" → ") }} meetings/week |
+{% endif %}
+
+{% if still_open %}
+## Carrying Forward
+
+{% for item in still_open %}
+- {{ item.content }}
+{% endfor %}
+
+{% endif %}
+---
+
+*Generated: {{ generated_at }}*

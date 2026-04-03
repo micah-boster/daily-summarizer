@@ -229,8 +229,17 @@ def _parse_monthly_response(
     current_section = ""
     current_content: list[str] = []
 
+    in_arcs_section = False
+
     for line in response_text.split("\n"):
-        if line.startswith("### ") and current_section.lower() in ("thematic arcs", ""):
+        if line.startswith("## ") and "thematic arc" in line[3:].strip().lower():
+            # Entering the Thematic Arcs section
+            if current_section:
+                sections[current_section] = "\n".join(current_content).strip()
+            current_section = line[3:].strip()
+            current_content = []
+            in_arcs_section = True
+        elif line.startswith("### ") and (in_arcs_section or current_section.startswith("arc:")):
             # Subsection under Thematic Arcs
             if current_section:
                 sections[current_section] = "\n".join(current_content).strip()
@@ -241,6 +250,7 @@ def _parse_monthly_response(
                 sections[current_section] = "\n".join(current_content).strip()
             current_section = line[3:].strip()
             current_content = []
+            in_arcs_section = False
         else:
             current_content.append(line)
 
