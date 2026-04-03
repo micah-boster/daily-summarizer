@@ -109,11 +109,11 @@ Plans:
   1. User can configure explicit priorities (projects, people, topics) that visibly influence what the daily synthesis emphasizes
   2. Quality metrics are tracked over time: edit frequency, section correction rates, data volume per run
   3. A JSON sidecar file is produced alongside each daily markdown for programmatic access to decisions, tasks, and source metadata
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: Priority configuration and quality metrics
-- [ ] 05-02: Structured data sidecar output
+- [ ] 05-01-PLAN.md — Priority configuration (projects, people, topics, suppress) and diff-based quality metrics tracking
+- [ ] 05-02-PLAN.md — JSON sidecar output for programmatic task extraction and decision metadata
 
 ## Progress
 
