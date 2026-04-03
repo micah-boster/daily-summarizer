@@ -6,3 +6,24 @@ calendars:
   ids:
     - "primary"
   exclude_patterns: []
+
+transcripts:
+  gemini:
+    sender_patterns:
+      - "calendar-notification@google.com"
+      - "meetings-noreply@google.com"
+    subject_patterns:
+      - "Transcript"
+      - "Meeting notes"
+  gong:
+    sender_patterns:
+      - "notifications@gong.io"
+      - "noreply@gong.io"
+    subject_patterns:
+      - "call"
+      - "conversation"
+  matching:
+    time_window_minutes: 30
+    include_unmatched_events: true
+  preprocessing:
+    strip_filler: true
