@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 from datetime import date
 
@@ -50,51 +51,125 @@ def notify_slack(message: str) -> bool:
         return False
 
 
-def _split_text(text: str, max_len: int = MAX_BLOCK_TEXT) -> list[str]:
-    """Split text into chunks that fit within Slack block limits."""
-    if len(text) <= max_len:
-        return [text]
+def _extract_overview(content: str) -> str:
+    """Pull the overview stats line (e.g. '10 meetings, 5.0 hours...')."""
+    m = re.search(r"^## Overview\n+(.*?)(?=\n#|\Z)", content, re.MULTILINE | re.DOTALL)
+    if m:
+        return m.group(1).strip().split("\n")[0]
+    return ""
 
-    chunks = []
-    remaining = text
-    while remaining:
-        if len(remaining) <= max_len:
-            chunks.append(remaining)
-            break
 
-        cut_point = remaining.rfind("\n\n", 0, max_len)
-        if cut_point == -1:
-            cut_point = remaining.rfind("\n", 0, max_len)
-        if cut_point == -1:
-            cut_point = max_len
+def _extract_bullet_items(content: str, section_name: str) -> list[str]:
+    """Extract decision/commitment/question bullet items across all per-meeting sections.
 
-        chunks.append(remaining[:cut_point])
-        remaining = remaining[cut_point:].lstrip("\n")
+    Returns condensed one-liners stripped of attribution and context.
+    """
+    items: list[str] = []
 
-    return chunks
+    # Find per-meeting extraction blocks
+    pattern = rf"\*\*{section_name}:\*\*\n?(.*?)(?=\n\*\*[A-Z]|\n###|\n---|\Z)"
+    for match in re.finditer(pattern, content, re.DOTALL):
+        raw = match.group(1).strip()
+        if not raw:
+            continue
+        # Split on "- " at start of line
+        for bullet in re.split(r"(?:^|\n)-\s+", raw):
+            bullet = bullet.strip()
+            if not bullet:
+                continue
+            # Strip attribution in parens and " — reason" suffixes
+            bullet = re.sub(r"\s*\([^)]*\)", "", bullet)
+            bullet = re.sub(r"\s*—\s*.*$", "", bullet)
+            # Truncate long items
+            if len(bullet) > 120:
+                bullet = bullet[:117] + "..."
+            if bullet:
+                items.append(bullet)
+
+    return items
+
+
+def _extract_meeting_names(content: str) -> list[str]:
+    """Get meeting names from per-meeting extraction headings."""
+    names = []
+    for m in re.finditer(r"^### (.+?)\s*\(", content, re.MULTILINE):
+        names.append(m.group(1).strip())
+    return names
 
 
 def _build_blocks(summary_content: str, target_date: date) -> list[dict]:
-    """Build Slack Block Kit blocks from daily summary content."""
-    blocks: list[dict] = [
-        {
-            "type": "header",
-            "text": {
-                "type": "plain_text",
-                "text": f"Daily Summary: {target_date.isoformat()}",
-            },
-        },
-    ]
+    """Build a condensed Slack digest from the full daily summary.
 
-    chunks = _split_text(summary_content)
-    for chunk in chunks:
+    This is NOT a dump of the MD file. It's a tight executive overview:
+    stats → decisions → action items → open questions.
+    """
+    blocks: list[dict] = []
+
+    # Header
+    blocks.append({
+        "type": "header",
+        "text": {
+            "type": "plain_text",
+            "text": f":memo: {target_date.strftime('%A, %B %-d')}",
+        },
+    })
+
+    # Overview stats
+    overview = _extract_overview(summary_content)
+    meetings = _extract_meeting_names(summary_content)
+    stats_parts = []
+    if overview:
+        stats_parts.append(overview)
+    if meetings:
+        stats_parts.append("Transcripts: " + ", ".join(meetings))
+    if stats_parts:
+        blocks.append({
+            "type": "context",
+            "elements": [{"type": "mrkdwn", "text": "\n".join(stats_parts)}],
+        })
+
+    # Decisions
+    decisions = _extract_bullet_items(summary_content, "Decisions")
+    if decisions:
+        blocks.append({"type": "divider"})
+        bullet_text = "\n".join(f"• {d}" for d in decisions[:8])
         blocks.append({
             "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": chunk,
-            },
+            "text": {"type": "mrkdwn", "text": f"*:white_check_mark: Decisions*\n{bullet_text}"},
         })
+
+    # Commitments / Action Items
+    commitments = _extract_bullet_items(summary_content, "Commitments")
+    if commitments:
+        blocks.append({"type": "divider"})
+        bullet_text = "\n".join(f"• {d}" for d in commitments[:8])
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*:point_right: Action Items*\n{bullet_text}"},
+        })
+
+    # Open Questions
+    questions = _extract_bullet_items(summary_content, "Open Questions")
+    if questions:
+        blocks.append({"type": "divider"})
+        bullet_text = "\n".join(f"• {d}" for d in questions[:5])
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*:grey_question: Open Questions*\n{bullet_text}"},
+        })
+
+    # No transcript data case
+    if not decisions and not commitments and not questions:
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "_No transcript data extracted for this day._"},
+        })
+
+    # Footer
+    blocks.append({
+        "type": "context",
+        "elements": [{"type": "mrkdwn", "text": "_Full details in daily summary file._"}],
+    })
 
     return blocks
 
