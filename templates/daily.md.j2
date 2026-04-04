@@ -50,18 +50,20 @@
 ### {{ ext.meeting_title }}
 
 {% if ext.decisions %}
-**Decisions:**
+| Decision | Rationale |
+|----------|-----------|
 {% for d in ext.decisions %}
-- {{ d.content }}{% if d.rationale %} — {{ d.rationale }}{% endif %}
-
+| {{ d.content }} | {{ d.rationale or "" }} |
 {% endfor %}
+
 {% endif %}
 {% if ext.commitments %}
-**Commitments:**
+| Commitment | Deadline |
+|------------|----------|
 {% for c in ext.commitments %}
-- {{ c.content }}{% if c.rationale %} — {{ c.rationale }}{% endif %}
-
+| {{ c.content }} | {{ c.rationale or "" }} |
 {% endfor %}
+
 {% endif %}
 {% if ext.substance %}
 **Substance:**
@@ -84,20 +86,17 @@
 
 ## Calendar
 
-{% if timed_events %}
 | Time | Meeting | With |
 |------|---------|------|
+{% if timed_events %}
 {% for event in timed_events %}
 {% if event.event_type != "workingLocation" %}
 | {{ event.start_time|format_time }}–{{ event.end_time|format_time }} | {{ event.title }}{% if event.is_recurring %} ↻{% endif %} | {{ event.attendees|format_attendees }} |
 {% endif %}
 {% endfor %}
-{% else %}
-No timed events for this day.
-
 {% endif %}
-{% if declined_events %}
 
+{% if declined_events %}
 ### Declined
 
 {% for event in declined_events %}
@@ -106,7 +105,6 @@ No timed events for this day.
 
 {% endif %}
 {% if cancelled_events %}
-
 ### Cancelled
 
 {% for event in cancelled_events %}

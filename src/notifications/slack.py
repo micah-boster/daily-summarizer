@@ -59,15 +59,59 @@ def _extract_overview(content: str) -> str:
     return ""
 
 
-def _extract_bullet_items(content: str, section_name: str) -> list[str]:
-    """Extract bullet items from the top-level synthesis sections (Substance, Decisions, Commitments).
+def _extract_table_rows(content: str, section_name: str) -> list[list[str]]:
+    """Extract rows from a markdown table under a ## heading.
 
-    These already contain owner/meeting context via em-dash separators.
-    Falls back to per-meeting extraction blocks if top-level sections are empty.
+    Returns list of rows, where each row is a list of cell values.
+    Skips the header and separator rows.
     """
-    items: list[str] = []
+    rows: list[list[str]] = []
 
-    # First try the top-level synthesis section (## Decisions, ## Commitments, etc.)
+    pattern = rf"^## {section_name}\s*\n(.*?)(?=\n## |\n---|\Z)"
+    m = re.search(pattern, content, re.MULTILINE | re.DOTALL)
+    if not m:
+        return rows
+
+    section_text = m.group(1).strip()
+    header_seen = False
+    separator_seen = False
+
+    for line in section_text.split("\n"):
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        # Skip header row
+        if not header_seen:
+            header_seen = True
+            continue
+        # Skip separator row (|---|---|)
+        if not separator_seen:
+            separator_seen = True
+            continue
+        # Data row
+        cells = [c.strip() for c in line.split("|")]
+        # Split produces empty strings at start/end from leading/trailing |
+        cells = [c for c in cells if c]
+        if cells:
+            rows.append(cells)
+
+    return rows
+
+
+def _extract_bullet_items(content: str, section_name: str) -> list[str]:
+    """Extract items from top-level synthesis sections.
+
+    Handles both markdown tables and bullet lists.
+    Falls back to per-meeting extraction blocks if top-level is empty.
+    """
+    # Try table format first
+    rows = _extract_table_rows(content, section_name)
+    if rows:
+        # Return rows as pipe-joined strings for downstream parsing
+        return [" — ".join(cells) for cells in rows]
+
+    # Try bullet format
+    items: list[str] = []
     pattern = rf"^## {section_name}\s*\n(.*?)(?=\n## |\n---|\Z)"
     m = re.search(pattern, content, re.MULTILINE | re.DOTALL)
     if m:
@@ -77,12 +121,11 @@ def _extract_bullet_items(content: str, section_name: str) -> list[str]:
             if line.startswith("- "):
                 bullet = line[2:].strip()
                 if bullet and bullet.lower() not in ("no items for this day.", "no transcript data available yet."):
-                    # Truncate if very long
                     if len(bullet) > 150:
                         bullet = bullet[:147] + "..."
                     items.append(bullet)
 
-    # Fall back to per-meeting extraction blocks if top-level was empty
+    # Fall back to per-meeting extraction blocks
     if not items:
         pattern = rf"\*\*{section_name}:\*\*\n?(.*?)(?=\n\*\*[A-Z]|\n###|\n---|\Z)"
         for match in re.finditer(pattern, content, re.DOTALL):
@@ -140,7 +183,7 @@ def _build_blocks(summary_content: str, target_date: date) -> list[dict]:
             "elements": [{"type": "mrkdwn", "text": "\n".join(stats_parts)}],
         })
 
-    # Decisions — structured with fields
+    # Decisions — each as a labeled block
     decisions = _extract_bullet_items(summary_content, "Decisions")
     if decisions:
         blocks.append({"type": "divider"})
@@ -153,17 +196,17 @@ def _build_blocks(summary_content: str, target_date: date) -> list[dict]:
             what = parts[0] if parts else item
             who = parts[1] if len(parts) > 1 else ""
             source = parts[2] if len(parts) > 2 else ""
-            fields = [{"type": "mrkdwn", "text": f"*{what}*"}]
-            meta = []
+            line = f"• *{what}*"
             if who:
-                meta.append(who)
+                line += f"\n   _By {who}_"
             if source:
-                meta.append(f"_{source}_")
-            if meta:
-                fields.append({"type": "mrkdwn", "text": " · ".join(meta)})
-            blocks.append({"type": "section", "fields": fields})
+                line += f" · _{source}_"
+            blocks.append({
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": line},
+            })
 
-    # Commitments / Action Items — structured with fields
+    # Commitments / Action Items — each with labeled owner/deadline
     commitments = _extract_bullet_items(summary_content, "Commitments")
     if commitments:
         blocks.append({"type": "divider"})
@@ -171,26 +214,25 @@ def _build_blocks(summary_content: str, target_date: date) -> list[dict]:
             "type": "section",
             "text": {"type": "mrkdwn", "text": "*:point_right: Action Items*"},
         })
-        for item in commitments[:8]:
+        for item in commitments[:10]:
             parts = [p.strip() for p in item.split("—")]
             what = parts[0] if parts else item
             owner = parts[1] if len(parts) > 1 else ""
             deadline = parts[2] if len(parts) > 2 else ""
             source = parts[3] if len(parts) > 3 else ""
-            left = f"*{what}*"
-            right_parts = []
+            line = f"• *{what}*"
+            meta = []
             if owner:
-                right_parts.append(f"👤 {owner}")
-            if deadline:
-                right_parts.append(f"📅 {deadline}")
+                meta.append(owner)
+            if deadline and deadline.lower() != "no deadline":
+                meta.append(f"by {deadline}")
             if source:
-                right_parts.append(f"_{source}_")
+                meta.append(source)
+            if meta:
+                line += f"\n   _" + " · ".join(meta) + "_"
             blocks.append({
                 "type": "section",
-                "fields": [
-                    {"type": "mrkdwn", "text": left},
-                    {"type": "mrkdwn", "text": "\n".join(right_parts) if right_parts else " "},
-                ],
+                "text": {"type": "mrkdwn", "text": line},
             })
 
     # Open Questions
