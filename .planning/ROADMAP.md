@@ -216,4 +216,4 @@ Note: Phases 8 and 9 can execute in parallel (independent sources); both must co
 | 7. Slack Ingest + Synthesis Integration | v1.5 | 0/2 | Not started | - |
 | 8. HubSpot Ingest | v1.5 | 0/1 | Not started | - |
 | 9. Google Docs Ingest | v1.5 | 0/1 | Not started | - |
-| 10. Cross-Source Synthesis + Commitments | v1.5 | 0/1 | Not started | - |
+| 10. Cross-Source Synthesis + Commitments | 1/2 | In Progress|  | - |
