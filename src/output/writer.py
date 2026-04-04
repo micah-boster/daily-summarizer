@@ -124,6 +124,23 @@ def write_daily_summary(
     env = create_jinja_env(template_dir)
     template = env.get_template("daily.md.j2")
 
+    # Parse pipe-delimited commitment rows into structured dicts for template
+    commitment_rows: list[dict[str, str]] = []
+    if synthesis.commitments and synthesis.commitments.items:
+        for item in synthesis.commitments.items:
+            if item.startswith("|") and item.endswith("|"):
+                # Parse pipe-delimited table row: | Who | What | By When | Source |
+                parts = [p.strip() for p in item.split("|")]
+                # Split on | gives ['', 'Who', 'What', 'By When', 'Source', '']
+                parts = [p for p in parts if p]  # Remove empty strings
+                if len(parts) >= 4:
+                    commitment_rows.append({
+                        "who": parts[0],
+                        "what": parts[1],
+                        "by_when": parts[2],
+                        "source": parts[3],
+                    })
+
     rendered = template.render(
         date=synthesis.date,
         generated_at=synthesis.generated_at,
@@ -138,6 +155,7 @@ def write_daily_summary(
         substance=synthesis.substance,
         decisions=synthesis.decisions,
         commitments=synthesis.commitments,
+        commitment_rows=commitment_rows,
         meetings_without_transcripts=synthesis.meetings_without_transcripts,
         extractions=synthesis.extractions,
         slack_items=slack_items or [],

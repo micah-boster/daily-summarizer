@@ -10,6 +10,26 @@
 {{ executive_summary }}
 
 {% endif %}
+{% if commitment_rows %}
+## Commitments
+
+| Who | What | By When | Source |
+|-----|------|---------|--------|
+{% for c in commitment_rows %}
+| {{ c.who }} | {{ c.what }} | {{ c.by_when }} | {{ c.source }} |
+{% endfor %}
+
+{% elif commitments.items %}
+## Commitments
+
+| Action Item | Owner | Deadline | Meeting |
+|-------------|-------|----------|---------|
+{% for item in commitments.items %}
+{% set cols = item|split_emdash(4) %}
+| {{ cols[0] }} | {{ cols[1] }} | {{ cols[2] }} | {{ cols[3] }} |
+{% endfor %}
+
+{% endif %}
 {% if substance.items %}
 ## Substance
 
@@ -26,17 +46,6 @@
 {% for item in decisions.items %}
 {% set cols = item|split_emdash(3) %}
 | {{ cols[0] }} | {{ cols[1] }} | {{ cols[2] }} |
-{% endfor %}
-
-{% endif %}
-{% if commitments.items %}
-## Commitments
-
-| Action Item | Owner | Deadline | Meeting |
-|-------------|-------|----------|---------|
-{% for item in commitments.items %}
-{% set cols = item|split_emdash(4) %}
-| {{ cols[0] }} | {{ cols[1] }} | {{ cols[2] }} | {{ cols[3] }} |
 {% endfor %}
 
 {% endif %}
