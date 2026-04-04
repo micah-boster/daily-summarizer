@@ -1,16 +1,14 @@
 # Roadmap: Work Intelligence Daily Summarizer
 
-## Overview
+## Milestones
 
-This roadmap delivers a personal daily intelligence pipeline in six phases, built from the ground up. Phase 0 validates that the execution model (Cowork + Claude Code + Google OAuth) actually works before any real code is written. Phases 1-2 build the data pipeline bottom-up: models and output first (so everything is testable with mock data), then calendar ingestion, then transcript ingestion with normalization. Phase 3 delivers the core value -- two-stage LLM synthesis that answers the three daily questions (substance, decisions, commitments) with source attribution. Phase 4 adds temporal roll-ups (weekly and monthly). Phase 5 adds feedback mechanisms and refinement once the base pipeline proves useful.
+- ✅ **v1.0 Daily Intelligence Pipeline** - Phases 0-5 (shipped 2026-04-03)
+- 🚧 **v1.5 Expanded Ingest** - Phases 6-10 (in progress)
 
 ## Phases
 
-**Phase Numbering:**
-- Integer phases (0, 1, 2, 3, 4, 5): Planned milestone work
-- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
-
-Decimal phases appear between their surrounding integers in numeric order.
+<details>
+<summary>v1.0 Daily Intelligence Pipeline (Phases 0-5) - SHIPPED 2026-04-03</summary>
 
 - [x] **Phase 0: Execution Model Validation** - Prove Cowork scheduling, Google OAuth, and Claude Code session reliability before building anything
 - [x] **Phase 1: Foundation and Calendar Ingestion** - Data models, markdown output writer, Google Calendar ingestion, and project scaffolding
@@ -18,8 +16,6 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Two-Stage Synthesis Pipeline** - Per-meeting extraction and daily cross-meeting synthesis answering the three core questions with source attribution
 - [x] **Phase 4: Temporal Roll-Ups** - Weekly summaries from accumulated dailies and monthly narrative with themes and progression arcs
 - [x] **Phase 5: Feedback and Refinement** - Priority configuration, quality tracking, structured data sidecar, and prompt tuning informed by accumulated output
-
-## Phase Details
 
 ### Phase 0: Execution Model Validation
 **Goal**: Confirm that the daily automation foundation works before building on it
@@ -48,8 +44,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [x] 01-01-PLAN.md — Pydantic data models, Jinja2 output writer, YAML config, CLI entry point
-- [x] 01-02-PLAN.md — Google Calendar ingestion module with event normalization and end-to-end pipeline wiring
+- [x] 01-01-PLAN.md -- Pydantic data models, Jinja2 output writer, YAML config, CLI entry point
+- [x] 01-02-PLAN.md -- Google Calendar ingestion module with event normalization and end-to-end pipeline wiring
 
 ### Phase 2: Transcript Ingestion and Normalization
 **Goal**: Ingest meeting transcripts from both sources and link them to calendar events so synthesis has complete, deduplicated, noise-filtered input data
@@ -64,9 +60,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [x] 02-01-PLAN.md — Gmail API utilities, Gemini transcript parser, filler stripping
-- [x] 02-02-PLAN.md — Gong transcript parser, combined fetch function
-- [x] 02-03-PLAN.md — Normalization pipeline with calendar-transcript linking, deduplication, pipeline wiring
+- [x] 02-01-PLAN.md -- Gmail API utilities, Gemini transcript parser, filler stripping
+- [x] 02-02-PLAN.md -- Gong transcript parser, combined fetch function
+- [x] 02-03-PLAN.md -- Normalization pipeline with calendar-transcript linking, deduplication, pipeline wiring
 
 ### Phase 3: Two-Stage Synthesis Pipeline
 **Goal**: Deliver the core daily intelligence brief that answers the three synthesis questions with source-attributed evidence and no evaluative language
@@ -82,18 +78,18 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [x] 03-01-PLAN.md — Per-meeting extraction models, prompts, and extractor module with Claude API integration
-- [x] 03-02-PLAN.md — Evidence-only language validator with banned pattern detection and source attribution checking
-- [x] 03-03-PLAN.md — Daily cross-meeting synthesizer, template update with appendix, and full pipeline wiring
+- [x] 03-01-PLAN.md -- Per-meeting extraction models, prompts, and extractor module with Claude API integration
+- [x] 03-02-PLAN.md -- Evidence-only language validator with banned pattern detection and source attribution checking
+- [x] 03-03-PLAN.md -- Daily cross-meeting synthesizer, template update with appendix, and full pipeline wiring
 
 ### Phase 4: Temporal Roll-Ups
 **Goal**: Users can review weekly and monthly intelligence that traces threads across days rather than just concatenating summaries
-**Depends on**: Phase 3 (requires several weeks of accumulated daily summaries)
+**Depends on**: Phase 3
 **Requirements**: TEMP-01, TEMP-02
 **Success Criteria** (what must be TRUE):
-  1. A weekly roll-up is produced from 5 daily summaries that groups related items into threads (e.g., a decision discussed Monday and revised Wednesday appears as one thread, not two disconnected items)
+  1. A weekly roll-up is produced from 5 daily summaries that groups related items into threads
   2. The weekly roll-up identifies the 3-5 most significant threads of the week with progression from first mention to current status
-  3. A monthly narrative synthesizes 4 weekly summaries into thematic arcs, emerging risks, and strategic shifts -- not a longer list of everything
+  3. A monthly narrative synthesizes 4 weekly summaries into thematic arcs, emerging risks, and strategic shifts
   4. Roll-up structure is consistent with daily structure (same categories, different granularity)
 **Plans**: 2 plans
 
@@ -103,8 +99,8 @@ Plans:
 
 ### Phase 5: Feedback and Refinement
 **Goal**: The pipeline improves over time through explicit priority configuration, quality tracking, and structured data output for downstream use
-**Depends on**: Phase 4 (requires proven base synthesis quality)
-**Requirements**: None (enhancement phase -- no v1 requirements; delivers differentiator features from research)
+**Depends on**: Phase 4
+**Requirements**: None (enhancement phase)
 **Success Criteria** (what must be TRUE):
   1. User can configure explicit priorities (projects, people, topics) that visibly influence what the daily synthesis emphasizes
   2. Quality metrics are tracked over time: edit frequency, section correction rates, data volume per run
@@ -112,19 +108,108 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [x] 05-01-PLAN.md — Priority configuration (projects, people, topics, suppress) and diff-based quality metrics tracking
-- [x] 05-02-PLAN.md — JSON sidecar output for programmatic task extraction and decision metadata
+- [x] 05-01-PLAN.md -- Priority configuration (projects, people, topics, suppress) and diff-based quality metrics tracking
+- [x] 05-02-PLAN.md -- JSON sidecar output for programmatic task extraction and decision metadata
+
+</details>
+
+### v1.5 Expanded Ingest (In Progress)
+
+**Milestone Goal:** Broaden the data surface beyond calendar and transcripts so synthesis sees the full picture of work activity.
+
+- [ ] **Phase 6: Data Model Foundation** - SourceItem model and commitment structure that all new sources depend on
+- [ ] **Phase 7: Slack Ingest + Synthesis Integration** - Slack channel/DM ingestion with end-to-end synthesis validation
+- [ ] **Phase 8: HubSpot Ingest** - Deal changes, contact notes, and CRM activity ingestion
+- [ ] **Phase 9: Google Docs Ingest** - Document edit detection and content extraction
+- [ ] **Phase 10: Cross-Source Synthesis + Commitments** - Deduplication tuning and structured commitment extraction across all sources
+
+## Phase Details
+
+### Phase 6: Data Model Foundation
+**Goal**: All new source data has a well-defined structure that ingest modules and synthesis can depend on
+**Depends on**: Phase 5 (v1.0 complete)
+**Requirements**: MODEL-01, MODEL-02
+**Success Criteria** (what must be TRUE):
+  1. A SourceItem can be instantiated with source type, channel/context, timestamp, content, and participants -- and validates correctly
+  2. A Commitment can be instantiated with who, what, by-when, and source attribution -- and validates correctly
+  3. Existing NormalizedEvent and DailySynthesis models still work unchanged (no regressions)
+**Plans**: TBD
+
+Plans:
+- [ ] 06-01: TBD
+
+### Phase 7: Slack Ingest + Synthesis Integration
+**Goal**: Daily summaries include Slack activity from curated channels and DMs, with source attribution throughout
+**Depends on**: Phase 6
+**Requirements**: SLACK-01, SLACK-02, SLACK-03, SLACK-04, SYNTH-05, SYNTH-07
+**Success Criteria** (what must be TRUE):
+  1. Running the pipeline produces a daily summary that includes Slack channel messages alongside meeting content
+  2. Thread replies above the configured threshold appear expanded in the summary, not collapsed to just the parent message
+  3. DM conversations appear in the summary with appropriate context
+  4. User can run discovery mode to see proposed channels and confirm/reject them before ingestion uses that list
+  5. Every Slack-sourced item in the output is attributed with "(per Slack #channel-name)" or "(per Slack DM with Person)"
+**Plans**: TBD
+
+Plans:
+- [ ] 07-01: TBD
+- [ ] 07-02: TBD
+
+### Phase 8: HubSpot Ingest
+**Goal**: Daily summaries include HubSpot CRM activity -- deal movements, contact notes, and task changes
+**Depends on**: Phase 7
+**Requirements**: HUBSPOT-01, HUBSPOT-02, HUBSPOT-03
+**Success Criteria** (what must be TRUE):
+  1. Deal stage changes from the target date appear in the daily summary with deal name and stage transition
+  2. Contact notes and activity from the target date appear in the summary with contact context
+  3. HubSpot tickets, calls, emails, meetings, and tasks from the target date appear in the summary
+  4. Every HubSpot-sourced item is attributed with "(per HubSpot [object type])"
+**Plans**: TBD
+
+Plans:
+- [ ] 08-01: TBD
+
+### Phase 9: Google Docs Ingest
+**Goal**: Daily summaries include documents the user created or edited that day
+**Depends on**: Phase 7
+**Requirements**: DOCS-01, DOCS-02
+**Success Criteria** (what must be TRUE):
+  1. Documents the user edited on the target date appear in the daily summary with title and content extract
+  2. Comments and suggestions on docs the user owns or is mentioned in appear in the summary
+  3. Every Docs-sourced item is attributed with "(per Google Doc [title])"
+**Plans**: TBD
+
+Plans:
+- [ ] 09-01: TBD
+
+### Phase 10: Cross-Source Synthesis + Commitments
+**Goal**: Multi-source output is deduplicated and commitments are extracted with structured deadlines across all sources
+**Depends on**: Phase 8, Phase 9
+**Requirements**: SYNTH-06, SYNTH-08
+**Success Criteria** (what must be TRUE):
+  1. When the same topic appears in both a meeting transcript and a Slack thread, the daily summary consolidates it into one item with both sources attributed
+  2. Commitments with deadlines are extracted from all sources (meetings, Slack, HubSpot) and appear as structured who/what/by-when entries in both the markdown output and JSON sidecar
+  3. The JSON sidecar contains a commitments array with machine-readable who, what, by_when, and source fields
+**Plans**: TBD
+
+Plans:
+- [ ] 10-01: TBD
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 0 -> 1 -> 2 -> 3 -> 4 -> 5
+Phases 6-10 execute in order: 6 -> 7 -> 8 -> 9 -> 10
+Note: Phases 8 and 9 can execute in parallel (independent sources); both must complete before Phase 10.
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 0. Execution Model Validation | 2/2 | Complete | 2026-04-02 |
-| 1. Foundation and Calendar Ingestion | 2/2 | Complete | 2026-04-02 |
-| 2. Transcript Ingestion and Normalization | 3/3 | Complete | 2026-04-02 |
-| 3. Two-Stage Synthesis Pipeline | 3/3 | Complete | 2026-04-02 |
-| 4. Temporal Roll-Ups | 2/2 | Complete | 2026-04-03 |
-| 5. Feedback and Refinement | 2/2 | Complete | 2026-04-03 |
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 0. Execution Model Validation | v1.0 | 2/2 | Complete | 2026-04-02 |
+| 1. Foundation and Calendar Ingestion | v1.0 | 2/2 | Complete | 2026-04-02 |
+| 2. Transcript Ingestion and Normalization | v1.0 | 3/3 | Complete | 2026-04-02 |
+| 3. Two-Stage Synthesis Pipeline | v1.0 | 3/3 | Complete | 2026-04-02 |
+| 4. Temporal Roll-Ups | v1.0 | 2/2 | Complete | 2026-04-03 |
+| 5. Feedback and Refinement | v1.0 | 2/2 | Complete | 2026-04-03 |
+| 6. Data Model Foundation | v1.5 | 0/1 | Not started | - |
+| 7. Slack Ingest + Synthesis Integration | v1.5 | 0/2 | Not started | - |
+| 8. HubSpot Ingest | v1.5 | 0/1 | Not started | - |
+| 9. Google Docs Ingest | v1.5 | 0/1 | Not started | - |
+| 10. Cross-Source Synthesis + Commitments | v1.5 | 0/1 | Not started | - |

@@ -90,27 +90,27 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MODEL-01 | TBD | Pending |
-| MODEL-02 | TBD | Pending |
-| SLACK-01 | TBD | Pending |
-| SLACK-02 | TBD | Pending |
-| SLACK-03 | TBD | Pending |
-| SLACK-04 | TBD | Pending |
-| HUBSPOT-01 | TBD | Pending |
-| HUBSPOT-02 | TBD | Pending |
-| HUBSPOT-03 | TBD | Pending |
-| DOCS-01 | TBD | Pending |
-| DOCS-02 | TBD | Pending |
-| SYNTH-05 | TBD | Pending |
-| SYNTH-06 | TBD | Pending |
-| SYNTH-07 | TBD | Pending |
-| SYNTH-08 | TBD | Pending |
+| MODEL-01 | Phase 6 | Pending |
+| MODEL-02 | Phase 6 | Pending |
+| SLACK-01 | Phase 7 | Pending |
+| SLACK-02 | Phase 7 | Pending |
+| SLACK-03 | Phase 7 | Pending |
+| SLACK-04 | Phase 7 | Pending |
+| SYNTH-05 | Phase 7 | Pending |
+| SYNTH-07 | Phase 7 | Pending |
+| HUBSPOT-01 | Phase 8 | Pending |
+| HUBSPOT-02 | Phase 8 | Pending |
+| HUBSPOT-03 | Phase 8 | Pending |
+| DOCS-01 | Phase 9 | Pending |
+| DOCS-02 | Phase 9 | Pending |
+| SYNTH-06 | Phase 10 | Pending |
+| SYNTH-08 | Phase 10 | Pending |
 
 **Coverage:**
 - v1.5 requirements: 15 total
-- Mapped to phases: 0
-- Unmapped: 15 ⚠️
+- Mapped to phases: 15
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-03*
-*Last updated: 2026-04-03 after v1.5 scoping*
+*Last updated: 2026-04-03 after v1.5 roadmap creation*
