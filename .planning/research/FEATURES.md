@@ -1,269 +1,237 @@
-# Features Research: Work Intelligence / Daily Synthesis
+# Feature Research: Multi-Source Data Ingestion (v1.5)
 
-**Research date:** 2026-03-23
-**Researcher:** Claude (agent-assisted)
-**Dimension:** Features
-**Project:** Work Intelligence System (Daily Summarizer)
+**Domain:** Work intelligence -- expanded data source integrations (Slack, HubSpot, Google Docs, Notion)
+**Researched:** 2026-04-03
+**Confidence:** MEDIUM -- API capabilities well-documented; cross-source dedup patterns are less standardized and need implementation validation
 
----
+## Feature Landscape
 
-## Scope
+### Table Stakes (Users Expect These)
 
-This document catalogs features across the work intelligence / daily synthesis product space, organized by the six dimensions requested: data ingestion, synthesis/summarization, temporal roll-ups, source attribution, output formats, and feedback/learning loops. Each feature is classified as table stakes, differentiator, or anti-feature, with complexity estimates and dependency notes.
+These are the minimum features that make each new source actually useful in the daily synthesis. Without these, adding the source adds noise without signal.
 
-**Competitive reference set:** Reclaim.ai, Mem.ai, Reflect, Notion AI, Granola, Otter.ai, Fireflies.ai, Read.ai, Fellow.app, and custom LLM pipelines processing calendar + transcript data.
+#### Slack Ingestion
 
----
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Channel message fetch for curated list | Core value: see async decisions that never surface in meetings | LOW | `conversations.history` with date range filter. Internal/custom apps retain Tier 3 limits (50+ req/min, 1000 msg/req) -- rate limits only punitive for non-Marketplace commercially distributed apps |
+| Thread resolution (fetch replies) | Slack threads are where decisions actually happen; top-level messages alone are misleading | MEDIUM | `conversations.replies` per thread. Requires detecting which messages have thread_ts != ts, then batch-fetching. Can be chatty on API calls for active channels |
+| Channel discovery + curation config | User needs to select high-signal channels, not ingest all 50+ | LOW | `conversations.list` to enumerate, store curated list in config YAML. Already a project decision |
+| Bot/app message filtering | Bot spam (deploy notifications, CI alerts) drowns signal | LOW | Filter by `subtype` field and `bot_id` presence. Configurable allow/block list |
+| Source attribution in output | "Per Slack #channel-name" lets reader trace back to source | LOW | Attach channel name to each normalized item. Existing pattern in transcript source attribution |
 
-## 1. Data Ingestion
+#### HubSpot Ingestion
 
-### Table Stakes (Must-Have or Users Leave)
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Deal stage changes for target date | Deal movement is the primary CRM signal for a manager/exec | MEDIUM | Use CRM search API with `lastmodifieddate` filter on deals, then check `dealstage` property changes via property history. Requires `hubspot-api-python` SDK |
+| Contact activity notes | Manual notes logged by team members are high-signal, low-volume | LOW | Engagements API filtered by type=NOTE and date range |
+| Task creation/completion | Tasks represent commitments that should flow into daily commitments section | LOW | Engagements API filtered by type=TASK with `hs_timestamp` date filter |
+| Meeting logs (HubSpot meetings, not calendar) | Some meetings are logged in HubSpot but not calendar | LOW | Engagements API filtered by type=MEETING. Cross-reference with calendar events for dedup |
+| Deal-level attribution | "Per HubSpot: [Deal Name]" in synthesis output | LOW | Attach deal name from association lookups |
 
-| Feature | Description | Complexity | Dependencies | Notes |
-|---------|-------------|------------|--------------|-------|
-| **Calendar event ingestion** | Pull meeting titles, times, attendees, descriptions from Google Calendar | Low | Google Calendar API auth | The skeleton everything hangs on. Without it, system cannot correlate transcripts to meetings or assess time allocation. |
-| **Meeting transcript ingestion** | Ingest transcripts from at least one source (Gemini, Gong, Otter, Fireflies) | Medium | Source-specific parsing; email or API access | The primary content source. Every competitor in this space ingests transcripts. Format varies wildly (email attachment, API, webhook). |
-| **Deduplication** | Detect and merge duplicate events/transcripts from overlapping sources | Medium | Depends on having 2+ sources | Without this, summaries repeat themselves. Calendar event + transcript + email confirmation for same meeting = one logical event. |
-| **Noise filtering** | Exclude low-signal content: automated notifications, scheduling emails, empty calendar holds | Low-Medium | Heuristic rules or classifier | 80%+ of raw data is noise. System is useless without aggressive filtering. Reclaim.ai and Notion AI both learned this the hard way. |
+#### Google Docs Ingestion
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Detect docs created/edited today | Know what documents were worked on, even without meeting context | LOW | Google Drive API `files.list` with `modifiedTime` filter and `mimeType='application/vnd.google-apps.document'`. Already have Google OAuth creds |
+| Extract document title + brief content summary | Title alone is insufficient; need enough content to understand what the doc is about | MEDIUM | Google Docs API `documents.get` returns structured JSON. Need to extract text from body elements. For long docs, truncate to first N paragraphs or use LLM summarization |
+| Distinguish "I edited" vs "shared with me" | Only surface docs the user actually worked on, not every shared doc | LOW | `modifiedByMeTime` field in Drive API distinguishes user edits from others' edits |
+| Source attribution | "Per Google Docs: [Doc Title]" | LOW | Straightforward metadata attachment |
+
+#### Notion Ingestion
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Detect pages updated today | Surface Notion work activity that doesn't appear anywhere else | MEDIUM | Use database query with `last_edited_time` timestamp filter. Requires knowing which databases/spaces to monitor -- needs a curated list like Slack channels. **IMPORTANT:** Notion API version 2025-09-03 introduced breaking changes for multi-source databases; must use `data_source_id` |
+| Page title + property changes | Know what changed, not just that something changed | MEDIUM | Retrieve page properties via pages API. For content changes, need to use blocks API to get page content -- Notion doesn't expose diffs, only current state |
+| Database entry changes | Track structured data changes (e.g., project status updates, task completions) | MEDIUM | Query database with date filter, compare against previous run's snapshot to detect changes. Notion has no native "what changed" API -- must diff against stored state |
+| Workspace/database curation config | Like Slack channels: user picks which Notion databases matter | LOW | Config YAML list of database IDs to monitor |
+| Source attribution | "Per Notion: [Page Title]" or "Per Notion: [Database Name]" | LOW | Metadata from page/database objects |
+
+### Cross-Source Features (Table Stakes for v1.5)
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Normalized event model expansion | All sources must produce items the synthesis pipeline can consume | MEDIUM | Current `NormalizedEvent` is calendar-centric (start_time, attendees, transcript). Need a broader `NormalizedItem` or add a `source_type` discriminator with source-specific fields. **Key dependency: this shapes everything downstream** |
+| Source-aware synthesis prompts | Slack threads need different extraction than meeting transcripts or HubSpot deal changes | MEDIUM | Current `EXTRACTION_PROMPT` assumes meeting transcript format. Need source-type-specific prompt templates, or a unified prompt that handles heterogeneous input |
+| Cross-source deduplication | Same topic in meeting + Slack + HubSpot = one synthesized item, not three | HIGH | This is the hardest feature. Time-proximity + title-similarity (current approach) won't work across source types. Needs LLM-assisted or embedding-based topic matching. Start with simple heuristics (same people + same day + keyword overlap) and iterate |
+| Source attribution throughout output | Every bullet in substance/decisions/commitments traces back to origin source | LOW | Extend existing `(per [source])` pattern. Already works for meetings; apply consistently to all sources |
+| Per-source error isolation | One source failing should not block the entire pipeline | LOW | Existing pattern: transcript failures don't block calendar. Apply same try/except isolation to each new source |
 
 ### Differentiators (Competitive Advantage)
 
-| Feature | Description | Complexity | Dependencies | Notes |
-|---------|-------------|------------|--------------|-------|
-| **Slack ingestion with channel prioritization** | Ingest Slack messages with configurable priority per channel (e.g., #leadership = high, #random = skip) | High | Slack API, channel taxonomy | Highest volume source. Mem.ai ingests broadly; the differentiation is in *selective* ingestion. Out of scope for v1 per PROJECT.md. |
-| **Cross-source event correlation** | Automatically link a calendar event to its transcript, related Slack thread, and follow-up email into a single "meeting record" | High | Calendar + transcript + Slack ingestion | This is what separates a synthesis tool from a search tool. Few products do this well. Fellow.app attempts it for meeting workflows. |
-| **Incremental ingestion** | Process only new/changed data since last run, not full re-scan | Medium | State tracking, cursor/token management | Critical for cost control when running on plan limits rather than API. Enables daily batch to run in minutes, not hours. |
-| **Configurable confidentiality boundaries** | Exclude specific calendar categories, channels, or senders from processing (HR, legal, board) | Medium | Ingestion layer filtering | PROJECT.md flags this as TBD. No competitor handles this well. Most are all-or-nothing. |
+Features that make this system genuinely more useful than reading each source individually. Not required for launch, but high-value.
 
-### Anti-Features (Deliberately NOT Build)
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Cross-source thread detection | "This HubSpot deal was also discussed in Slack #sales and in Tuesday's meeting" -- connecting dots across sources that humans miss | HIGH | Requires entity/topic matching across source types. Could use LLM to identify topic clusters across normalized items. **Strong candidate for v1.5.1 iteration rather than v1.5.0 launch** |
+| Slack signal scoring | Auto-rank Slack messages by likely importance: messages mentioning user, messages with decisions/commitments, threads with high reply count | MEDIUM | Heuristic scoring: mentions of user, reaction count, reply count, message length, presence of keywords. Reduces noise before LLM processing |
+| Incremental ingestion with state tracking | Only fetch what's new since last run, not re-fetch entire day | MEDIUM | Store last-fetched timestamp/cursor per source. Slack has `oldest`/`latest` params. HubSpot has `lastmodifieddate`. Drive has `changes.list` with page tokens. Notion has `last_edited_time` filter. Saves API calls and processing time |
+| Commitment deadline extraction from all sources | Structured who/what/by-when from Slack messages and HubSpot tasks, not just meetings | MEDIUM | Extend existing commitment extraction to all source types. HubSpot tasks already have structured deadlines. Slack commitments need LLM extraction. Already on the PROJECT.md active requirements list |
+| HubSpot deal stage narrative | "Deal X moved from Proposal to Negotiation" as a synthesized event rather than raw property change | LOW | Transform HubSpot property history into human-readable narrative. Low complexity, high readability impact |
 
-| Feature | Why Not | Risk if Built |
-|---------|---------|---------------|
-| **Real-time streaming ingestion** | End-of-day batch is sufficient for v1 (per PROJECT.md). Real-time adds massive complexity for marginal daily-summary value. | Over-engineering; cost explosion; distraction from synthesis quality. |
-| **Automatic Slack DM ingestion** | DMs contain the most sensitive content. Blanket ingestion creates privacy and trust problems. | Legal exposure, employee trust erosion, potential policy violations. |
-| **Browser history / screen time tracking** | Invasive; low signal-to-synthesis ratio; RescueTime already exists. | Privacy overreach; data volume explosion with minimal synthesis value. |
+### Anti-Features (Commonly Requested, Often Problematic)
 
----
-
-## 2. Synthesis / Summarization
-
-### Table Stakes
-
-| Feature | Description | Complexity | Dependencies | Notes |
-|---------|-------------|------------|--------------|-------|
-| **Structured daily summary** | Produce a daily summary organized by consistent categories (not freeform prose) | Medium | Ingested data, LLM access, prompt engineering | Every competitor produces some form of daily output. Structure is what makes it scannable in 5 minutes. The 10-question framework in the planning doc is the structure. |
-| **Evidence-only framing** | Surface what happened (quotes, timestamps, contributions) without evaluative language | Medium | Prompt engineering, output validation | PROJECT.md mandates this. No "performed well" or "underperformed." This is both an ethical requirement and a legal safeguard. |
-| **Per-meeting synthesis** | Summarize each meeting individually before rolling into daily view | Medium | Transcript ingestion, meeting boundary detection | Users need to drill into specific meetings. Granola, Otter.ai, and Fireflies all produce per-meeting summaries as baseline. |
-| **Decision extraction** | Identify and extract decisions made, by whom, with stated rationale | Medium-High | NLP/LLM with good prompt design | Core question #3 from the framework. Most meeting note tools (Fellow, Fireflies) attempt this. Quality varies enormously. |
-| **Task/commitment extraction** | Identify action items, who owns them, and deadlines | Medium | Similar to decision extraction | Core question #7. Otter.ai, Fireflies, Fellow, and Read.ai all extract action items. Table stakes for meeting intelligence. |
-
-### Differentiators
-
-| Feature | Description | Complexity | Dependencies | Notes |
-|---------|-------------|------------|--------------|-------|
-| **Cross-meeting synthesis** | Connect threads across multiple meetings in the same day (e.g., "the pricing discussion in the 10am continued in the 2pm with different stakeholders") | High | All per-meeting summaries, entity resolution | This is where daily synthesis surpasses per-meeting tools. No single-meeting product does this. It requires understanding that topics span meetings. |
-| **Substance filtering (signal vs. noise)** | Distinguish high-impact events from routine updates using learned user priorities | High | Feedback loop (see section 6), prompt engineering | The planning doc identifies this as the hard problem. "Two people in the same meeting would highlight different things as substantive." |
-| **Counterfactual awareness** | Flag what did NOT happen: cancelled meetings, missing follow-ups, silence from usually-active people | High | Historical baseline, pattern detection | Mentioned in the planning doc as a novel intelligence layer. Absence of signal is itself a signal. No competitor does this. |
-| **Theme extraction across days** | Identify recurring topics, unresolved questions, and intellectual threads that persist across multiple days | High | Multi-day state, entity/topic tracking | Question #5 from the framework. This is where temporal composability starts to emerge. Mem.ai attempts something like this with their knowledge graph. |
-| **Personnel evidence collection** | Maintain per-person running logs of contributions, key quotes, collaboration moments (never evaluative) | High | Entity resolution for people, strict output guardrails | Highest-value and highest-risk feature per the planning doc. Frame as evidence collection, not evaluation. No competitor offers this because of the risk. |
-
-### Anti-Features
-
-| Feature | Why Not | Risk if Built |
-|---------|---------|---------------|
-| **Automated performance ratings** | System should never render judgments about people. Human makes evaluation calls. | Legal liability, bias amplification, context collapse, trust destruction. |
-| **Sentiment analysis on communications** | Crude positive/negative scoring of messages decontextualizes tone. Sarcasm, cultural norms, and relationship context make this unreliable. | False signals presented as data; managers acting on misleading "sentiment scores." |
-| **Auto-generated meeting agendas** | Scope creep into meeting management. Fellow.app and Notion AI own this. Focus on post-hoc synthesis, not pre-meeting prep. | Feature sprawl; moves system from intelligence to workflow tool. |
-| **Smart replies / auto-drafting** | Generating responses based on synthesis. Different product category entirely. | Liability; voice/tone mismatch; user trust issues. |
-
----
-
-## 3. Temporal Roll-Ups
-
-### Table Stakes
-
-| Feature | Description | Complexity | Dependencies | Notes |
-|---------|-------------|------------|--------------|-------|
-| **Weekly summary from dailies** | Aggregate 5 daily summaries into a week-in-review: top accomplishments, open threads, key decisions | Medium | 5 days of structured daily output, LLM processing | The planning doc specifies this. Use case: Monday planning, 1:1 prep. Without weekly roll-ups the system is just a daily log. |
-| **Consistent structure across time horizons** | Weekly, monthly, quarterly summaries use the same category framework (just at different granularity) | Low | Template/prompt design | Users should be able to compare a daily "Decisions" section to a monthly "Decisions" section without learning a new format. |
-
-### Differentiators
-
-| Feature | Description | Complexity | Dependencies | Notes |
-|---------|-------------|------------|--------------|-------|
-| **Monthly narrative with themes** | Produce a thematic narrative (not just a longer list) identifying progress arcs, emerging risks, and strategic shifts | High | 4 weeks of dailies/weeklies, sophisticated prompt engineering | The planning doc calls for "thematic narrative, progress against goals." This requires understanding trajectory, not just aggregation. |
-| **Quarterly achievement portfolio** | Structured document suitable for QBR prep, performance self-reviews, and self-advocacy | High | 3 months of roll-ups, goal/OKR context | The planning doc identifies this as a key use case. The real unlock of temporal composability. "What did I accomplish in Q1?" with sourced evidence. |
-| **Per-person temporal roll-ups** | Weekly/monthly view of interactions and contributions per direct report or key stakeholder | High | Personnel evidence collection, multi-week state | Performance review prep. The planning doc calls this the highest-value output. Requires careful guardrails. |
-| **Per-project temporal roll-ups** | Track a project's evolution across weeks/months: decisions made, pivots, progress | High | Project entity resolution, multi-week state | Useful for retrospectives and handoffs. Requires identifying which meetings/threads belong to which project. |
-| **Trend detection across roll-ups** | Identify patterns: "You've had 3 weeks of increasing meeting load" or "The infrastructure topic keeps resurfacing without resolution" | High | Multiple weeks of structured data, statistical/LLM analysis | This is the "personal operating record" insight the planning doc envisions. Moves from summary to intelligence. |
-
-### Anti-Features
-
-| Feature | Why Not | Risk if Built |
-|---------|---------|---------------|
-| **Automated goal tracking / OKR scoring** | System lacks context on what "progress" means for ambiguous goals. Human judges goal attainment. | False precision; gaming incentives; context collapse on nuanced goals. |
-| **Predictive forecasting** | "Based on current trajectory, you will miss your Q2 target." Insufficient data and context for reliable predictions. | False confidence in predictions; users making bad decisions based on unreliable forecasts. |
-
----
-
-## 4. Source Attribution
-
-### Table Stakes
-
-| Feature | Description | Complexity | Dependencies | Notes |
-|---------|-------------|------------|--------------|-------|
-| **Per-item source linking** | Every summary item traces back to the specific transcript, calendar event, or message it came from | Medium | Ingestion metadata preservation, output formatting | PROJECT.md explicitly requires this. Without attribution, summaries are unverifiable claims. Users cannot trust or correct unattributed synthesis. |
-| **Timestamp preservation** | All evidence carries original timestamps (not just "today" but "10:32 AM in the product sync") | Low | Metadata from ingestion | Timestamps are essential for sequencing events and resolving conflicts. "Was the decision made before or after the data came in?" |
-| **Participant attribution** | Attribute statements, decisions, and commitments to specific people | Medium | Speaker identification in transcripts, attendee lists from calendar | "Sarah decided X" vs. "it was decided" is the difference between a useful log and a vague summary. |
-
-### Differentiators
-
-| Feature | Description | Complexity | Dependencies | Notes |
-|---------|-------------|------------|--------------|-------|
-| **Direct quote preservation** | Include verbatim quotes for key moments (decisions, commitments, notable statements) | Medium | Transcript access, quote selection logic | Question #6 (Resonance) from the framework. Preserves the human texture. Most summarizers paraphrase everything and lose the voice. |
-| **Source confidence scoring** | Indicate confidence level based on source quality (full transcript = high, calendar title only = low, secondhand reference = very low) | Medium-High | Source metadata, confidence heuristic | Helps user calibrate trust. "This decision was extracted from a full transcript" vs. "inferred from a calendar title." |
-| **Cross-reference linking** | Link related items across days: "This follows up on the decision from Tuesday's product sync" | High | Multi-day entity resolution, decision/topic tracking | The planning doc envisions tracing decisions back through discussions that shaped them. This is the knowledge graph aspect. |
-
-### Anti-Features
-
-| Feature | Why Not | Risk if Built |
-|---------|---------|---------------|
-| **Hiding sources behind a "trust the AI" interface** | Attribution is the entire trust mechanism. If users cannot verify, they cannot correct, and the system becomes an unreliable oracle. | Erosion of trust; uncorrectable errors compounding over time. |
-
----
-
-## 5. Output Formats
-
-### Table Stakes
-
-| Feature | Description | Complexity | Dependencies | Notes |
-|---------|-------------|------------|--------------|-------|
-| **Structured markdown file per day** | One markdown file per day with consistent sections, stored locally | Low | Synthesis pipeline output | PROJECT.md specifies flat markdown files for v1. Readable in any editor, versionable in git, compatible with Obsidian. |
-| **Scannable in under 5 minutes** | Daily output is concise enough to read over morning coffee | Low (design constraint) | Good prompt engineering for brevity | PROJECT.md core value statement: "worth 5 minutes of my time." If it takes 15 minutes to read, the system failed. |
-| **Consistent naming and organization** | Files follow a predictable naming scheme (e.g., `YYYY-MM-DD.md`) in a predictable directory structure | Low | Pipeline output configuration | Users should be able to find any day's summary without searching. Temporal organization is essential. |
-
-### Differentiators
-
-| Feature | Description | Complexity | Dependencies | Notes |
-|---------|-------------|------------|--------------|-------|
-| **Multiple output tiers** | Executive summary (30 seconds), standard summary (5 minutes), full detail (deep dive) at user's choice | Medium | Multi-pass synthesis or progressive disclosure in output format | Lets user choose depth based on day. Light meeting day = skim. Critical day = deep read. No competitor offers this well. |
-| **Obsidian-native output** | Files with YAML frontmatter, wikilinks, tags, and backlinks compatible with Obsidian knowledge management | Medium | Obsidian formatting conventions, entity linking | Planning doc mentions Obsidian as a potential destination. Enables the "second brain" integration naturally. |
-| **Structured data sidecar** | JSON or YAML alongside markdown containing machine-readable decisions, tasks, people, and topics for downstream querying | Medium | Parallel output generation | Planning doc notes the need for both readability (markdown) and queryability (structured data). Enables Phase 4 query interface. |
-| **Email digest option** | Deliver daily summary via email for consumption outside file system | Low-Medium | Email sending capability | Some users prefer push delivery. Reclaim.ai uses email for daily planning summaries. |
-
-### Anti-Features
-
-| Feature | Why Not | Risk if Built |
-|---------|---------|---------------|
-| **Interactive dashboard / web UI** | Premature for v1. Adds massive frontend complexity before the synthesis quality is proven. | Engineering distraction; maintenance burden; delays validation of core value proposition. |
-| **Slack bot delivery** | Posting summaries into Slack mixes private intelligence with team-visible channels. Personal tool first. | Privacy leakage; team-facing implications before system is reliable. |
-| **PDF / formatted report generation** | Over-polished output for a personal tool. Markdown is sufficient and more flexible. | Complexity for aesthetics; slows iteration on content quality. |
-
----
-
-## 6. Feedback / Learning Loops
-
-### Table Stakes
-
-| Feature | Description | Complexity | Dependencies | Notes |
-|---------|-------------|------------|--------------|-------|
-| **Manual correction capability** | User can edit the generated summary to fix errors, add context, remove irrelevant items | Low | Markdown files are inherently editable | Minimum viable feedback: user fixes the output. System does not need to be perfect if corrections are easy. |
-| **Prompt iteration cycle** | Developer (Micah) can modify synthesis prompts based on observed output quality | Low | Access to prompt templates | The POC is explicitly about refining prompts. This is the v1 learning loop: human reviews, adjusts prompts, quality improves. |
-
-### Differentiators
-
-| Feature | Description | Complexity | Dependencies | Notes |
-|---------|-------------|------------|--------------|-------|
-| **Thumbs up/down on summary items** | Lightweight per-item feedback that accumulates to improve signal detection | Medium | Feedback storage, prompt conditioning on historical feedback | Planning doc Phase 5. "Add a lightweight feedback mechanism that improves synthesis quality over time." |
-| **Substance calibration** | System learns user's definition of "substantive" from corrections and feedback over weeks | High | Feedback loop, preference modeling or few-shot example curation | The planning doc identifies this as the critical learning challenge. "The system needs to learn your definition of substance over time." |
-| **Correction propagation** | When user corrects a summary item, the correction informs future synthesis (e.g., "stop summarizing standup status updates, I already know those") | High | Feedback storage, retrieval-augmented prompting | Moves beyond per-session prompting to persistent learned preferences. |
-| **Quality metrics tracking** | Track summary quality over time: how often does user edit? Which sections get corrected most? | Medium | Edit tracking, basic analytics | Meta-feedback: the system monitors its own performance trajectory. |
-| **Explicit priority configuration** | User declares priorities (projects, people, topics) that weight synthesis toward what matters most | Medium | Configuration layer, prompt conditioning | Rather than learning implicitly, let user explicitly say "I care most about the infrastructure migration and the Q2 hiring plan." |
-
-### Anti-Features
-
-| Feature | Why Not | Risk if Built |
-|---------|---------|---------------|
-| **Fully automated self-improvement** | System autonomously changing its synthesis behavior without user review creates unpredictable drift. | Silent quality degradation; system optimizes for wrong objective; user loses trust. |
-| **Fine-tuning a custom model** | Enormous complexity for marginal gains over good prompt engineering + few-shot examples. | Cost, maintenance burden, model lock-in, training data requirements far exceed personal tool scope. |
-
----
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Full Slack workspace ingestion | "Don't miss anything" | 50+ channels at 100+ messages/day = massive noise, high LLM cost, slow pipeline. Most channels are zero-signal for an exec | Curated channel list (5-15 channels). Discovery command to suggest high-activity channels, user confirms |
+| Google Docs full-text ingestion | "Understand what I wrote" | Long documents (10+ pages) blow up context windows and LLM costs. Most doc content is not relevant to daily intelligence | Title + first 500 words + any comments/suggestions. Or LLM-summarize to 200 words max |
+| Real-time Slack monitoring | "See decisions as they happen" | Breaks batch architecture, adds webhook complexity, creates intraday noise. System is designed for end-of-day synthesis | End-of-day batch fetch. Already an explicit out-of-scope decision in PROJECT.md |
+| Notion full page content ingestion | "Know everything that changed" | Notion pages can be huge (entire wikis). Block-by-block content retrieval is API-intensive | Title + property changes + first-level blocks only. Content summary for pages with significant changes |
+| HubSpot full CRM sync | "See all customer activity" | Full CRM dump includes hundreds of contacts, thousands of activities. Most is irrelevant daily noise | Scoped to deal stage changes, notes, and tasks on deals the user owns or is associated with |
+| Automatic channel/database discovery without curation | "Just figure out what's important" | What's important is highly personal and context-dependent. Auto-discovery over-includes | Discovery command that suggests, user curates. Config file is the source of truth |
+| Email body ingestion (beyond transcripts) | "My inbox is where work happens" | Email is the noisiest source by far. Spam, newsletters, automated notifications. Signal extraction is extremely hard | Defer to v2.0+ or never. Current transcript-from-email approach is the right scoping |
+| Notion webhook subscriptions | "Get notified of changes" | Over-engineering for batch; adds webhook server complexity | Polling via search API in daily batch |
+| Slack DM ingestion | "Decisions happen in DMs too" | Privacy boundary; DMs mix personal and work context | Public/private channels only from curated list |
+| Google Docs change tracking (revision diffs) | "Show me what changed" | Revision API is slow and diffs are noisy at document scale | Fetch current content of docs modified that day; title + summary is sufficient |
 
 ## Feature Dependencies
 
-The following dependency graph shows which features enable or require others:
-
 ```
-Calendar Ingestion ──────────────────┐
-                                     ├──> Cross-Source Event Correlation ──> Cross-Meeting Synthesis
-Transcript Ingestion ────────────────┤
-                                     ├──> Per-Meeting Synthesis ──> Structured Daily Summary
-Noise Filtering ─────────────────────┘                                      │
-                                                                            ├──> Weekly Roll-Up ──> Monthly Narrative ──> Quarterly Portfolio
-Per-Item Source Linking ──> Participant Attribution ──> Personnel Evidence   │
-                                                                            ├──> Theme Extraction ──> Trend Detection
-Manual Correction ──> Thumbs Up/Down ──> Substance Calibration              │
-                                                                            └──> Structured Data Sidecar ──> Query Interface (Phase 4)
-Prompt Iteration ──> Explicit Priority Config ──> Correction Propagation
+[Normalized Item Model Expansion]
+    |
+    +--requires--> [Slack Ingestion]
+    +--requires--> [HubSpot Ingestion]
+    +--requires--> [Google Docs Ingestion]
+    +--requires--> [Notion Ingestion]
+    |
+    +--requires--> [Source-Aware Synthesis Prompts]
+                       |
+                       +--requires--> [Cross-Source Deduplication]
+                                          |
+                                          +--enhances--> [Cross-Source Thread Detection] (differentiator)
+
+[Google OAuth Credentials] --already exists--> [Google Docs Ingestion]
+                                           \--> [Google Drive file listing]
+
+[Slack Channel Discovery] --enables--> [Slack Ingestion]
+
+[HubSpot Auth Setup] --enables--> [HubSpot Ingestion]
+
+[Notion Auth Setup] --enables--> [Notion Ingestion]
+
+[Per-Source Error Isolation] --enhances--> [All Source Ingestion]
+
+[Incremental State Tracking] --enhances--> [All Source Ingestion] (differentiator, can defer)
 ```
 
-### Critical Path for v1 (POC)
+### Dependency Notes
 
-1. Calendar ingestion (skeleton)
-2. Transcript ingestion (substance)
-3. Noise filtering (usability)
-4. Per-meeting synthesis (building block)
-5. Structured daily summary answering Questions 2, 3, 7 (Substance, Decisions, Commitments)
-6. Per-item source linking (trust)
-7. Structured markdown file per day (output)
-8. Manual correction + prompt iteration (learning)
+- **Normalized Item Model must come first:** Every source ingestion module depends on a data model that can represent non-calendar items. The current `NormalizedEvent` is too calendar-specific (fields like `start_time`, `end_time`, `attendees`, `meeting_link`, `transcript_text`). This is the foundation layer.
+- **Source-aware prompts depend on model expansion:** Can't write source-specific extraction prompts until the data shape from each source is defined.
+- **Cross-source dedup depends on all sources flowing through normalization:** You need items from multiple sources to deduplicate them. This is the last integration step, not the first.
+- **Google Docs reuses existing auth:** No new OAuth setup needed. Google Drive API shares the same credentials already in use for calendar and Gmail. Only needs additional OAuth scopes (`documents.readonly`, `drive.readonly`).
+- **HubSpot and Notion require new auth flows:** Net-new API integrations with their own authentication. HubSpot: private app access token (simplest for personal tool). Notion: internal integration token (created at notion.so/my-integrations, must be shared with target pages/databases).
+- **Notion is the most complex integration:** No native change detection API, breaking API version changes, block-by-block content retrieval. Should be last source integrated.
+
+## MVP Definition
+
+### Launch With (v1.5.0)
+
+Minimum to validate multi-source synthesis. Three sources (not four) to reduce launch risk.
+
+- [ ] **Normalized item model expansion** -- Extend or replace `NormalizedEvent` to handle heterogeneous source types (Slack message, HubSpot deal change, doc edit). This is the foundation.
+- [ ] **Slack channel ingestion (curated list)** -- Highest signal new source per PROJECT.md learnings. Fetch messages + thread replies from configured channels for target date. Bot filtering.
+- [ ] **HubSpot deal + activity ingestion** -- Deal stage changes, notes, and tasks for target date. Structured data that enriches meeting context.
+- [ ] **Google Docs change detection** -- List docs created/edited by user on target date. Title + brief summary. Reuses existing OAuth.
+- [ ] **Source-aware synthesis prompts** -- Different extraction approach for Slack threads vs HubSpot structured data vs meeting transcripts vs doc summaries.
+- [ ] **Source attribution in all output** -- Every synthesized item traces back to origin source with `(per [source]: [detail])` format.
+- [ ] **Per-source error isolation** -- Each source fails independently without blocking the pipeline.
+- [ ] **Config-driven source enablement** -- Each source can be enabled/disabled and configured in config.yaml.
+
+### Add After Validation (v1.5.x)
+
+Features to add once core multi-source synthesis is working and daily output quality is validated.
+
+- [ ] **Notion ingestion** -- Add after Slack + HubSpot + Docs are stable. Notion API has breaking changes (2025-09-03 multi-source databases) and no native diff support, making it the most complex integration. Trigger: user confirms the three primary sources are generating useful output.
+- [ ] **Cross-source deduplication** -- Start with time-proximity + participant-overlap heuristics. LLM-assisted topic matching as iteration. Trigger: user reports redundant items in daily synthesis.
+- [ ] **Slack signal scoring** -- Rank messages by importance before LLM processing. Trigger: Slack ingestion works but daily output is too noisy.
+- [ ] **Incremental state tracking** -- Store cursors/timestamps to avoid re-fetching. Trigger: pipeline runtime becomes noticeably slow with 4+ sources.
+- [ ] **Commitment deadline extraction from Slack/HubSpot** -- Structured who/what/by-when from non-meeting sources. Trigger: user validates meeting commitment extraction is accurate.
+- [ ] **HubSpot deal stage narrative** -- Transform raw property changes into "Deal X moved from Proposal to Negotiation." Trigger: HubSpot raw output is hard to read.
+
+### Future Consideration (v2.0+)
+
+- [ ] **Cross-source thread detection** -- Connecting the same topic across Slack, meetings, and HubSpot requires entity-layer awareness. Defer until v2.0 entity layer exists.
+- [ ] **Email body ingestion (beyond transcripts)** -- Too noisy for current architecture. Needs sophisticated filtering that likely requires entity layer.
+- [ ] **Slack workspace auto-discovery** -- ML-based channel importance scoring. Overkill for personal tool with 5-15 channels.
+
+## Feature Prioritization Matrix
+
+| Feature | User Value | Implementation Cost | Priority | Depends On |
+|---------|------------|---------------------|----------|------------|
+| Normalized item model expansion | HIGH | MEDIUM | P0 | Nothing (foundation) |
+| Slack channel ingestion | HIGH | LOW | P1 | Model expansion |
+| HubSpot deal/activity ingestion | HIGH | MEDIUM | P1 | Model expansion, HubSpot auth |
+| Google Docs change detection | MEDIUM | LOW | P1 | Model expansion (reuses existing auth) |
+| Source-aware synthesis prompts | HIGH | MEDIUM | P1 | Model expansion |
+| Source attribution in output | HIGH | LOW | P1 | Model expansion |
+| Per-source error isolation | MEDIUM | LOW | P1 | Nothing (pattern already exists) |
+| Config-driven source enablement | MEDIUM | LOW | P1 | Nothing |
+| Notion ingestion | MEDIUM | HIGH | P2 | Model expansion, Notion auth, API version handling |
+| Cross-source deduplication | HIGH | HIGH | P2 | All sources ingesting |
+| Slack signal scoring | MEDIUM | MEDIUM | P2 | Slack ingestion |
+| Incremental state tracking | LOW | MEDIUM | P2 | All sources ingesting |
+| Commitment deadline extraction (multi-source) | MEDIUM | MEDIUM | P2 | Source-aware prompts |
+| HubSpot deal stage narrative | MEDIUM | LOW | P2 | HubSpot ingestion |
+| Cross-source thread detection | HIGH | HIGH | P3 | Deduplication, entity layer (v2.0) |
+
+**Priority key:**
+- P0: Must complete before anything else (foundation)
+- P1: Must have for v1.5.0 launch
+- P2: Should have, add in v1.5.x iterations
+- P3: Nice to have, future consideration
+
+## Ecosystem Context
+
+| Capability | Reclaim.ai / Clockwise | Notion AI | Slack AI | This System |
+|---------|------------------------|-----------|----------|--------------|
+| Meeting summarization | Calendar + transcript based | Notion meeting notes only | Slack huddle transcripts only | Multi-source: calendar + transcript + related Slack threads + HubSpot context |
+| Cross-source synthesis | Single-source only | Notion workspace only | Slack workspace only | True cross-source daily intelligence across 4+ sources |
+| Decision tracking | Not offered | Manual in Notion databases | Channel recaps mention decisions | Automated extraction from all sources with attribution |
+| Temporal roll-ups | Weekly time reports only | Not offered | Weekly channel digests | Daily -> weekly -> monthly narrative synthesis |
+| CRM integration | Not offered | Basic via Notion databases | Salesforce/HubSpot search (not synthesis) | HubSpot deal changes synthesized into daily intelligence |
+
+The key differentiator: no existing tool synthesizes across Slack + CRM + Docs + meetings into a single coherent daily brief. Each platform's AI features only see their own silo.
+
+## API-Specific Implementation Notes
+
+### Slack
+- **Auth:** Bot token with `channels:history`, `groups:history`, `channels:read` scopes. Internal/custom app -- NOT affected by 2026 rate limit crackdown (those only hit non-Marketplace commercially distributed apps).
+- **Rate limits:** Tier 3 for internal apps: 50+ req/min, 1000 messages per request. Generous for batch end-of-day use.
+- **Key gotcha:** Thread replies require separate `conversations.replies` call per thread. Budget for this in API call volume.
+- **SDK:** `slack-sdk` Python package.
+
+### HubSpot
+- **Auth:** Private app access token (simplest for personal tool). Scoped to specific HubSpot account.
+- **SDK:** `hubspot-api-python` (official, actively maintained). Note: method locations have changed in recent versions (`do_search` moved from `basic_api` to `identifiers_api`).
+- **Key gotcha:** No single "what changed today" API. Must query deals by `lastmodifieddate`, then check property history for stage changes. Engagements API for notes/tasks/meetings.
+
+### Google Docs
+- **Auth:** Reuses existing Google OAuth credentials. Add `https://www.googleapis.com/auth/documents.readonly` and `https://www.googleapis.com/auth/drive.readonly` scopes.
+- **Key gotcha:** Google Docs API returns structured JSON (paragraphs, tables, lists), not plain text. Consider using Drive API `files.export` with `text/plain` mimeType for simpler text extraction instead of parsing the document structure.
+
+### Notion
+- **Auth:** Internal integration token (created at notion.so/my-integrations). Must be explicitly shared with target pages/databases.
+- **API version:** Must target 2025-09-03 or later for multi-source database support. Breaking change: `data_source_id` required for database operations.
+- **SDK:** `notion-sdk-py` (community, sync + async support).
+- **Key gotcha:** No "what changed" API. Must query pages by `last_edited_time` filter, then diff against stored state to detect actual changes. Most complex integration of the four.
+
+## Sources
+
+- [Slack conversations.history API](https://api.slack.com/methods/conversations.history)
+- [Slack rate limit changes for non-Marketplace apps](https://api.slack.com/changelog/2025-05-terms-rate-limit-update-and-faq)
+- [Slack rate limits documentation](https://docs.slack.dev/apis/web-api/rate-limits/)
+- [HubSpot CRM Deals API](https://developers.hubspot.com/docs/api-reference/crm-deals-v3/guide)
+- [HubSpot hubspot-api-python GitHub](https://github.com/HubSpot/hubspot-api-python)
+- [Google Docs API Python quickstart](https://developers.google.com/workspace/docs/api/quickstart/python)
+- [Google Drive changes API](https://developers.google.com/workspace/drive/api/guides/manage-changes)
+- [Google Drive files.list modifiedTime filter](https://googleapis.github.io/google-api-python-client/docs/dyn/drive_v3.files.html)
+- [Notion API database query filters](https://developers.notion.com/reference/post-database-query-filter)
+- [Notion API upgrade guide 2025-09-03](https://developers.notion.com/docs/upgrade-guide-2025-09-03)
+- [notion-sdk-py GitHub](https://github.com/ramnes/notion-sdk-py)
 
 ---
-
-## Complexity Summary
-
-| Complexity | Count | Examples |
-|------------|-------|----------|
-| **Low** | 7 | Calendar ingestion, timestamp preservation, consistent naming, manual correction, prompt iteration, scannable output, consistent roll-up structure |
-| **Medium** | 14 | Transcript ingestion, deduplication, noise filtering, per-meeting synthesis, weekly roll-up, source linking, participant attribution, incremental ingestion, quote preservation, structured data sidecar, email digest, thumbs up/down, quality metrics, explicit priority config |
-| **Medium-High** | 3 | Decision extraction, source confidence scoring, configurable confidentiality boundaries |
-| **High** | 10 | Slack ingestion, cross-source correlation, cross-meeting synthesis, substance filtering, counterfactual awareness, theme extraction, monthly narrative, quarterly portfolio, per-person roll-ups, substance calibration, correction propagation |
-
----
-
-## Competitive Positioning Notes
-
-**What existing tools do well:**
-- Otter.ai, Fireflies.ai, Granola: Per-meeting transcription and summarization (action items, decisions). They own the single-meeting workflow.
-- Reclaim.ai: Calendar intelligence, time blocking, scheduling optimization. They own calendar-as-operating-system.
-- Mem.ai: Knowledge management with AI-powered retrieval and connections across notes. They own the "second brain" search.
-- Notion AI: In-context summarization within an existing workspace. They own "AI inside your existing docs."
-- Fellow.app: Meeting management lifecycle (agenda, notes, action items, 1:1s). They own the meeting workflow.
-- Read.ai: Meeting analytics with engagement metrics. They own meeting performance data.
-
-**The gap this system fills:**
-None of these tools synthesize across all meetings in a day into a coherent daily intelligence briefing. They are per-meeting tools, per-workspace tools, or scheduling tools. The white space is the **cross-source, cross-meeting, temporal synthesis layer** that sits on top of individual meeting tools and produces a personal operating record. The planning doc's core insight is correct: the opportunity is a synthesis layer, not another ingestion tool.
-
-**Strongest differentiation opportunities for this project:**
-1. Cross-meeting daily synthesis (no one does this)
-2. Temporal roll-ups with evidence chains (no one does this well)
-3. Personnel evidence collection with strict ethical guardrails (no one attempts this)
-4. Counterfactual awareness (entirely novel)
-5. Learned substance calibration (Mem.ai is closest but in a different product category)
-
----
-
-## Research Confidence & Gaps
-
-**High confidence:** Data ingestion features, output format features, and basic synthesis features are well-understood from existing products and the planning documents.
-
-**Medium confidence:** Feedback/learning loop features are less proven in this product category. The planning doc's Phase 5 framing is reasonable but implementation complexity may be underestimated.
-
-**Gaps to investigate:**
-- How do existing LLM pipelines handle transcript quality variance (partial transcripts, speaker misidentification, crosstalk)?
-- What is the actual token cost per day for processing 3-8 meeting transcripts through Claude? Critical for the "zero incremental cost" constraint.
-- How do users of Mem.ai and Reflect actually interact with temporal views? Is weekly roll-up genuinely used, or do people just search?
-
----
-
-*Research completed: 2026-03-23. Feeds into requirements definition and architecture decisions for Work Intelligence System.*
+*Feature research for: Work Intelligence System v1.5 -- Multi-Source Data Ingestion*
+*Researched: 2026-04-03*

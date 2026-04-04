@@ -1,335 +1,230 @@
-# STACK.md -- Work Intelligence / Daily Synthesis Pipeline
-
-**Project:** Work Intelligence System (Daily Summarizer)
-**Research date:** 2026-03-23
-**Dimension:** Technology stack for a Python-based personal work intelligence pipeline
-**Confidence note:** Web search/fetch were unavailable during this research session. Versions are based on known stable releases as of early 2026. Each recommendation includes a confidence level. **Verify versions with `pip index versions <package>` before pinning.**
-
----
-
-## Executive Summary
-
-The stack is deliberately simple: Google's official Python client libraries for API access, `httpx` for Gong's REST API, Pydantic for data modeling, Jinja2 for markdown templating, and Claude (via plan limits, not API) for LLM synthesis. No frameworks, no ORMs, no vector databases, no workflow engines. The pipeline is a sequential Python script triggered by Cowork scheduled tasks.
-
----
-
-## 1. Runtime & Language
-
-| Component | Recommendation | Version | Confidence | Rationale |
-|-----------|---------------|---------|------------|-----------|
-| Python | CPython | `>=3.11, <3.13` | HIGH | 3.11+ for `tomllib`, improved error messages, and `StrEnum`. Avoid 3.13 until ecosystem catches up. 3.12 is the sweet spot. |
-| Package manager | `uv` | `>=0.5` | HIGH | Faster than pip/poetry, handles venvs, lockfiles, and Python version management in one tool. Claude Code already works well with uv. |
-| Virtual env | uv-managed venv | -- | HIGH | `uv venv` + `uv pip install`. No conda, no pyenv -- uv replaces both. |
-
-### What NOT to use
-- **Poetry**: Slower, heavier, and uv has surpassed it for most workflows.
-- **Conda**: Overkill for a pure-Python project with no native dependencies.
-- **Python 3.10 or below**: Missing `tomllib`, worse error messages, no `StrEnum`.
-
----
-
-## 2. Google API Access (Calendar + Gmail)
-
-| Component | Package | Version | Confidence | Rationale |
-|-----------|---------|---------|------------|-----------|
-| Google API client | `google-api-python-client` | `>=2.150.0` | MEDIUM (verify) | Official Google client. Handles discovery-based API access for both Gmail and Calendar. Mature, well-documented, stable API surface. |
-| Auth library | `google-auth` | `>=2.36.0` | MEDIUM (verify) | Core auth library for Google APIs. Handles OAuth2 tokens, service accounts, refresh logic. |
-| OAuth flow | `google-auth-oauthlib` | `>=1.2.0` | MEDIUM (verify) | Desktop OAuth flow for first-time auth. Only needed for initial token generation -- after that, refresh tokens handle reauth. |
-| HTTP transport | `google-auth-httplib2` | `>=0.2.0` | MEDIUM (verify) | Required transport adapter for google-api-python-client. |
-
-### Auth strategy
-1. Run OAuth desktop flow once to get refresh token
-2. Store `token.json` locally (add to `.gitignore`)
-3. Pipeline loads token, auto-refreshes, and uses it for both Gmail and Calendar APIs
-4. Scopes needed: `gmail.readonly`, `calendar.readonly`
-
-### Why this and not alternatives
-- **`google-cloud-*` libraries**: Those are for GCP services (BigQuery, Cloud Storage, etc.), not Gmail/Calendar consumer APIs.
-- **`gspread` / `pygsheets`**: Wrong abstraction. We need raw Gmail and Calendar API access, not a convenience wrapper for Sheets.
-- **`simplegmail`**: Abandoned, limited, doesn't support Calendar.
-- **Direct REST with httpx**: Possible but you'd reimplement token refresh, discovery, pagination. The official client handles all of this.
-
----
-
-## 3. Gong API Access
-
-| Component | Package | Version | Confidence | Rationale |
-|-----------|---------|---------|------------|-----------|
-| HTTP client | `httpx` | `>=0.27.0` | MEDIUM (verify) | Modern async-capable HTTP client. Used for direct REST calls to Gong API. |
-
-### Why httpx, not a Gong SDK
-- **There is no official Gong Python SDK.** Gong provides a REST API with OpenAPI spec but no maintained Python client.
-- **Community SDKs (`gong-python-client`, etc.)**: Poorly maintained, low download counts, lag behind API changes. Do not use.
-- **httpx over requests**: httpx has a cleaner API, native async support (useful if pipeline grows), HTTP/2 support, and is actively maintained. `requests` works fine too but httpx is the modern default.
-
-### Gong API specifics
-- Auth: Bearer token (API key from Gong admin settings). Much simpler than Google OAuth.
-- Key endpoints: `/v2/calls` (list calls), `/v2/calls/{id}/transcript` (get transcript)
-- Rate limits: 3 requests/second for most endpoints. Build in basic backoff.
-- Transcripts come as structured JSON with speaker labels and timestamps -- no parsing needed.
-
-### Alternative approach: Gong email delivery
-- Gong can email transcript summaries. If the API is too restrictive or requires admin access you don't have, parse transcripts from Gmail instead.
-- This means Gong transcripts arrive via the Gmail ingestion path, not a separate API.
-- Decision: **Try API first; fall back to Gmail-based ingestion if blocked.**
-
----
-
-## 4. Data Modeling & Validation
-
-| Component | Package | Version | Confidence | Rationale |
-|-----------|---------|---------|------------|-----------|
-| Data models | `pydantic` | `>=2.9.0` | HIGH | Type-safe data classes with validation, serialization, and JSON schema generation. Models calendar events, email messages, transcripts, and synthesis output. |
-
-### Why Pydantic
-- Google API responses are raw dicts. Pydantic converts them to typed, validated objects immediately at the ingestion boundary.
-- Synthesis output needs a defined schema (sections, source links, timestamps). Pydantic enforces that.
-- `.model_dump()` gives clean dicts for template rendering. `.model_dump_json()` enables optional JSON storage later.
-- V2 is significantly faster than V1 and has cleaner API.
-
-### What NOT to use
-- **dataclasses**: No validation, no serialization, no schema generation. Fine for simple cases but this project needs validation at API boundaries.
-- **attrs**: Good library but Pydantic has won the ecosystem. Better tooling, documentation, and LLM familiarity.
-- **TypedDict**: No runtime validation. Useful for typing but not for data integrity.
-
----
-
-## 5. Email & Transcript Parsing
-
-| Component | Package | Version | Confidence | Rationale |
-|-----------|---------|---------|------------|-----------|
-| Email parsing | `python-email` (stdlib) | built-in | HIGH | `email.message` from stdlib handles MIME parsing, attachment extraction, encoding. No external dependency needed. |
-| HTML stripping | `beautifulsoup4` | `>=4.12.0` | HIGH | Extracts text from HTML email bodies. Also useful for cleaning up any HTML in transcript content. |
-| HTML parser | `lxml` | `>=5.3.0` | MEDIUM (verify) | Fast parser backend for BeautifulSoup. Falls back to stdlib `html.parser` if lxml is problematic. |
-| Date parsing | `python-dateutil` | `>=2.9.0` | HIGH | Parses varied date formats from email headers and API responses. `dateutil.parser.parse()` handles most formats without custom logic. |
-| Timezone handling | `zoneinfo` (stdlib) | built-in | HIGH | Python 3.11+ has `zoneinfo` in stdlib. No need for `pytz`. |
-
-### Transcript processing strategy
-
-**Gemini transcripts (via Gmail/Calendar):**
-- Arrive as email attachments or inline content in Gmail
-- Format varies: sometimes plain text, sometimes HTML, sometimes PDF attachment
-- Strategy: extract via Gmail API attachment download, then parse based on MIME type
-- May need `PyPDF2` (`>=3.0.0`) if transcripts arrive as PDF -- add only if needed
-
-**Gong transcripts (via API):**
-- Structured JSON with speaker labels, timestamps, and utterances
-- No parsing needed -- map directly to Pydantic models
-
-**Gong transcripts (via email fallback):**
-- HTML email with structured summary
-- BeautifulSoup extracts the text content
-- Less structured than API response but workable
-
-### What NOT to use
-- **`mailparser`**: Thin wrapper around stdlib email. Adds dependency without adding value.
-- **`flanker`**: Email parsing library from Mailgun. Overkill for read-only parsing.
-- **`textract`**: Heavy dependency for text extraction from documents. Only add if PDF transcripts become common.
-
----
-
-## 6. LLM Synthesis (Claude via Plan Limits)
-
-| Component | Approach | Confidence | Rationale |
-|-----------|----------|------------|-----------|
-| LLM provider | Claude (Anthropic) via Claude Code | HIGH | Decided in architecture. Uses plan limits, not API. Claude Code executes the synthesis step within the pipeline. |
-| Execution model | Cowork scheduled task triggers Claude Code | HIGH | Cowork handles scheduling. Claude Code runs the Python pipeline which includes synthesis prompts. |
-
-### How synthesis works without API keys
-
-This is the most unconventional part of the stack. The pipeline does NOT call the Anthropic API directly. Instead:
-
-1. Cowork scheduled task fires daily
-2. The task runs a Claude Code session
-3. Claude Code executes Python scripts that pull data from Gmail, Calendar, Gong
-4. The pulled data is formatted into context
-5. Claude (within the Code session) processes the context and produces structured synthesis
-6. Python scripts write the synthesis output to markdown files
-
-**Implication:** The synthesis step is Claude Code reading/writing files, not a Python `anthropic.Client()` call. The pipeline script prepares the data; Claude Code does the reasoning.
-
-### What NOT to use
-- **`anthropic` Python SDK**: Would require API keys and per-token billing. Explicitly out of scope for v1.
-- **`openai` SDK**: Wrong provider, wrong cost model.
-- **LangChain / LlamaIndex**: Massive over-engineering for a single-provider, single-task pipeline. These frameworks add complexity without value when you have one LLM doing one job.
-- **Semantic Kernel**: Same problem. Framework overhead for a simple pipeline.
-
-### Graduation path
-If the system proves out and needs to run headlessly (no Cowork/Claude Code), switch to the `anthropic` Python SDK (`>=0.39.0`). The data preparation code stays identical; only the synthesis step changes from "Claude Code processes this" to "API call processes this."
-
----
-
-## 7. Markdown Output & Templating
-
-| Component | Package | Version | Confidence | Rationale |
-|-----------|---------|---------|------------|-----------|
-| Templating | `jinja2` | `>=3.1.4` | HIGH | Industry-standard Python templating. Renders daily summary templates from structured data. Supports template inheritance for daily/weekly/monthly variants. |
-
-### Why Jinja2 and not string formatting
-- Templates live as separate `.md.j2` files that can be iterated independently of code
-- Conditional sections (e.g., only show "Decisions" if decisions exist)
-- Loop constructs for variable-length sections (multiple meetings, multiple action items)
-- Template inheritance: weekly template extends daily, monthly extends weekly
-
-### What NOT to use
-- **f-strings / `.format()`**: Fine for simple cases but unmaintainable for multi-section documents with conditional content.
-- **Mako**: Less common, worse documentation, no advantage over Jinja2 for this use case.
-- **Markdown libraries (`markdown`, `mistune`)**: These convert markdown to HTML. We're generating markdown, not consuming it.
-
----
-
-## 8. File Storage & Organization
-
-| Component | Approach | Confidence | Rationale |
-|-----------|----------|------------|-----------|
-| Storage format | Flat markdown files | HIGH | Decided in architecture. Human-readable, git-friendly, no database overhead. |
-| Directory structure | Date-based hierarchy | HIGH | `output/daily/2026/03/2026-03-23.md` pattern. Predictable, filesystem-browsable. |
-| Config format | TOML | HIGH | `tomllib` is in stdlib as of 3.11. Cleaner than YAML, simpler than JSON for config. |
-
-### File organization
-
-```
-output/
-  daily/
-    2026/
-      03/
-        2026-03-23.md       # Daily synthesis
-        2026-03-23.json     # Structured data (optional, for programmatic access)
-  weekly/
-    2026/
-      2026-W13.md           # Weekly roll-up
-  raw/
-    2026/
-      03/
-        2026-03-23/
-          calendar.json     # Raw calendar data (for debugging/reprocessing)
-          emails.json       # Raw email data
-          transcripts/      # Raw transcript files
-```
-
-### What NOT to use (yet)
-- **SQLite**: Adds query capability but premature before knowing what queries are needed. Add in Phase 3 if roll-ups need structured queries.
-- **Vector database (ChromaDB, Qdrant, etc.)**: Semantic search is a Phase 4+ feature. Don't add infrastructure for future requirements.
-- **Obsidian vault**: Possible future destination but coupling to Obsidian's conventions now constrains storage decisions. Write plain markdown that could go anywhere.
-
----
-
-## 9. Development & Testing
-
-| Component | Package | Version | Confidence | Rationale |
-|-----------|---------|---------|------------|-----------|
-| Testing | `pytest` | `>=8.3.0` | HIGH | Standard Python test framework. |
-| Test fixtures | `pytest-fixtures` (built-in) | -- | HIGH | Fixture-based test data for API response mocking. |
-| HTTP mocking | `respx` | `>=0.21.0` | MEDIUM (verify) | Mocks httpx requests. Used for testing Gong API calls without hitting real endpoints. |
-| Google API mocking | manual fixtures | -- | HIGH | Google API client is best tested with fixture JSON files loaded into mock discovery. `unittest.mock.patch` on the service object. |
-| Linting | `ruff` | `>=0.8.0` | HIGH | Replaces flake8, isort, black in one tool. Fast, opinionated, minimal config. |
-| Type checking | `pyright` | `>=1.1.390` | MEDIUM (verify) | Works with Pydantic v2 out of the box. Faster than mypy for iterative development. |
-
-### What NOT to use
-- **`tox`**: Overkill for a single-Python-version personal project.
-- **`black`**: Ruff replaces it. One fewer tool.
-- **`flake8` / `isort`**: Same -- ruff handles all of this.
-- **`mypy`**: Slower than pyright, worse Pydantic v2 support.
-
----
-
-## 10. Complete Dependency List
-
-### Core (required)
-
-```toml
-[project]
-requires-python = ">=3.11,<3.13"
-
-dependencies = [
-    "google-api-python-client>=2.150.0",
-    "google-auth>=2.36.0",
-    "google-auth-oauthlib>=1.2.0",
-    "google-auth-httplib2>=0.2.0",
-    "httpx>=0.27.0",
-    "pydantic>=2.9.0",
-    "beautifulsoup4>=4.12.0",
-    "python-dateutil>=2.9.0",
-    "jinja2>=3.1.4",
-]
-```
-
-### Development
-
-```toml
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.3.0",
-    "respx>=0.21.0",
-    "ruff>=0.8.0",
-    "pyright>=1.1.390",
-]
-```
-
-### Conditional (add only if needed)
-
-| Package | When to add | Version |
-|---------|-------------|---------|
-| `lxml` | If BeautifulSoup parsing is too slow with `html.parser` | `>=5.3.0` |
-| `PyPDF2` | If Gemini transcripts arrive as PDF attachments | `>=3.0.0` |
-| `anthropic` | If graduating from plan limits to API-based execution | `>=0.39.0` |
-
----
-
-## 11. What This Stack Deliberately Excludes
-
-| Excluded | Why |
-|----------|-----|
-| **LangChain / LlamaIndex** | Framework overhead for a single-LLM, single-task pipeline. Adds abstraction layers that obscure what's happening. When the pipeline is "pull data, format prompt, get response, write file," a framework adds complexity without value. |
-| **Celery / RQ / task queues** | Pipeline is a single sequential batch job. No concurrency, no distributed processing, no queue needed. Cowork handles scheduling. |
-| **FastAPI / Flask** | No web server needed. This is a batch pipeline, not a service. |
-| **Docker** | Runs on Micah's local machine via Claude Code. Containerization adds deployment complexity for zero benefit in v1. |
-| **Any vector database** | Semantic search / RAG is a Phase 4+ feature. Don't add infrastructure for speculative requirements. |
-| **Any ORM (SQLAlchemy, etc.)** | No database in v1. Flat files. |
-| **`requests`** | httpx is the modern replacement. One HTTP client, not two. |
-| **YAML for config** | TOML is in stdlib (3.11+), cleaner syntax, no `ruamel.yaml` / `pyyaml` dependency debates. |
-| **Async (asyncio)** | Pipeline is sequential batch processing. Async adds complexity for no throughput benefit when you're making a few dozen API calls in series. Consider only if API pagination becomes a bottleneck. |
-
----
-
-## 12. Confidence Summary
-
-| Category | Confidence | Note |
-|----------|------------|------|
-| Runtime (Python 3.12, uv) | HIGH | Well-established, no risk |
-| Google API libraries | MEDIUM | Library choices are correct; exact version pins need verification via PyPI |
-| httpx for Gong | MEDIUM | Correct approach; verify Gong API access/permissions are available |
-| Pydantic v2 | HIGH | Standard choice, well-established |
-| Email parsing (stdlib + bs4) | HIGH | Proven approach |
-| Jinja2 templating | HIGH | Standard choice |
-| Claude via plan limits (not API) | HIGH for concept, MEDIUM for reliability | Cowork scheduling reliability is the key unknown. The Cowork spike (from decisions doc) validates this. |
-| Flat file storage | HIGH | Correct for v1; migration path to DB is clean |
-| Dev tooling (ruff, pyright, pytest) | HIGH | Standard modern Python tooling |
-
----
-
-## 13. Version Verification Checklist
-
-Run this after creating the project to pin exact versions:
+# Technology Stack: v1.5 Expanded Ingest
+
+**Project:** Work Intelligence System - Data Source Integrations
+**Researched:** 2026-04-03
+**Overall confidence:** HIGH
+
+## Existing Stack (DO NOT CHANGE)
+
+Already validated and in production. Listed for reference only.
+
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| Python | 3.12 | Runtime |
+| anthropic | >=0.45.0 | Claude API for synthesis |
+| google-api-python-client | >=2.193.0 | Google Calendar, Drive, Docs APIs |
+| google-auth / google-auth-oauthlib | >=2.49.1 / >=1.3.1 | Google OAuth2 |
+| httpx | >=0.28.1 | HTTP client (Slack webhooks) |
+| pydantic | >=2.12.5 | Data models |
+| jinja2 | >=3.1.6 | Output templates |
+| pyyaml | >=6.0.3 | Config |
+| python-dotenv | >=1.0.0 | Env vars |
+
+## New Dependencies for v1.5
+
+### Slack API: `slack-sdk`
+
+| | Detail |
+|---|--------|
+| **Package** | `slack-sdk>=3.41.0` |
+| **Why this** | Official Slack Python SDK maintained by Slack. Replaces deprecated `slackclient`. Provides `WebClient` with built-in retry handling, rate limit awareness, and cursor-based pagination. |
+| **Why not httpx** | `slack-sdk` handles token management, pagination cursors, rate limit backoff, and typed responses. Raw HTTP would mean reimplementing all of this. |
+| **Confidence** | HIGH - official SDK, actively maintained, v3.41.0 released March 2026 |
+
+**Authentication:** Bot Token (xoxb-) via Slack App with custom install to workspace.
+
+| Scope | Purpose | Required For |
+|-------|---------|-------------|
+| `channels:history` | Read messages from public channels | `conversations.history` |
+| `channels:read` | List public channels (discovery) | `conversations.list` |
+| `groups:history` | Read messages from private channels | `conversations.history` on private channels |
+| `groups:read` | List private channels (discovery) | `conversations.list` for private channels |
+| `users:read` | Resolve user IDs to display names | Rendering "who said what" |
+
+Setup: Create Slack App at api.slack.com -> Install to workspace -> Copy Bot User OAuth Token -> Store in `.env` as `SLACK_BOT_TOKEN`.
+
+**Rate Limits (CRITICAL):**
+This is an internal/personal app (not commercially distributed), which means Tier 3 limits apply:
+- `conversations.history`: ~50 requests/minute per workspace (Tier 3)
+- `conversations.list`: ~20 requests/minute (Tier 2)
+- `users.info`: ~50 requests/minute (Tier 3)
+
+For a daily batch reading ~10-20 curated channels, this is more than sufficient. The SDK's built-in `RetryHandler` handles 429 responses automatically. No custom rate limiting needed for this use case.
+
+**Warning:** Non-Marketplace commercially distributed apps face 1 req/min limit as of May 2025. This does NOT apply to internal apps installed only in your own workspace.
+
+### HubSpot API: `hubspot-api-client`
+
+| | Detail |
+|---|--------|
+| **Package** | `hubspot-api-client>=12.0.0` |
+| **Why this** | Official HubSpot Python SDK for V3 API. Provides typed client classes for each API domain (deals, contacts, engagements). Handles pagination and auth. |
+| **Why not httpx** | HubSpot's API surface is large; the SDK provides pre-built clients for each endpoint family (CRM, engagements, etc.) with pagination helpers. |
+| **Confidence** | HIGH - official SDK, v12.0.0 released May 2025 |
+
+**Authentication:** Private App Access Token.
+
+Setup: HubSpot Settings -> Integrations -> Private Apps -> Create -> Select scopes -> Copy access token -> Store in `.env` as `HUBSPOT_ACCESS_TOKEN`. Token does not expire (manual rotation only).
+
+| Scope | Purpose |
+|-------|---------|
+| `crm.objects.deals.read` | Read deal records and changes |
+| `crm.objects.contacts.read` | Read contact records |
+| `sales-email-read` | Read email engagement logs |
+| `crm.objects.owners.read` | Resolve owner IDs to names |
+
+**Rate Limits:**
+- Private apps: 100 requests/10 seconds (Free/Starter), 190 requests/10 seconds (Professional/Enterprise)
+- Daily limit: effectively unlimited for this use case (500K+/day)
+- For daily batch pulling deal activity and notes, this is far more than sufficient
+
+**Key API endpoints for v1.5:**
+- `api_client.crm.deals.basic_api.get_page()` - List deals
+- `api_client.crm.deals.search_api.do_search()` - Search deals modified today
+- `api_client.crm.objects.notes.basic_api.get_page()` - Get notes/engagements
+- `api_client.crm.timeline.events_api` - Timeline events for activity feed
+
+### Google Docs API: NO NEW DEPENDENCY
+
+| | Detail |
+|---|--------|
+| **Package** | Already have `google-api-python-client` |
+| **Why no addition** | `drive.py` already builds a Docs service via `build("docs", "v1", credentials=creds)`. The existing `drive.readonly` OAuth scope already grants read access to Google Docs content. |
+| **What's needed** | New ingest module that uses Drive API `files.list()` with `mimeType='application/vnd.google-apps.document'` and `modifiedTime > '{today}'` query to find docs edited that day, then `documents().get()` to fetch content. |
+| **Confidence** | HIGH - already working in production for Gemini notes |
+
+**Additional scope needed:** None. `drive.readonly` covers both Drive file listing and Docs content reading.
+
+**Rate Limits:**
+- Google Docs API: 300 read requests/minute per user (default)
+- Google Drive API: 12,000 queries/day per project
+- Trivially sufficient for daily batch
+
+**Strategy for "docs edited today":**
+1. `drive.files().list(q="mimeType='application/vnd.google-apps.document' and modifiedTime > '2026-04-02T00:00:00'")` - Find modified docs
+2. `docs.documents().get(documentId=id)` - Fetch content for each
+3. Filter to docs the user actually edited (not just viewed) using `drive.revisions().list()` if needed
+
+### Notion API: `notion-client`
+
+| | Detail |
+|---|--------|
+| **Package** | `notion-client>=3.0.0` |
+| **Why this** | Official Python port of the Notion reference SDK. Maintained by the community (`ramnes/notion-sdk-py`) but endorsed by Notion. Sync and async support. Simple, thin wrapper around the REST API. |
+| **Why not httpx** | Notion's API has specific pagination (cursor-based, block-level), content structures (rich text blocks), and auth patterns that the SDK handles cleanly. |
+| **Why not `ultimate-notion`** | Over-abstracted for our needs. We want raw API data to normalize into our own models, not another ORM layer. |
+| **Confidence** | HIGH - widely used, 3.0.0 is stable release |
+
+**Authentication:** Internal Integration Token.
+
+Setup: notion.so/my-integrations -> Create integration -> Select workspace -> Copy "Internal Integration Secret" -> Store in `.env` as `NOTION_TOKEN`. Then share target pages/databases with the integration manually.
+
+**Rate Limits (MOST RESTRICTIVE of all four):**
+- 3 requests/second average (some burst allowed)
+- No paid tier upgrade available
+- For daily batch reading ~5-20 pages, this requires:
+  - Sequential requests with simple delay (0.35s between calls)
+  - Or batch page queries using `search` endpoint to reduce call count
+
+**Key API methods for v1.5:**
+- `notion.search(filter={"property": "object", "value": "page"}, sort={"direction": "descending", "timestamp": "last_edited_time"})` - Find recently edited pages
+- `notion.pages.retrieve(page_id)` - Get page metadata
+- `notion.blocks.children.list(block_id)` - Get page content (blocks)
+- `notion.databases.query(database_id, filter=...)` - Query database for recent changes
+
+**Content extraction challenge:** Notion stores content as nested blocks (paragraphs, headings, lists, etc.). Each block type has different structure. Need a block-to-text flattener for synthesis input.
+
+## What NOT to Add
+
+| Library | Why Not |
+|---------|---------|
+| `requests` | Already have `httpx` which is strictly better (async support, HTTP/2). HubSpot SDK uses `requests` internally but that's its own dependency. |
+| `aiohttp` | Not needed. `httpx` already supports async if we need it later. |
+| `slack-bolt` | Framework for Slack apps with event handlers/listeners. We're doing batch reads, not building a bot that responds to events. |
+| `notion-py` | Unofficial, uses internal API, fragile. Use official `notion-client`. |
+| `hubspot3` | Legacy/community wrapper. Official `hubspot-api-client` is maintained by HubSpot. |
+| `google-auth-httplib2` | Already in deps but only needed for legacy patterns. Existing code already uses it; no change needed. |
+| Any database library | Storage remains flat files for v1.5. DB deferred to v2.0. |
+| Any web framework | No API/UI in v1.5. Deferred to v4.0. |
+| `tenacity` / retry libraries | Slack SDK has built-in retry. HubSpot SDK handles retries. For Notion, simple `time.sleep` between calls is sufficient given 3 req/s limit. |
+
+## Installation
 
 ```bash
-# Verify latest stable versions
-uv pip index versions google-api-python-client
-uv pip index versions google-auth
-uv pip index versions google-auth-oauthlib
-uv pip index versions httpx
-uv pip index versions pydantic
-uv pip index versions beautifulsoup4
-uv pip index versions jinja2
-uv pip index versions python-dateutil
-uv pip index versions ruff
-uv pip index versions pyright
-uv pip index versions pytest
-uv pip index versions respx
+# New dependencies only (add to pyproject.toml)
+uv add slack-sdk hubspot-api-client notion-client
 ```
 
-**Minimum versions in this document are based on known stable releases as of early 2026. They may be slightly behind current. Always verify before pinning.**
+Updated `pyproject.toml` dependencies section (additions only):
+```toml
+"slack-sdk>=3.41.0",
+"hubspot-api-client>=12.0.0",
+"notion-client>=3.0.0",
+```
 
----
+## Environment Variables (New)
 
-*Research produced: 2026-03-23. Feeds into roadmap and project scaffolding.*
+```bash
+# .env additions
+SLACK_BOT_TOKEN=xoxb-...          # Slack app bot token
+HUBSPOT_ACCESS_TOKEN=pat-...       # HubSpot private app token
+NOTION_TOKEN=ntn_...               # Notion internal integration secret
+```
+
+## Authentication Summary
+
+| Service | Auth Type | Token Lifetime | Refresh Needed | Setup Complexity |
+|---------|-----------|---------------|----------------|-----------------|
+| Slack | Bot OAuth Token | Until app uninstalled or token revoked | No (persistent) | Low - create app, install, copy token |
+| HubSpot | Private App Access Token | Indefinite (manual rotation) | No | Low - create private app, select scopes, copy token |
+| Google Docs | OAuth2 (existing) | Access token: 1hr, auto-refresh | Yes (already handled) | None - already set up |
+| Notion | Internal Integration Token | Until revoked | No | Low - create integration, share pages |
+
+Key insight: All three new services use simple bearer tokens stored in `.env`. No OAuth dance required (unlike the existing Google setup). This significantly simplifies the auth story.
+
+## Rate Limit Summary
+
+| Service | Limit | Daily Batch Impact | Mitigation Needed |
+|---------|-------|-------------------|-------------------|
+| Slack | 50 req/min (Tier 3, internal app) | None - 10-20 channels is trivial | SDK built-in retry |
+| HubSpot | 100-190 req/10s | None - small number of daily queries | None |
+| Google Docs | 300 read req/min | None - handful of docs per day | None |
+| Notion | 3 req/s average | Minimal - add 0.35s delay between calls | Simple sleep or SDK-level pacing |
+
+Notion is the only service where rate limiting is a design consideration, and even then it's manageable with a simple delay for the expected volume (~5-20 pages/day).
+
+## Integration Points with Existing Code
+
+Each new source should follow the existing ingest module pattern:
+
+```
+src/ingest/
+    calendar.py     # existing - Google Calendar
+    drive.py        # existing - Google Drive / Gemini notes
+    gmail.py        # existing - Gmail
+    transcripts.py  # existing - transcript processing
+    normalizer.py   # existing - normalize ingest data
+    slack.py        # NEW - Slack channel messages
+    hubspot.py      # NEW - HubSpot activity
+    google_docs.py  # NEW - Google Docs edited that day
+    notion.py       # NEW - Notion page/database changes
+```
+
+Each module should return normalized data matching existing Pydantic models in `src/models/`, feeding into `normalizer.py` for cross-source deduplication before synthesis.
+
+## Sources
+
+- [Slack Python SDK (GitHub)](https://github.com/slackapi/python-slack-sdk) - Official SDK repo
+- [Slack conversations.history](https://docs.slack.dev/reference/methods/conversations.history/) - Method docs
+- [Slack rate limits](https://docs.slack.dev/apis/web-api/rate-limits/) - Tier system
+- [Slack rate limit changes for non-Marketplace apps](https://docs.slack.dev/changelog/2025/05/29/rate-limit-changes-for-non-marketplace-apps/) - May 2025 change
+- [HubSpot Python SDK (GitHub)](https://github.com/HubSpot/hubspot-api-python) - Official SDK repo
+- [hubspot-api-client (PyPI)](https://pypi.org/project/hubspot-api-client/) - Package info
+- [HubSpot API usage limits](https://developers.hubspot.com/docs/developer-tooling/platform/usage-guidelines) - Rate limits
+- [HubSpot private apps](https://developers.hubspot.com/docs/apps/legacy-apps/private-apps/overview) - Auth setup
+- [notion-sdk-py (GitHub)](https://github.com/ramnes/notion-sdk-py) - Official Python SDK
+- [notion-client (PyPI)](https://pypi.org/project/notion-client/) - Package info
+- [Notion API rate limits](https://developers.notion.com/reference/request-limits) - 3 req/s limit
+- [Notion authorization](https://developers.notion.com/docs/create-a-notion-integration) - Integration setup
+- [Google Docs API quickstart](https://developers.google.com/workspace/docs/api/quickstart/python) - Python setup
+- [Google Drive files.list](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list) - Query modified files
