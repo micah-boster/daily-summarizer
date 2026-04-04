@@ -117,11 +117,13 @@ Plans:
 
 **Milestone Goal:** Broaden the data surface beyond calendar and transcripts so synthesis sees the full picture of work activity.
 
-- [ ] **Phase 6: Data Model Foundation** - SourceItem model and commitment structure that all new sources depend on
-- [ ] **Phase 7: Slack Ingest + Synthesis Integration** - Slack channel/DM ingestion with end-to-end synthesis validation
-- [ ] **Phase 8: HubSpot Ingest** - Deal changes, contact notes, and CRM activity ingestion
-- [ ] **Phase 9: Google Docs Ingest** - Document edit detection and content extraction
+- [x] **Phase 6: Data Model Foundation** - SourceItem model and commitment structure that all new sources depend on (completed 2026-04-04)
+- [x] **Phase 7: Slack Ingest + Synthesis Integration** - Slack channel/DM ingestion with end-to-end synthesis validation (completed 2026-04-04)
+- [x] **Phase 8: HubSpot Ingest** - Deal changes, contact notes, and CRM activity ingestion (completed 2026-04-04)
+- [x] **Phase 9: Google Docs Ingest** - Document edit detection and content extraction (completed 2026-04-04)
 - [x] **Phase 10: Cross-Source Synthesis + Commitments** - Deduplication tuning and structured commitment extraction across all sources (completed 2026-04-04)
+- [ ] **Phase 11: Pipeline Hardening** - Bug fixes, run_daily() decomposition, commitment model consolidation, dependency pinning
+- [ ] **Phase 12: Reliability & Test Coverage** - API retry/backoff, token counting, pre-existing test fixes, pipeline orchestrator tests
 
 ## Phase Details
 
@@ -198,11 +200,42 @@ Plans:
 - [ ] 10-01-PLAN.md -- Enhanced synthesis prompt with cross-source dedup rules, Commitments table reordering
 - [ ] 10-02-PLAN.md -- Structured commitment extraction via Claude structured outputs, sidecar integration
 
+### Phase 11: Pipeline Hardening
+**Goal**: Fix known bugs, decompose the monolithic pipeline orchestrator, consolidate dead code, and lock dependencies for reproducible builds
+**Depends on**: Phase 10
+**Requirements**: None (quality/reliability phase)
+**Gap Closure**: Closes integration gap MODEL-02-DEAD-CODE and flow gap COMMITMENT-NOCREDS from v1.5 audit
+**Success Criteria** (what must be TRUE):
+  1. Pipeline runs correctly when Google credentials are unavailable (Slack/HubSpot-only mode) — commitment extraction still works
+  2. `run_daily()` is decomposed into a pipeline runner; adding a new source requires editing only 1-2 locations, not 4
+  3. All imports are at module level; a broken optional dependency produces a clear error at startup, not a silent partial run
+  4. One shared Anthropic client is created per pipeline run and passed through
+  5. Only one Commitment model exists in the codebase (dead Phase 6 model removed)
+  6. `uv.lock` is committed and critical deps have upper-bound pins
+  7. Slack backfill for past dates uses the target date, not stale cursors
+  8. HubSpot owner resolution uses configured owner ID, not first-result assumption
+  9. REQUIREMENTS.md traceability and SUMMARY frontmatter are accurate
+**Plans**: TBD
+
+### Phase 12: Reliability & Test Coverage
+**Goal**: Pipeline gracefully handles transient API failures and has test coverage for orchestration logic and edge cases
+**Depends on**: Phase 11
+**Requirements**: None (quality/reliability phase)
+**Success Criteria** (what must be TRUE):
+  1. Google, Claude, and HubSpot API calls retry with exponential backoff (at least 2 retries) before failing
+  2. Synthesis call estimates input tokens and truncates if over budget before sending to Claude
+  3. All pre-existing test failures are fixed (test_notifications, test_extractor, test_writer)
+  4. `main.py` pipeline orchestration has test coverage (at least happy path + single-source-failure path)
+  5. Claude response parsers have tests for malformed/empty/unexpected responses
+  6. All tests pass: `uv run pytest` exits 0
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:**
 Phases 6-10 execute in order: 6 -> 7 -> 8 -> 9 -> 10
-Note: Phases 8 and 9 can execute in parallel (independent sources); both must complete before Phase 10.
+Phases 8 and 9 can execute in parallel (independent sources); both must complete before Phase 10.
+Phases 11-12 are sequential gap closure phases.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -212,8 +245,10 @@ Note: Phases 8 and 9 can execute in parallel (independent sources); both must co
 | 3. Two-Stage Synthesis Pipeline | v1.0 | 3/3 | Complete | 2026-04-02 |
 | 4. Temporal Roll-Ups | v1.0 | 2/2 | Complete | 2026-04-03 |
 | 5. Feedback and Refinement | v1.0 | 2/2 | Complete | 2026-04-03 |
-| 6. Data Model Foundation | v1.5 | 0/1 | Not started | - |
-| 7. Slack Ingest + Synthesis Integration | v1.5 | 0/2 | Not started | - |
-| 8. HubSpot Ingest | v1.5 | 0/1 | Not started | - |
-| 9. Google Docs Ingest | v1.5 | 0/1 | Not started | - |
-| 10. Cross-Source Synthesis + Commitments | 2/2 | Complete    | 2026-04-04 | - |
+| 6. Data Model Foundation | v1.5 | 1/1 | Complete | 2026-04-04 |
+| 7. Slack Ingest + Synthesis Integration | v1.5 | 3/3 | Complete | 2026-04-04 |
+| 8. HubSpot Ingest | v1.5 | 2/2 | Complete | 2026-04-04 |
+| 9. Google Docs Ingest | v1.5 | 2/2 | Complete | 2026-04-04 |
+| 10. Cross-Source Synthesis + Commitments | v1.5 | 2/2 | Complete | 2026-04-04 |
+| 11. Pipeline Hardening | v1.5 | 0/0 | Not started | - |
+| 12. Reliability & Test Coverage | v1.5 | 0/0 | Not started | - |

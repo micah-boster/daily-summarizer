@@ -45,14 +45,14 @@
 
 ### HubSpot Ingestion (HUBSPOT)
 
-- [ ] **HUBSPOT-01**: Ingest deal stage changes and deal activity for the target date
-- [ ] **HUBSPOT-02**: Ingest contact activity and notes
-- [ ] **HUBSPOT-03**: Ingest tickets, calls, emails, meetings, and task activity
+- [x] **HUBSPOT-01**: Ingest deal stage changes and deal activity for the target date
+- [x] **HUBSPOT-02**: Ingest contact activity and notes
+- [x] **HUBSPOT-03**: Ingest tickets, calls, emails, meetings, and task activity
 
 ### Google Docs Ingestion (DOCS)
 
-- [ ] **DOCS-01**: Ingest list of documents the user edited on the target date with title and content extract
-- [ ] **DOCS-02**: Ingest comments and suggestions on docs the user owns or is mentioned in
+- [x] **DOCS-01**: Ingest list of documents the user edited on the target date with title and content extract
+- [x] **DOCS-02**: Ingest comments and suggestions on docs the user owns or is mentioned in
 
 ### Synthesis Updates (SYNTH)
 
@@ -61,10 +61,15 @@
 - [x] **SYNTH-07**: Source attribution in all output ("per Slack #channel", "per HubSpot deal", "per Google Doc")
 - [x] **SYNTH-08**: Commitment deadlines extracted and structured (who/what/by-when) in synthesis output and JSON sidecar
 
-## v1.5.x Requirements (Deferred)
+## v1.5.1 Requirements (Deferred)
 
 - **NOTION-01**: Ingest Notion page updates and database changes for the target date
 - **DEDUP-01**: Algorithmic cross-source deduplication as alternative/supplement to LLM-based
+- **PERF-01**: Parallel ingest modules (asyncio/threads for independent sources)
+- **PERF-02**: Parallel per-meeting extraction (concurrent Claude API calls)
+- **CONFIG-01**: Typed config model (Pydantic validation on config.yaml load)
+- **OPS-01**: Raw data cache retention policy (auto-delete after configurable TTL)
+- **PERF-03**: Slack user batch resolution (users_list instead of N users_info calls)
 
 ## v2+ Requirements (Future)
 
@@ -98,11 +103,11 @@
 | SLACK-04 | Phase 7 | Complete |
 | SYNTH-05 | Phase 7 | Complete |
 | SYNTH-07 | Phase 7 | Complete |
-| HUBSPOT-01 | Phase 8 | Pending |
-| HUBSPOT-02 | Phase 8 | Pending |
-| HUBSPOT-03 | Phase 8 | Pending |
-| DOCS-01 | Phase 9 | Pending |
-| DOCS-02 | Phase 9 | Pending |
+| HUBSPOT-01 | Phase 8 | Complete |
+| HUBSPOT-02 | Phase 8 | Complete |
+| HUBSPOT-03 | Phase 8 | Complete |
+| DOCS-01 | Phase 9 | Complete |
+| DOCS-02 | Phase 9 | Complete |
 | SYNTH-06 | Phase 10 | Complete |
 | SYNTH-08 | Phase 10 | Complete |
 
@@ -113,4 +118,4 @@
 
 ---
 *Requirements defined: 2026-04-03*
-*Last updated: 2026-04-03 after v1.5 roadmap creation*
+*Last updated: 2026-04-04 after v1.5 milestone audit and gap closure planning*
