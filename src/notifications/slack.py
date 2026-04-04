@@ -60,31 +60,43 @@ def _extract_overview(content: str) -> str:
 
 
 def _extract_bullet_items(content: str, section_name: str) -> list[str]:
-    """Extract decision/commitment/question bullet items across all per-meeting sections.
+    """Extract bullet items from the top-level synthesis sections (Substance, Decisions, Commitments).
 
-    Returns condensed one-liners stripped of attribution and context.
+    These already contain owner/meeting context via em-dash separators.
+    Falls back to per-meeting extraction blocks if top-level sections are empty.
     """
     items: list[str] = []
 
-    # Find per-meeting extraction blocks
-    pattern = rf"\*\*{section_name}:\*\*\n?(.*?)(?=\n\*\*[A-Z]|\n###|\n---|\Z)"
-    for match in re.finditer(pattern, content, re.DOTALL):
-        raw = match.group(1).strip()
-        if not raw:
-            continue
-        # Split on "- " at start of line
-        for bullet in re.split(r"(?:^|\n)-\s+", raw):
-            bullet = bullet.strip()
-            if not bullet:
+    # First try the top-level synthesis section (## Decisions, ## Commitments, etc.)
+    pattern = rf"^## {section_name}\s*\n(.*?)(?=\n## |\n---|\Z)"
+    m = re.search(pattern, content, re.MULTILINE | re.DOTALL)
+    if m:
+        section_text = m.group(1).strip()
+        for line in section_text.split("\n"):
+            line = line.strip()
+            if line.startswith("- "):
+                bullet = line[2:].strip()
+                if bullet and bullet.lower() not in ("no items for this day.", "no transcript data available yet."):
+                    # Truncate if very long
+                    if len(bullet) > 150:
+                        bullet = bullet[:147] + "..."
+                    items.append(bullet)
+
+    # Fall back to per-meeting extraction blocks if top-level was empty
+    if not items:
+        pattern = rf"\*\*{section_name}:\*\*\n?(.*?)(?=\n\*\*[A-Z]|\n###|\n---|\Z)"
+        for match in re.finditer(pattern, content, re.DOTALL):
+            raw = match.group(1).strip()
+            if not raw:
                 continue
-            # Strip attribution in parens and " — reason" suffixes
-            bullet = re.sub(r"\s*\([^)]*\)", "", bullet)
-            bullet = re.sub(r"\s*—\s*.*$", "", bullet)
-            # Truncate long items
-            if len(bullet) > 120:
-                bullet = bullet[:117] + "..."
-            if bullet:
-                items.append(bullet)
+            for line in raw.split("\n"):
+                line = line.strip()
+                if line.startswith("- "):
+                    bullet = line[2:].strip()
+                    if bullet and len(bullet) > 150:
+                        bullet = bullet[:147] + "..."
+                    if bullet:
+                        items.append(bullet)
 
     return items
 

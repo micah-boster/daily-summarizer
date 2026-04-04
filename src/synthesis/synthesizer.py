@@ -37,22 +37,24 @@ Number of meetings with transcripts: {transcript_count}
 Produce a daily summary with these exact sections:
 
 {executive_summary_instruction}## Substance
-One bullet per distinct thing that happened. Max 15 words per bullet. No filler.
+One bullet per distinct thing that happened. Keep it concise but include enough context to be useful standalone.
 - [What happened] — [Source meeting]
 
 ## Decisions
-One bullet per decision. Merge duplicates across meetings.
+One bullet per decision. Merge duplicates across meetings. Always include who decided.
 - [What was decided] — [Who decided] — [Source meeting]
 
 ## Commitments
-One bullet per action item. Include owner and deadline if stated.
-- [What] — [Owner] — [Deadline if stated] — [Source meeting]
+One bullet per action item. ALWAYS include the owner name and deadline. Every commitment must have an owner.
+- [What] — [Owner] — [Deadline if stated, or "no deadline"] — [Source meeting]
 
 CRITICAL RULES:
-- CONCISE: Each bullet should be ONE short sentence, not a paragraph. 15-20 words max.
+- CONCISE: Each bullet should be 1-2 short sentences max. No filler words.
+- CONTEXT: Every bullet must be understandable on its own without reading the full document. Include enough specifics.
+- OWNERS: Every commitment MUST name who owns it. Never write a commitment without an owner.
 - DEDUPLICATE: If the same topic came up in multiple meetings, write ONE bullet and list both meetings.
-- NO PADDING: Do not restate context the reader already knows. "Hire HubSpot vendor" not "Team decided to move forward with hiring an external vendor for HubSpot onboarding and professional flow building."
-- Source meeting goes at end after an em dash, not in parens with participants.
+- NO PADDING: "Hire HubSpot vendor (<$5K)" not "Team decided to move forward with hiring an external vendor for HubSpot onboarding and professional flow building."
+- Source meeting goes at end after an em dash.
 - Neutral tone. Facts only.
 - If a category has no items, write "No items for this day."
 """
