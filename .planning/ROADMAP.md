@@ -148,11 +148,12 @@ Plans:
   3. DM conversations appear in the summary with appropriate context
   4. User can run discovery mode to see proposed channels and confirm/reject them before ingestion uses that list
   5. Every Slack-sourced item in the output is attributed with "(per Slack #channel-name)" or "(per Slack DM with Person)"
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 07-01: TBD
-- [ ] 07-02: TBD
+- [ ] 07-01-PLAN.md -- Slack API client, message filtering, thread expansion, channel/DM fetching, SourceItem conversion
+- [ ] 07-02-PLAN.md -- Slack discovery mode CLI for channel/DM proposal and selection
+- [ ] 07-03-PLAN.md -- Synthesis prompt integration, pipeline wiring, output template update
 
 ### Phase 8: HubSpot Ingest
 **Goal**: Daily summaries include HubSpot CRM activity -- deal movements, contact notes, and task changes
