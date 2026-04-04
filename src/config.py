@@ -26,6 +26,7 @@ def load_config(config_path: Path | None = None) -> dict:
     # Ensure nested dicts exist for env var overrides
     config.setdefault("pipeline", {})
     config.setdefault("calendars", {})
+    config.setdefault("hubspot", {})
 
     # Environment variable overrides
     if tz := os.environ.get("SUMMARIZER_TIMEZONE"):

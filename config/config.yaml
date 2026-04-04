@@ -63,3 +63,15 @@ google_docs:
   max_docs_per_day: 50
   exclude_ids: []
   exclude_title_patterns: []
+
+hubspot:
+  enabled: false
+  # Ownership scope: "mine" (default), "all", or list of owner IDs/emails
+  ownership_scope: "mine"
+  # Volume caps per activity type (0 = unlimited)
+  max_deals: 50
+  max_contacts: 50
+  max_tickets: 25
+  max_activities_per_type: 25
+  # HubSpot portal URL base for deep links (e.g., "https://app.hubspot.com/contacts/12345678")
+  portal_url: ""
