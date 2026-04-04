@@ -2,6 +2,19 @@
 
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+from src.ingest.slack import (
+    build_slack_client,
+    load_slack_state,
+    message_to_source_item,
+    save_slack_state,
+    should_expand_thread,
+    thread_to_source_item,
+)
 from src.ingest.slack_filter import (
     NOISE_SUBTYPES,
     TRIVIAL_PATTERN,
@@ -180,3 +193,290 @@ class TestFilterPatterns:
 
     def test_url_only_pattern_does_not_match_text_with_url(self):
         assert URL_ONLY_PATTERN.match("see <https://example.com>") is None
+
+
+# ============================================================
+# Tests for src/ingest/slack.py (Task 2)
+# ============================================================
+
+
+class TestBuildSlackClient:
+    """Tests for build_slack_client."""
+
+    def test_raises_without_token(self):
+        import pytest
+
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValueError, match="No Slack bot token"):
+                build_slack_client(token=None)
+
+    def test_builds_with_explicit_token(self):
+        client = build_slack_client(token="xoxb-test-token")
+        assert client is not None
+        assert client.token == "xoxb-test-token"
+
+    def test_builds_from_env(self):
+        with patch.dict("os.environ", {"SLACK_BOT_TOKEN": "xoxb-env-token"}):
+            client = build_slack_client()
+            assert client.token == "xoxb-env-token"
+
+
+class TestShouldExpandThread:
+    """Tests for should_expand_thread."""
+
+    def test_expands_when_both_thresholds_met(self):
+        msg = {"reply_count": 5, "reply_users_count": 3}
+        config = {"slack": {"thread_min_replies": 3, "thread_min_participants": 2}}
+        assert should_expand_thread(msg, config) is True
+
+    def test_does_not_expand_below_reply_threshold(self):
+        msg = {"reply_count": 2, "reply_users_count": 3}
+        config = {"slack": {"thread_min_replies": 3, "thread_min_participants": 2}}
+        assert should_expand_thread(msg, config) is False
+
+    def test_does_not_expand_below_participant_threshold(self):
+        msg = {"reply_count": 5, "reply_users_count": 1}
+        config = {"slack": {"thread_min_replies": 3, "thread_min_participants": 2}}
+        assert should_expand_thread(msg, config) is False
+
+    def test_does_not_expand_both_below_threshold(self):
+        msg = {"reply_count": 1, "reply_users_count": 1}
+        config = {"slack": {"thread_min_replies": 3, "thread_min_participants": 2}}
+        assert should_expand_thread(msg, config) is False
+
+    def test_uses_defaults_when_config_missing(self):
+        msg = {"reply_count": 3, "reply_users_count": 2}
+        config = {}  # No slack section
+        assert should_expand_thread(msg, config) is True
+
+    def test_exact_threshold_matches(self):
+        msg = {"reply_count": 3, "reply_users_count": 2}
+        config = {"slack": {"thread_min_replies": 3, "thread_min_participants": 2}}
+        assert should_expand_thread(msg, config) is True
+
+    def test_missing_reply_fields_default_to_zero(self):
+        msg = {}
+        config = {"slack": {"thread_min_replies": 3, "thread_min_participants": 2}}
+        assert should_expand_thread(msg, config) is False
+
+
+class TestMessageToSourceItem:
+    """Tests for message_to_source_item."""
+
+    def _make_msg(self, **overrides):
+        base = {
+            "ts": "1712000000.000100",
+            "user": "U_ALICE",
+            "text": "Let's discuss the API redesign",
+        }
+        base.update(overrides)
+        return base
+
+    def test_basic_channel_message(self):
+        msg = self._make_msg()
+        user_map = {"U_ALICE": "Alice"}
+        item = message_to_source_item(msg, "design-team", "C_DESIGN", user_map)
+
+        assert item.id == "slack_C_DESIGN_1712000000.000100"
+        assert item.source_type == "slack_message"
+        assert item.content_type == "message"
+        assert item.title == "Message from Alice"
+        assert item.content == "Let's discuss the API redesign"
+        assert item.participants == ["Alice"]
+        assert item.display_context == "Slack #design-team"
+        assert "C_DESIGN" in item.source_url
+        assert item.context["channel_id"] == "C_DESIGN"
+        assert item.context["reply_count"] == 0
+
+    def test_dm_message(self):
+        msg = self._make_msg()
+        user_map = {"U_ALICE": "Alice"}
+        item = message_to_source_item(
+            msg, "DM_123", "DM_123", user_map,
+            is_dm=True, dm_partner="Bob"
+        )
+
+        assert item.display_context == "Slack DM with Bob"
+        assert item.attribution_text() == "(per Slack DM with Bob)"
+
+    def test_channel_attribution_text(self):
+        msg = self._make_msg()
+        user_map = {"U_ALICE": "Alice"}
+        item = message_to_source_item(msg, "general", "C_GEN", user_map)
+        assert item.attribution_text() == "(per Slack #general)"
+
+    def test_reply_count_appended_to_content(self):
+        msg = self._make_msg()
+        user_map = {"U_ALICE": "Alice"}
+        item = message_to_source_item(
+            msg, "general", "C_GEN", user_map, reply_count=5
+        )
+        assert "(5 replies)" in item.content
+        assert item.context["reply_count"] == 5
+
+    def test_zero_reply_count_no_hint(self):
+        msg = self._make_msg()
+        user_map = {"U_ALICE": "Alice"}
+        item = message_to_source_item(
+            msg, "general", "C_GEN", user_map, reply_count=0
+        )
+        assert "(0 replies)" not in item.content
+        assert "replies" not in item.content
+
+    def test_none_reply_count_no_hint(self):
+        msg = self._make_msg()
+        user_map = {"U_ALICE": "Alice"}
+        item = message_to_source_item(
+            msg, "general", "C_GEN", user_map, reply_count=None
+        )
+        assert "replies" not in item.content
+
+    def test_timestamp_conversion(self):
+        msg = self._make_msg(ts="1712000000.000100")
+        user_map = {"U_ALICE": "Alice"}
+        item = message_to_source_item(msg, "general", "C_GEN", user_map)
+        assert item.timestamp.tzinfo == timezone.utc
+        assert item.timestamp.year == 2024
+
+    def test_unknown_user_fallback(self):
+        msg = self._make_msg(user="U_UNKNOWN")
+        user_map = {}  # No mapping
+        item = message_to_source_item(msg, "general", "C_GEN", user_map)
+        assert item.title == "Message from U_UNKNOWN"
+
+    def test_raw_data_preserved(self):
+        msg = self._make_msg()
+        user_map = {"U_ALICE": "Alice"}
+        item = message_to_source_item(msg, "general", "C_GEN", user_map)
+        assert item.raw_data == msg
+
+
+class TestThreadToSourceItem:
+    """Tests for thread_to_source_item."""
+
+    def test_aggregates_participants(self):
+        parent = {"ts": "1712000000.000100", "user": "U_ALICE", "text": "What do we think?"}
+        replies = [
+            {"ts": "1712000001.000200", "user": "U_BOB", "text": "I agree"},
+            {"ts": "1712000002.000300", "user": "U_CAROL", "text": "Me too"},
+            {"ts": "1712000003.000400", "user": "U_ALICE", "text": "Great"},
+        ]
+        user_map = {"U_ALICE": "Alice", "U_BOB": "Bob", "U_CAROL": "Carol"}
+
+        item = thread_to_source_item(parent, replies, "design", "C_DES", user_map)
+
+        assert item.source_type == "slack_thread"
+        assert item.content_type == "thread"
+        assert set(item.participants) == {"Alice", "Bob", "Carol"}
+        assert item.context["reply_count"] == 3
+
+    def test_formats_content_with_names(self):
+        parent = {"ts": "1712000000.000100", "user": "U_ALICE", "text": "Discussion"}
+        replies = [
+            {"ts": "1712000001.000200", "user": "U_BOB", "text": "My take"},
+        ]
+        user_map = {"U_ALICE": "Alice", "U_BOB": "Bob"}
+
+        item = thread_to_source_item(parent, replies, "eng", "C_ENG", user_map)
+
+        assert "Alice: Discussion" in item.content
+        assert "Bob: My take" in item.content
+
+    def test_title_truncated(self):
+        parent = {
+            "ts": "1712000000.000100",
+            "user": "U_ALICE",
+            "text": "A" * 100,  # 100 chars
+        }
+        user_map = {"U_ALICE": "Alice"}
+
+        item = thread_to_source_item(parent, [], "eng", "C_ENG", user_map)
+        assert len(item.title) < 100
+        assert item.title.endswith("...")
+
+    def test_display_context(self):
+        parent = {"ts": "1712000000.000100", "user": "U_ALICE", "text": "test"}
+        user_map = {"U_ALICE": "Alice"}
+
+        item = thread_to_source_item(parent, [], "design-team", "C_DT", user_map)
+        assert item.display_context == "Slack #design-team"
+
+
+class TestSlackStateManagement:
+    """Tests for load_slack_state / save_slack_state round-trip."""
+
+    def test_load_returns_empty_when_no_file(self, tmp_path):
+        state = load_slack_state(tmp_path)
+        assert state == {"channels": {}, "dms": {}}
+
+    def test_save_and_load_round_trip(self, tmp_path):
+        state = {
+            "channels": {
+                "C_123": {"last_ts": "1712000000.000100", "name": "general"}
+            },
+            "dms": {
+                "D_456": {"last_ts": "1712000001.000200", "partner": "Alice"}
+            },
+        }
+        save_slack_state(state, tmp_path)
+        loaded = load_slack_state(tmp_path)
+        assert loaded == state
+
+    def test_save_creates_directory(self, tmp_path):
+        nested = tmp_path / "nested" / "dir"
+        state = {"channels": {}, "dms": {}}
+        save_slack_state(state, nested)
+        assert (nested / "slack_state.json").exists()
+
+    def test_save_is_valid_json(self, tmp_path):
+        state = {"channels": {"C1": {"last_ts": "123.456"}}, "dms": {}}
+        save_slack_state(state, tmp_path)
+        with open(tmp_path / "slack_state.json") as f:
+            loaded = json.load(f)
+        assert loaded["channels"]["C1"]["last_ts"] == "123.456"
+
+
+class TestVolumeCap:
+    """Test that volume capping works correctly in fetch_slack_items."""
+
+    @patch("src.ingest.slack.build_slack_client")
+    @patch("src.ingest.slack.save_slack_state")
+    @patch("src.ingest.slack.load_slack_state")
+    @patch("src.ingest.slack._resolve_channel_name")
+    @patch("src.ingest.slack.fetch_channel_messages")
+    @patch("src.ingest.slack.resolve_user_names")
+    def test_volume_cap_keeps_most_recent(
+        self,
+        mock_resolve_users,
+        mock_fetch_msgs,
+        mock_resolve_name,
+        mock_load_state,
+        mock_save_state,
+        mock_build_client,
+    ):
+        from src.ingest.slack import fetch_slack_items
+
+        mock_build_client.return_value = MagicMock()
+        mock_load_state.return_value = {"channels": {}, "dms": {}}
+        mock_resolve_name.return_value = "test-channel"
+        mock_resolve_users.return_value = {"U1": "TestUser"}
+
+        # Create 150 messages
+        messages = [
+            {"ts": f"{1712000000 + i}.000100", "user": "U1", "text": f"Message {i}"}
+            for i in range(150)
+        ]
+        mock_fetch_msgs.return_value = messages
+
+        config = {
+            "slack": {
+                "enabled": True,
+                "channels": ["C_TEST"],
+                "dms": [],
+                "max_messages_per_channel": 100,
+                "bot_allowlist": [],
+            }
+        }
+
+        items = fetch_slack_items(config)
+        assert len(items) == 100

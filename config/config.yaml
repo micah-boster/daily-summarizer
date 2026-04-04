@@ -36,3 +36,22 @@ synthesis:
   synthesis_max_output_tokens: 8192
   weekly_max_output_tokens: 8192
   monthly_max_output_tokens: 8192
+
+slack:
+  enabled: false
+  channels: []
+  dms: []
+  thread_min_replies: 3
+  thread_min_participants: 2
+  max_messages_per_channel: 100
+  bot_allowlist: []
+  discovery_check_days: 7
+  filter:
+    skip_subtypes:
+      - "channel_join"
+      - "channel_leave"
+      - "channel_topic"
+      - "channel_purpose"
+      - "channel_name"
+    skip_patterns:
+      - "^(ok|thanks|lol|yes|no|sure|yep|nope|haha|nice)$"
