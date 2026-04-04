@@ -25,10 +25,9 @@ DEFAULT_MAX_OUTPUT_TOKENS = 4096
 def _parse_section_items(section_text: str, section_type: str) -> list[ExtractionItem]:
     """Parse items from a single extraction section.
 
-    Handles the structured format:
-    - **Decision:** content
-    - **Participants:** names
-    - **Rationale:** reasoning
+    Handles two formats:
+    1. Pipe-delimited: - [content] | [who] | [rationale]
+    2. Legacy structured: - **Decision:** content / - **Participants:** names
 
     Args:
         section_text: Text content of one section (e.g., everything under ## Decisions).
@@ -37,12 +36,55 @@ def _parse_section_items(section_text: str, section_type: str) -> list[Extractio
     Returns:
         List of ExtractionItem objects parsed from the section.
     """
-    if not section_text.strip() or section_text.strip().lower() == "none":
+    if not section_text.strip() or section_text.strip().lower() in ("none", "none."):
         return []
 
     items: list[ExtractionItem] = []
 
-    # Map section types to their primary field label
+    # Try pipe-delimited format first (new concise format)
+    for line in section_text.split("\n"):
+        line = line.strip()
+        if not line.startswith("- "):
+            continue
+        line = line[2:].strip()
+
+        # Check for pipe-delimited format
+        if "|" in line:
+            parts = [p.strip() for p in line.split("|")]
+            content = parts[0]
+            participants: list[str] = []
+            rationale: str | None = None
+
+            if len(parts) >= 2 and parts[1]:
+                participants = [p.strip() for p in parts[1].split(",") if p.strip()]
+            if len(parts) >= 3 and parts[2]:
+                rationale = parts[2] if parts[2].lower() not in ("not stated", "none", "") else None
+
+            if content:
+                items.append(ExtractionItem(content=content, participants=participants, rationale=rationale))
+            continue
+
+        # Check for bold-label format (legacy): - **Decision:** content
+        bold_match = re.match(r"\*\*\w[\w\s]*:\*\*\s*(.*)", line)
+        if bold_match:
+            content = bold_match.group(1).strip()
+            if content:
+                items.append(ExtractionItem(content=content, participants=[], rationale=None))
+            continue
+
+        # Plain bullet — just content
+        if line:
+            items.append(ExtractionItem(content=line, participants=[], rationale=None))
+
+    # Fall back to legacy multi-line block parsing if no items found
+    if not items:
+        items = _parse_legacy_blocks(section_text, section_type)
+
+    return items
+
+
+def _parse_legacy_blocks(section_text: str, section_type: str) -> list[ExtractionItem]:
+    """Parse legacy multi-line extraction format (- **Decision:** / - **Participants:**)."""
     primary_labels = {
         "decisions": "Decision",
         "commitments": "Commitment",
@@ -51,21 +93,17 @@ def _parse_section_items(section_text: str, section_type: str) -> list[Extractio
         "tensions": "Tension",
     }
     primary_label = primary_labels.get(section_type, "Item")
-
-    # Split into item blocks by looking for the primary label pattern
     pattern = rf"-\s+\*\*{primary_label}:\*\*"
     blocks = re.split(pattern, section_text)
 
-    for block in blocks[1:]:  # Skip text before first item
+    items: list[ExtractionItem] = []
+    for block in blocks[1:]:
         block = block.strip()
         if not block:
             continue
 
-        # Extract content (first line or until next field)
         lines = block.split("\n")
         content = lines[0].strip()
-
-        # Extract participants from various field patterns
         participants: list[str] = []
         rationale: str | None = None
 
@@ -73,12 +111,9 @@ def _parse_section_items(section_text: str, section_type: str) -> list[Extractio
             line = line.strip()
             if not line.startswith("- **"):
                 continue
-
-            # Extract field value
             field_match = re.match(r"-\s+\*\*(\w[\w\s]*):\*\*\s*(.*)", line)
             if not field_match:
                 continue
-
             field_name = field_match.group(1).strip().lower()
             field_value = field_match.group(2).strip()
 
@@ -89,13 +124,7 @@ def _parse_section_items(section_text: str, section_type: str) -> list[Extractio
                     rationale = field_value
 
         if content:
-            items.append(
-                ExtractionItem(
-                    content=content,
-                    participants=participants,
-                    rationale=rationale,
-                )
-            )
+            items.append(ExtractionItem(content=content, participants=participants, rationale=rationale))
 
     return items
 

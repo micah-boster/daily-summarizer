@@ -25,7 +25,7 @@ EXECUTIVE_SUMMARY_INSTRUCTION = """## Executive Summary
 
 """
 
-SYNTHESIS_PROMPT = """You are a court reporter producing a daily intelligence brief. Synthesize the extracted meeting data below into a single daily summary.
+SYNTHESIS_PROMPT = """You are producing a daily intelligence brief. Be concise. Every word must earn its place.
 
 Date: {date}
 Number of meetings with transcripts: {transcript_count}
@@ -37,28 +37,24 @@ Number of meetings with transcripts: {transcript_count}
 Produce a daily summary with these exact sections:
 
 {executive_summary_instruction}## Substance
-[What happened of substance today? List specific items, not vague generalities.]
-For each item:
-- **Item:** [specific thing that happened] (Meeting Title -- Key Participants)
+One bullet per distinct thing that happened. Max 15 words per bullet. No filler.
+- [What happened] — [Source meeting]
 
 ## Decisions
-[What decisions were made, by whom, with what rationale?]
-For each decision:
-- **Decision:** [what was decided] | **Who:** [decision maker(s)] | **Rationale:** [stated reasoning] (Meeting Title -- Key Participants)
+One bullet per decision. Merge duplicates across meetings.
+- [What was decided] — [Who decided] — [Source meeting]
 
 ## Commitments
-[What tasks/commitments were created, completed, or deferred? Include owners and deadlines where stated.]
-For each commitment:
-- **Commitment:** [what was committed to] | **Owner:** [who] | **Deadline:** [if stated] | **Status:** [created/completed/deferred] (Meeting Title -- Key Participants)
+One bullet per action item. Include owner and deadline if stated.
+- [What] — [Owner] — [Deadline if stated] — [Source meeting]
 
 CRITICAL RULES:
-- Every item MUST include its source meeting in parentheses: (Meeting Title -- Key Participants)
-- When an item appears in multiple meetings, list all sources: (Meeting A -- Sarah; Meeting B -- Mike)
-- Use neutral reporter tone: facts only, no editorializing, no evaluating individuals
-- Do not use words like: productive, effective, impressive, excellent, poor, weak, strong, wisely, unfortunately
-- Merge duplicate items that appeared in multiple meetings into a single item with multiple sources
-- If a category has no items across all meetings, write "No items for this day."
-- Be specific: "Team decided to delay launch to Q3 due to API dependency" not "Team discussed launch timing"
+- CONCISE: Each bullet should be ONE short sentence, not a paragraph. 15-20 words max.
+- DEDUPLICATE: If the same topic came up in multiple meetings, write ONE bullet and list both meetings.
+- NO PADDING: Do not restate context the reader already knows. "Hire HubSpot vendor" not "Team decided to move forward with hiring an external vendor for HubSpot onboarding and professional flow building."
+- Source meeting goes at end after an em dash, not in parens with participants.
+- Neutral tone. Facts only.
+- If a category has no items, write "No items for this day."
 """
 
 
@@ -159,24 +155,20 @@ def _parse_synthesis_response(response_text: str) -> dict:
         ("commitments", "commitments"),
     ]:
         section_text = sections.get(section_key, "")
-        if not section_text or section_text.strip().lower() == "no items for this day.":
+        if not section_text or section_text.strip().lower() in (
+            "no items for this day.",
+            "no items for this day",
+        ):
             continue
 
         # Extract bullet items (lines starting with -)
         items: list[str] = []
-        current_item_lines: list[str] = []
-
         for line in section_text.split("\n"):
             stripped = line.strip()
-            if stripped.startswith("- **"):
-                if current_item_lines:
-                    items.append(" ".join(current_item_lines))
-                current_item_lines = [stripped[2:]]  # Remove "- " prefix
-            elif stripped and current_item_lines:
-                current_item_lines.append(stripped)
-
-        if current_item_lines:
-            items.append(" ".join(current_item_lines))
+            if stripped.startswith("- "):
+                item = stripped[2:].strip()
+                if item:
+                    items.append(item)
 
         result[result_key] = items
 

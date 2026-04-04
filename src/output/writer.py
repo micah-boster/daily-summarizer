@@ -17,12 +17,26 @@ def _format_time(dt) -> str:
 
 
 def _format_attendees(attendees: list[Attendee]) -> str:
-    """Format attendee list as comma-separated names, excluding self."""
+    """Format attendee list as comma-separated names, excluding self and resources."""
     names = []
     for a in attendees:
         if a.is_self:
             continue
-        names.append(a.name if a.name else a.email)
+        # Skip conference rooms and resources
+        if a.email and "@resource.calendar.google.com" in a.email:
+            continue
+        # Skip entries that look like room names (contain bracketed hardware info)
+        display = a.name if a.name else a.email
+        if "[" in display and "]" in display:
+            continue
+        # Use first name only for internal team (finbounce.com)
+        if a.email and "finbounce.com" in a.email:
+            if a.name:
+                display = a.name.split()[0]
+            else:
+                # Extract name from email: "colin@finbounce.com" -> "Colin"
+                display = a.email.split("@")[0].capitalize()
+        names.append(display)
     return ", ".join(names)
 
 
