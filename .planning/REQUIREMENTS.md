@@ -33,8 +33,8 @@
 
 ### Data Model (MODEL)
 
-- [ ] **MODEL-01**: New `SourceItem` Pydantic model for non-meeting sources (Slack messages, HubSpot activities, Doc edits) parallel to existing `NormalizedEvent`
-- [ ] **MODEL-02**: Commitment data structure captures who, what, by-when with source attribution
+- [x] **MODEL-01**: New `SourceItem` Pydantic model for non-meeting sources (Slack messages, HubSpot activities, Doc edits) parallel to existing `NormalizedEvent`
+- [x] **MODEL-02**: Commitment data structure captures who, what, by-when with source attribution
 
 ### Slack Ingestion (SLACK)
 
@@ -90,8 +90,8 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MODEL-01 | Phase 6 | Pending |
-| MODEL-02 | Phase 6 | Pending |
+| MODEL-01 | Phase 6 | Complete |
+| MODEL-02 | Phase 6 | Complete |
 | SLACK-01 | Phase 7 | Pending |
 | SLACK-02 | Phase 7 | Pending |
 | SLACK-03 | Phase 7 | Pending |

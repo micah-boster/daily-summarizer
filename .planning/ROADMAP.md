@@ -133,10 +133,10 @@ Plans:
   1. A SourceItem can be instantiated with source type, channel/context, timestamp, content, and participants -- and validates correctly
   2. A Commitment can be instantiated with who, what, by-when, and source attribution -- and validates correctly
   3. Existing NormalizedEvent and DailySynthesis models still work unchanged (no regressions)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 06-01: TBD
+- [ ] 06-01-PLAN.md -- SourceItem model, Commitment model, SynthesisSource Protocol, NormalizedEvent conformance, tests
 
 ### Phase 7: Slack Ingest + Synthesis Integration
 **Goal**: Daily summaries include Slack activity from curated channels and DMs, with source attribution throughout
