@@ -2,79 +2,94 @@
 
 ## What This Is
 
-A personal work intelligence system that ingests calendar events and meeting transcripts from Bounce.AI work to produce structured daily summaries. It answers three core synthesis questions — what happened of substance, what decisions were made, and what tasks/commitments emerged — then rolls those up into weekly, monthly, and quarterly intelligence over time. Built for Micah Boster as a personal tool with the potential to share select outputs (e.g., team roll-ups) later.
+A personal work intelligence system that ingests data from multiple work sources (calendar, transcripts, Slack, HubSpot, Google Docs, Notion) to produce structured daily summaries answering what happened of substance, what decisions were made, and what tasks/commitments emerged. Rolls up into weekly, monthly, and quarterly intelligence. Built for Micah Boster as a personal tool evolving toward an entity-aware platform with action capabilities and a web interface.
 
 ## Core Value
 
 Every morning I open a structured daily summary of yesterday's work and find it accurate, useful, and worth 5 minutes of my time — without having produced it manually.
 
+## Current Milestone: v1.5 Expanded Ingest
+
+**Goal:** Broaden the data surface beyond calendar and transcripts so synthesis sees the full picture of work activity.
+
+**Target features:**
+- Slack message ingestion from curated channel list (discovery-based selection)
+- HubSpot activity ingestion (deal changes, contact notes, tasks)
+- Google Docs ingestion (documents created/edited that day)
+- Notion ingestion (page updates, database changes)
+- Cross-source normalization and deduplication
+- Source attribution in synthesis ("per Slack #channel", "per HubSpot deal")
+- Updated synthesis prompts for multi-source input
+
 ## Requirements
 
 ### Validated
 
-(None yet — ship to validate)
+- ✓ Semi-automated daily pipeline (v1.0)
+- ✓ Google Calendar event ingestion (v1.0)
+- ✓ Meeting transcript ingestion — Gemini and Gong (v1.0)
+- ✓ Daily synthesis: substance, decisions, commitments (v1.0)
+- ✓ Structured markdown output with source attribution (v1.0)
+- ✓ Weekly and monthly temporal roll-ups (v1.0)
+- ✓ Evidence-only framing enforced (v1.0)
+- ✓ Priority configuration (v1.0)
+- ✓ Slack digest notifications (v1.0)
+- ✓ Quality tracking and JSON sidecar (v1.0)
 
 ### Active
 
-- [ ] Semi-automated daily pipeline: script pulls calendar + transcript data, processes through Claude, outputs structured summary
-- [ ] Ingest Google Calendar events (Bounce workspace) for meeting skeleton
-- [ ] Ingest meeting transcripts from Gemini (Gmail/Calendar attachments)
-- [ ] Ingest meeting transcripts from Gong (email delivery)
-- [ ] Daily synthesis answering: What happened of substance today?
-- [ ] Daily synthesis answering: What decisions were made, by whom, with what rationale?
-- [ ] Daily synthesis answering: What tasks/commitments were created, completed, or deferred?
-- [ ] Structured output file per day (markdown) with source attribution
-- [ ] Temporal roll-ups: weekly summary from accumulated dailies
-- [ ] Temporal roll-ups: monthly narrative with progress and themes
-- [ ] Prompt engineering that enforces evidence-only framing (no evaluative language)
-- [ ] Source linking: each summary item traces back to the specific transcript or calendar event
+- [ ] Slack message ingestion from curated channels
+- [ ] HubSpot activity ingestion (deals, contacts, tasks)
+- [ ] Google Docs ingestion (created/edited documents)
+- [ ] Notion ingestion (page updates, database changes)
+- [ ] Cross-source deduplication (same event across multiple sources = one item)
+- [ ] Source attribution throughout synthesis output
+- [ ] Updated synthesis prompts for multi-source context
 
 ### Out of Scope
 
-- Real-time / intraday processing — end-of-day batch is sufficient for v1
-- Slack ingestion — defer until calendar + transcripts prove value
-- HubSpot / Notion / Drive ingestion — defer to later phases
-- Personnel evaluation or judgment — system surfaces evidence only, never "performed well" / "underperformed"
-- Team-facing dashboards or shared views — personal tool first
-- Multi-context support (Nighthawk, advisory) — Bounce only
-- Query interface / ad-hoc retrieval — defer until storage model is decided
-- API-based execution — run on Claude plan limits for v1
+- Entity layer (partners, people, initiatives) — v2.0
+- Response drafting and send queue — v3.0
+- Web interface — v4.0
+- Personnel evaluation or judgment — system surfaces evidence only
+- Team-facing dashboards or shared views — personal tool
+- Real-time / intraday processing — end-of-day batch sufficient
+- Query interface / ad-hoc retrieval — v2.0+
 
 ## Context
 
-**User:** Micah Boster, manager/executive at Bounce.AI. Has direct reports, does performance reviews, manages cross-functional work. Uses Gmail, Slack, HubSpot, Notion, Google Calendar, Google Drive daily.
+**User:** Micah Boster, manager/executive at Bounce.AI. Uses Gmail, Slack, HubSpot, Notion, Google Calendar, Google Drive daily.
 
-**Transcript sources:**
-- Gemini: auto-transcriptions that arrive via Gmail or attached to Google Calendar invites
-- Gong: call recordings/transcripts delivered via email
-- Eventually both will consolidate in Notion, but for v1 we pull from Gmail/Calendar
+**v1.0 learnings:**
+- Calendar + transcripts provide strong meeting intelligence but miss async work entirely
+- Slack is highest volume, lowest average signal — channel curation is critical
+- HubSpot contains structured deal/contact activity that doesn't surface in meetings
+- Cross-source dedup is essential — same topic discussed in meeting, Slack, and email
+- Synthesis prompts need source-specific handling (Slack thread ≠ meeting transcript)
 
-**Prior thinking:** Three planning documents in `docs/` contain extensive conceptual framing, a 10-question daily synthesis framework, data source mapping, architecture options, and ~50 architecture decision questions. The 10 questions are: Task Management, Substance, Decisions, People & Team, Themes & Questions, Resonance, Commitments & Follow-ups, Risks & Flags, External Signals, Energy & Focus. V1 focuses on questions 2, 3, and 7 (Substance, Decisions, Tasks/Commitments).
-
-**Validation approach:** Start with a semi-automated manual POC (Phase 0 from planning docs). Script pulls data + processes through Claude + outputs structured file. Micah reviews and tweaks daily. Goal: learn which data is highest-signal, refine prompts, prove the daily habit before investing in full automation.
-
-**Confidentiality boundaries:** TBD — will be informed by the POC. Some categories (HR, legal, board) may be excluded from processing. For now, process everything since output is private.
+**Platform vision:** v1.5 (expanded ingest) → v2.0 (entity layer) → v3.0 (action layer) → v4.0 (web UI). See docs/multi-version-platform-vision.md.
 
 ## Constraints
 
-- **Execution model**: Runs within Claude Code / Cowork on Claude Pro/Max plan limits — not API-based. Cannot be fully headless in v1.
 - **Language**: Python for all pipeline logic
-- **Personnel framing**: System must never output evaluative language about individuals. Enforced in prompt design. Surfaces timestamped evidence, quotes, and contributions only.
-- **Storage**: Flat markdown files for v1. Storage architecture (Obsidian, SQLite, vector DB) to be decided after POC validates the concept.
-- **Cost**: Zero incremental cost target — runs against existing Claude plan allocation.
-- **Privacy**: Data passes through Anthropic's infrastructure via Claude plan usage. Acceptable for personal use. Check with Bounce legal/IT before processing team-wide data.
+- **LLM**: Claude API (Sonnet for daily, Opus for roll-ups)
+- **Personnel framing**: Evidence only, never evaluative language
+- **Storage**: Flat markdown + JSON sidecar for now; DB layer deferred to v2.0
+- **Privacy**: Personal use only; data passes through Anthropic API
+- **Slack channels**: Discovery-based with manual curation, not all-channels
+- **HubSpot scope**: Activity logs, deal changes, notes — not full CRM dump
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Python + Claude Code + Cowork | Keeps everything in Claude ecosystem, avoids API costs, Cowork handles scheduling | — Pending |
-| Run on plan limits, not API | Validate value before committing to ongoing API spend. Graduating to API later is straightforward | — Pending |
-| Evidence only, never evaluations | Legal exposure, fairness problems, context collapse risks with automated assessment. Human makes judgment calls | — Pending |
-| Start with calendar + transcripts | Highest signal-to-noise ratio. Calendar is the skeleton, transcripts are the substance | — Pending |
-| Semi-automated POC before full automation | Learn which data matters, refine prompts, prove the daily habit before investing in infrastructure | — Pending |
-| Flat files for v1 storage | Avoids premature architecture decisions. Storage model informed by what queries prove useful during POC | — Pending |
-| Bounce-only scope | Simplifies data governance, API access, and confidentiality boundaries | — Pending |
+| Python + Claude API | Migrated from plan limits; API gives reliability and headless operation | ✓ Good |
+| Evidence only, never evaluations | Legal exposure, fairness, context collapse risks | ✓ Good |
+| Two-stage synthesis (per-meeting → daily) | Architecturally required for source attribution | ✓ Good |
+| Flat files for storage | Avoids premature architecture; revisit at v2.0 | ✓ Good |
+| Slack channel discovery + curation | Auto-find active channels, user confirms/adds; avoids noise from 50+ channels | — Pending |
+| HubSpot: activity-only scope | Deal changes and notes, not full CRM; keeps ingestion focused | — Pending |
+| Cross-source dedup at normalization layer | One event = one item regardless of how many sources mention it | — Pending |
 
 ---
-*Last updated: 2026-03-23 after initialization*
+*Last updated: 2026-04-03 after milestone v1.5 start*

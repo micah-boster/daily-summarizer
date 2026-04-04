@@ -1,71 +1,41 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: unknown
-last_updated: "2026-04-03T14:30:22.887Z"
+milestone: v1.5
+milestone_name: Expanded Ingest
+status: defining_requirements
+last_updated: "2026-04-03T20:00:00.000Z"
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 14
-  completed_plans: 14
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-23)
+See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** Every morning I open a structured daily summary of yesterday's work and find it accurate, useful, and worth 5 minutes of my time -- without having produced it manually.
-**Current focus:** Phase 1: Foundation and Calendar Ingestion
+**Current focus:** Defining requirements for milestone v1.5 (Expanded Ingest)
 
 ## Current Position
 
-Phase: 1 of 5 (Foundation and Calendar Ingestion) -- COMPLETE
-Plan: 2 of 2 in current phase (all plans complete)
-Status: Phase Complete
-Last activity: 2026-04-03 -- Completed 01-02-PLAN.md (calendar ingestion, end-to-end pipeline)
-
-Progress: [████░░░░░░] 42%
-
-## Performance Metrics
-
-**Velocity:**
-- Total plans completed: 2
-- Average duration: multi-session
-- Total execution time: multi-session
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| - | - | - | - |
-
-**Recent Trend:**
-- Last 5 plans: -
-- Trend: -
-
-*Updated after each plan completion*
-| Phase 00 P01 | multi-session | 2 tasks | 12 files |
-| Phase 00 P02 | multi-session | 2 tasks | 2 files |
-| Phase 01 P01 | 4 min | 2 tasks | 10 files |
-| Phase 01 P02 | 2 min | 2 tasks | 4 files |
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-03 — Milestone v1.5 started
 
 ## Accumulated Context
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- [Roadmap]: 6-phase structure validated by research -- Phase 0 spike before any pipeline code
-- [Roadmap]: Two-stage synthesis (per-meeting then daily) is architecturally required, not optional
-- [Phase 00]: Used google-auth (not oauth2client) and zoneinfo (not pytz) per research
-- [Phase 00]: OAuth requests all scopes upfront (calendar.readonly + gmail.readonly)
-- [Phase 00]: Validation script is single-shot (not daemon) -- Cowork handles scheduling
-- [Phase 00]: 5-day Cowork validation skipped -- manual end-to-end run proved execution model works
-- [Phase 00]: Cowork scheduling deferred to background setup; docs available for self-service
+- [v1.0]: All 6 phases complete, 14 plans executed
+- [v1.5]: Slack channel selection is discovery-based with manual curation
+- [v1.5]: HubSpot scope is activity-only (deals, notes, tasks)
+- [v1.5]: Cross-source dedup required at normalization layer
+- [v1.5]: Entity merge is propose-and-confirm (not auto-merge) — deferred to v2.0
 
 ### Pending Todos
 
@@ -73,12 +43,13 @@ None yet.
 
 ### Blockers/Concerns
 
-- Cowork scheduling reliability for daily batch pipelines is unproven (Phase 0 validates this)
-- Gong API access may require admin privileges; email fallback is the backup path
-- Library version pins from STACK.md need PyPI verification before project scaffolding
+- Slack API access and scoping for channel history reads
+- HubSpot API authentication and rate limits
+- Notion API token setup and page access scoping
+- Google Docs API — may need additional OAuth scope
 
 ## Session Continuity
 
 Last session: 2026-04-03
-Stopped at: Completed 01-02-PLAN.md (Phase 1 complete)
+Stopped at: Milestone v1.5 initialization
 Resume file: None
