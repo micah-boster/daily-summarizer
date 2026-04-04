@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from src.models.sources import ContentType, SourceItem, SourceType
 from src.synthesis.models import ExtractionItem, MeetingExtraction
 from src.synthesis.synthesizer import (
+    SYNTHESIS_PROMPT,
     _format_extractions_for_prompt,
     _format_slack_items_for_prompt,
     _parse_synthesis_response,
@@ -277,3 +278,81 @@ def test_synthesize_daily_with_slack_only(mock_anthropic):
 
     assert len(result["substance"]) == 1
     assert "API redesign" in result["substance"][0]
+
+
+# --- Cross-source dedup and table-format commitment tests ---
+
+
+class TestSynthesisPromptDedupRules:
+    """Verify SYNTHESIS_PROMPT contains required dedup instructions."""
+
+    def test_prompt_has_cross_source_dedup(self):
+        assert "CROSS-SOURCE DEDUPLICATION" in SYNTHESIS_PROMPT
+
+    def test_prompt_has_conflicting_details_rule(self):
+        assert "CONFLICTING details" in SYNTHESIS_PROMPT
+
+    def test_prompt_has_uncertain_matches_rule(self):
+        assert "UNCERTAIN matches" in SYNTHESIS_PROMPT
+
+    def test_prompt_has_commitment_table_headers(self):
+        assert "| Who | What | By When | Source |" in SYNTHESIS_PROMPT
+
+    def test_prompt_has_dedup_commitments_rule(self):
+        assert "DEDUP COMMITMENTS" in SYNTHESIS_PROMPT
+
+    def test_prompt_has_date_normalization(self):
+        assert "Date normalization" in SYNTHESIS_PROMPT
+
+
+COMMITMENTS_TABLE_RESPONSE = """## Substance
+- Pipeline review showed strong Q2 numbers — Team Sync
+
+## Decisions
+No items for this day.
+
+## Commitments
+
+| Who | What | By When | Source |
+|-----|------|---------|--------|
+| John | Send deck to partners | 2026-04-10 | standup |
+| Sarah | Schedule vendor call | unspecified | standup, Slack #proj-alpha |
+"""
+
+COMMITMENTS_BULLET_RESPONSE = """## Substance
+- Pipeline review — Team Sync
+
+## Decisions
+No items for this day.
+
+## Commitments
+- **Commitment:** Send deck | **Owner:** John | **Deadline:** Friday April 10 | standup
+"""
+
+
+class TestParseCommitmentsTable:
+    """Verify _parse_synthesis_response handles table-format commitments."""
+
+    def test_parse_table_format_commitments(self):
+        result = _parse_synthesis_response(COMMITMENTS_TABLE_RESPONSE)
+        assert len(result["commitments"]) == 2
+        assert "John" in result["commitments"][0]
+        assert "Send deck" in result["commitments"][0]
+        assert "Sarah" in result["commitments"][1]
+
+    def test_parse_table_preserves_pipe_format(self):
+        result = _parse_synthesis_response(COMMITMENTS_TABLE_RESPONSE)
+        # Each commitment should be a pipe-delimited row
+        assert result["commitments"][0].startswith("|")
+        assert result["commitments"][0].endswith("|")
+
+    def test_parse_bullet_format_backward_compat(self):
+        """Bullet-list format commitments still parse correctly."""
+        result = _parse_synthesis_response(COMMITMENTS_BULLET_RESPONSE)
+        assert len(result["commitments"]) == 1
+        assert "Send deck" in result["commitments"][0]
+
+    def test_substance_still_parsed_with_table_commitments(self):
+        result = _parse_synthesis_response(COMMITMENTS_TABLE_RESPONSE)
+        assert len(result["substance"]) == 1
+        assert "Pipeline review" in result["substance"][0]
