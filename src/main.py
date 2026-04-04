@@ -361,6 +361,33 @@ def run_daily(args: argparse.Namespace) -> None:
                     commitments=Section(title="Commitments"),
                 )
 
+            # --- Structured commitment extraction (second Claude call) ---
+            extracted_commitments: list = []
+            try:
+                from src.synthesis.commitments import extract_commitments
+
+                # Build synthesis text from sections for extraction
+                synthesis_text_parts: list[str] = []
+                if synthesis_result.get("executive_summary"):
+                    synthesis_text_parts.append(synthesis_result["executive_summary"])
+                for section in ["substance", "decisions", "commitments"]:
+                    for item in synthesis_result.get(section, []):
+                        synthesis_text_parts.append(item)
+                synthesis_text = "\n".join(synthesis_text_parts)
+                if synthesis_text.strip():
+                    extracted_commitments = extract_commitments(
+                        synthesis_text, current, config
+                    )
+                    logger.info(
+                        "Extracted %d structured commitments",
+                        len(extracted_commitments),
+                    )
+            except Exception as e:
+                logger.warning(
+                    "Commitment extraction failed: %s. Continuing without structured commitments.",
+                    e,
+                )
+
             # Quality tracking: detect edits on previous raw output before overwriting
             try:
                 from src.quality import detect_edits, save_raw_output, update_quality_report
@@ -403,7 +430,10 @@ def run_daily(args: argparse.Namespace) -> None:
             try:
                 from src.output.writer import write_daily_sidecar
 
-                sidecar_path = write_daily_sidecar(synthesis, extractions, output_dir)
+                sidecar_path = write_daily_sidecar(
+                    synthesis, extractions, output_dir,
+                    extracted_commitments=extracted_commitments,
+                )
                 logger.info("Wrote JSON sidecar -> %s", sidecar_path)
             except Exception as e:
                 logger.warning("Sidecar generation failed: %s. Daily summary still written.", e)

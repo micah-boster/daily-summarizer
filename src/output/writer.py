@@ -179,23 +179,25 @@ def write_daily_sidecar(
     synthesis: DailySynthesis,
     extractions: list,
     output_dir: Path,
+    extracted_commitments: list | None = None,
 ) -> Path:
     """Write a JSON sidecar file alongside the daily markdown summary.
 
     Produces YYYY-MM-DD.json in the same directory as YYYY-MM-DD.md,
-    containing structured tasks, decisions, and source meeting metadata.
+    containing structured tasks, decisions, commitments, and source meeting metadata.
 
     Args:
         synthesis: The DailySynthesis data.
         extractions: List of MeetingExtraction objects from Stage 1.
         output_dir: Base output directory.
+        extracted_commitments: Optional list of ExtractedCommitment objects.
 
     Returns:
         Path to the written JSON sidecar file.
     """
     from src.sidecar import build_daily_sidecar
 
-    sidecar = build_daily_sidecar(synthesis, extractions)
+    sidecar = build_daily_sidecar(synthesis, extractions, extracted_commitments=extracted_commitments)
 
     d = synthesis.date
     file_dir = output_dir / "daily" / str(d.year) / f"{d.month:02d}"

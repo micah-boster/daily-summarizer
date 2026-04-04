@@ -41,6 +41,15 @@ class SidecarMeeting(BaseModel):
     has_transcript: bool = False
 
 
+class SidecarCommitment(BaseModel):
+    """A structured commitment extracted from synthesis output."""
+
+    who: str
+    what: str
+    by_when: str  # ISO date, "week of YYYY-MM-DD", or "unspecified"
+    source: list[str]  # ["standup", "Slack #proj-alpha"]
+
+
 class DailySidecar(BaseModel):
     """Complete JSON sidecar for a daily summary."""
 
@@ -50,12 +59,14 @@ class DailySidecar(BaseModel):
     transcript_count: int
     tasks: list[SidecarTask] = Field(default_factory=list)
     decisions: list[SidecarDecision] = Field(default_factory=list)
+    commitments: list[SidecarCommitment] = Field(default_factory=list)
     source_meetings: list[SidecarMeeting] = Field(default_factory=list)
 
 
 def build_daily_sidecar(
     synthesis: DailySynthesis,
     extractions: list[MeetingExtraction],
+    extracted_commitments: list | None = None,
 ) -> DailySidecar:
     """Build a DailySidecar from synthesis data and meeting extractions.
 
@@ -127,6 +138,19 @@ def build_daily_sidecar(
             )
         )
 
+    # Map extracted commitments to SidecarCommitment instances
+    sidecar_commitments: list[SidecarCommitment] = []
+    if extracted_commitments:
+        for c in extracted_commitments:
+            sidecar_commitments.append(
+                SidecarCommitment(
+                    who=c.who,
+                    what=c.what,
+                    by_when=c.by_when,
+                    source=c.source,
+                )
+            )
+
     return DailySidecar(
         date=date_str,
         generated_at=synthesis.generated_at.isoformat(),
@@ -134,5 +158,6 @@ def build_daily_sidecar(
         transcript_count=synthesis.transcript_count,
         tasks=tasks,
         decisions=decisions,
+        commitments=sidecar_commitments,
         source_meetings=source_meetings,
     )
