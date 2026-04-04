@@ -55,3 +55,11 @@ slack:
       - "channel_name"
     skip_patterns:
       - "^(ok|thanks|lol|yes|no|sure|yep|nope|haha|nice)$"
+
+google_docs:
+  enabled: false
+  content_max_chars: 2500
+  comment_max_chars: 500
+  max_docs_per_day: 50
+  exclude_ids: []
+  exclude_title_patterns: []
