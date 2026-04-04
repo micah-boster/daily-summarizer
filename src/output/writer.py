@@ -101,6 +101,7 @@ def write_daily_summary(
     synthesis: DailySynthesis,
     output_dir: Path,
     template_dir: Path,
+    slack_items: list | None = None,
 ) -> Path:
     """Render a DailySynthesis to markdown and write to the output directory.
 
@@ -111,6 +112,7 @@ def write_daily_summary(
         synthesis: The daily synthesis data to render.
         output_dir: Base output directory.
         template_dir: Directory containing Jinja2 templates.
+        slack_items: Optional list of Slack SourceItems for the activity section.
 
     Returns:
         Path to the written markdown file.
@@ -134,6 +136,8 @@ def write_daily_summary(
         commitments=synthesis.commitments,
         meetings_without_transcripts=synthesis.meetings_without_transcripts,
         extractions=synthesis.extractions,
+        slack_items=slack_items or [],
+        slack_item_count=len(slack_items) if slack_items else 0,
     )
 
     # Build output path: output_dir/daily/YYYY/MM/YYYY-MM-DD.md

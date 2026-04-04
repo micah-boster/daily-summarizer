@@ -40,6 +40,14 @@
 {% endfor %}
 
 {% endif %}
+{% if slack_items %}
+## Slack Activity
+
+{% for item in slack_items %}
+- **{{ item.title }}** — {{ item.content[:200] }}{% if item.content|length > 200 %}...{% endif %} {{ item.attribution_text() }}
+{% endfor %}
+
+{% endif %}
 {% if extractions %}
 ---
 

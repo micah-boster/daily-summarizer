@@ -168,6 +168,50 @@ def run_daily(args: argparse.Namespace) -> None:
 
     current = from_date
     while current <= to_date:
+        # --- Slack ingestion (independent of Google auth) ---
+        slack_items: list = []
+        try:
+            slack_config = config.get("slack", {})
+            if slack_config.get("enabled", False):
+                from src.ingest.slack import (
+                    build_slack_client,
+                    fetch_slack_items,
+                    load_slack_state,
+                    save_slack_state,
+                )
+
+                slack_items = fetch_slack_items(config)
+                logger.info("Fetched %d Slack items", len(slack_items))
+
+                # --- Periodic new-channel auto-suggest ---
+                try:
+                    from src.ingest.slack_discovery import check_new_channels
+
+                    state = load_slack_state(Path("config"))
+                    last_check = state.get("last_discovery_check")
+                    check_interval = slack_config.get("discovery_check_days", 7)
+                    should_check = (
+                        last_check is None
+                        or datetime.fromisoformat(last_check)
+                        < datetime.now() - timedelta(days=check_interval)
+                    )
+                    if should_check:
+                        client = build_slack_client()
+                        new_channels = check_new_channels(client, state, config)
+                        if new_channels:
+                            logger.info(
+                                "New active Slack channels detected: %s — run discover-slack to add them.",
+                                ", ".join(f"#{name}" for name in new_channels),
+                            )
+                        state["last_discovery_check"] = datetime.now().isoformat()
+                        save_slack_state(state, Path("config"))
+                except Exception as e:
+                    logger.debug("Periodic channel check skipped: %s", e)
+        except Exception as e:
+            logger.warning(
+                "Slack ingestion failed: %s. Continuing without Slack data.", e
+            )
+
         try:
             if calendar_service is not None:
                 # Full pipeline: fetch real calendar data
@@ -233,8 +277,10 @@ def run_daily(args: argparse.Namespace) -> None:
                 try:
                     from src.synthesis.synthesizer import synthesize_daily
 
-                    if extractions:
-                        synthesis_result = synthesize_daily(extractions, current, config)
+                    if extractions or slack_items:
+                        synthesis_result = synthesize_daily(
+                            extractions, current, config, slack_items=slack_items
+                        )
                         logger.info("Daily synthesis complete")
                 except Exception as e:
                     logger.warning("Synthesis failed: %s. Continuing with empty synthesis.", e)
@@ -304,7 +350,7 @@ def run_daily(args: argparse.Namespace) -> None:
             except Exception as e:
                 logger.warning("Quality tracking (detect) failed: %s", e)
 
-            path = write_daily_summary(synthesis, output_dir, template_dir)
+            path = write_daily_summary(synthesis, output_dir, template_dir, slack_items=slack_items)
             logger.info(
                 "Wrote daily summary for %s -> %s (%d meetings, %.1fh)",
                 current,
