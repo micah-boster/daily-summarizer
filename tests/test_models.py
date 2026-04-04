@@ -67,6 +67,21 @@ class TestNormalizedEvent:
         assert event.end_time is None
 
 
+    def test_model_dump_does_not_contain_protocol_properties(self):
+        event = NormalizedEvent(id="evt1", title="Standup")
+        dumped = event.model_dump()
+        # Protocol properties must NOT appear in serialized output
+        assert "source_id" not in dumped
+        assert "source_type" not in dumped
+        assert "timestamp" not in dumped
+        assert "participants_list" not in dumped
+        assert "content_for_synthesis" not in dumped
+
+    def test_attribution_text_returns_expected_string(self):
+        event = NormalizedEvent(id="evt1", title="Weekly Sync")
+        assert event.attribution_text() == "(per Weekly Sync)"
+
+
 class TestResponseStatus:
     def test_enum_values_match_google_calendar_api(self):
         assert ResponseStatus.ACCEPTED == "accepted"

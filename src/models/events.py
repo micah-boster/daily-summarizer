@@ -42,6 +42,29 @@ class NormalizedEvent(BaseModel):
     transcript_source: str | None = None
     raw_data: dict | None = None
 
+    @property
+    def source_id(self) -> str:
+        return self.id
+
+    @property
+    def source_type(self) -> str:
+        return self.source
+
+    @property
+    def timestamp(self) -> datetime | None:
+        return self.start_time
+
+    @property
+    def participants_list(self) -> list[str]:
+        return [a.name or a.email for a in self.attendees]
+
+    @property
+    def content_for_synthesis(self) -> str | None:
+        return self.transcript_text
+
+    def attribution_text(self) -> str:
+        return f"(per {self.title})"
+
 
 class Section(BaseModel):
     title: str
