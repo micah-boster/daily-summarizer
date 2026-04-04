@@ -212,6 +212,20 @@ def run_daily(args: argparse.Namespace) -> None:
                 "Slack ingestion failed: %s. Continuing without Slack data.", e
             )
 
+        # --- Google Docs ingestion (uses same Google OAuth creds) ---
+        docs_items: list = []
+        try:
+            docs_config = config.get("google_docs", {})
+            if docs_config.get("enabled", False) and creds is not None:
+                from src.ingest.google_docs import fetch_google_docs_items
+
+                docs_items = fetch_google_docs_items(config, creds, current)
+                logger.info("Fetched %d Google Docs items", len(docs_items))
+        except Exception as e:
+            logger.warning(
+                "Google Docs ingestion failed: %s. Continuing without Docs data.", e
+            )
+
         try:
             if calendar_service is not None:
                 # Full pipeline: fetch real calendar data
@@ -277,9 +291,9 @@ def run_daily(args: argparse.Namespace) -> None:
                 try:
                     from src.synthesis.synthesizer import synthesize_daily
 
-                    if extractions or slack_items:
+                    if extractions or slack_items or docs_items:
                         synthesis_result = synthesize_daily(
-                            extractions, current, config, slack_items=slack_items
+                            extractions, current, config, slack_items=slack_items, docs_items=docs_items
                         )
                         logger.info("Daily synthesis complete")
                 except Exception as e:
@@ -350,7 +364,7 @@ def run_daily(args: argparse.Namespace) -> None:
             except Exception as e:
                 logger.warning("Quality tracking (detect) failed: %s", e)
 
-            path = write_daily_summary(synthesis, output_dir, template_dir, slack_items=slack_items)
+            path = write_daily_summary(synthesis, output_dir, template_dir, slack_items=slack_items, docs_items=docs_items)
             logger.info(
                 "Wrote daily summary for %s -> %s (%d meetings, %.1fh)",
                 current,

@@ -48,6 +48,18 @@
 {% endfor %}
 
 {% endif %}
+{% if docs_items %}
+## Google Docs Activity
+
+{% for item in docs_items %}
+{% if item.source_type.value == "google_doc_edit" %}
+- **{{ item.title }}** — {{ item.content[:200] }}{% if item.content|length > 200 %}...{% endif %} {{ item.attribution_text() }}
+{% elif item.source_type.value == "google_doc_comment" %}
+- {{ item.title }}: {{ item.content[:200] }}{% if item.content|length > 200 %}...{% endif %} {{ item.attribution_text() }}
+{% endif %}
+{% endfor %}
+
+{% endif %}
 {% if extractions %}
 ---
 
