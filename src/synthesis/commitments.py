@@ -74,6 +74,7 @@ def extract_commitments(
     synthesis_text: str,
     target_date: date,
     config: dict,
+    client: anthropic.Anthropic | None = None,
 ) -> list[ExtractedCommitment]:
     """Extract structured commitments from synthesized daily summary text.
 
@@ -94,7 +95,7 @@ def extract_commitments(
         return []
 
     try:
-        client = anthropic.Anthropic()
+        client = client or anthropic.Anthropic()
         synthesis_config = config.get("synthesis", {})
         model = synthesis_config.get("model", DEFAULT_MODEL)
 

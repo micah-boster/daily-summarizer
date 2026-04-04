@@ -350,6 +350,7 @@ def synthesize_monthly(
     month: int,
     config: dict,
     output_dir: Path,
+    client: anthropic.Anthropic | None = None,
 ) -> MonthlySynthesis:
     """Produce monthly synthesis from accumulated weekly summaries.
 
@@ -392,7 +393,7 @@ def synthesize_monthly(
     model = synthesis_config.get("model", DEFAULT_MODEL)
     max_tokens = synthesis_config.get("monthly_max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
 
-    client = anthropic.Anthropic()
+    client = client or anthropic.Anthropic()
     response = client.messages.create(
         model=model,
         max_tokens=max_tokens,

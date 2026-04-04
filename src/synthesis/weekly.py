@@ -405,6 +405,7 @@ def synthesize_weekly(
     target_date: date,
     config: dict,
     output_dir: Path,
+    client: anthropic.Anthropic | None = None,
 ) -> WeeklySynthesis:
     """Produce weekly synthesis from accumulated daily summaries.
 
@@ -467,7 +468,7 @@ def synthesize_weekly(
     model = synthesis_config.get("model", DEFAULT_MODEL)
     max_tokens = synthesis_config.get("weekly_max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
 
-    client = anthropic.Anthropic()
+    client = client or anthropic.Anthropic()
     response = client.messages.create(
         model=model,
         max_tokens=max_tokens,

@@ -428,6 +428,7 @@ def synthesize_daily(
     slack_items: list[SourceItem] | None = None,
     docs_items: list[SourceItem] | None = None,
     hubspot_items: list[SourceItem] | None = None,
+    client: anthropic.Anthropic | None = None,
 ) -> dict:
     """Produce daily synthesis from meeting extractions, Slack, Docs, and HubSpot items.
 
@@ -514,7 +515,7 @@ def synthesize_daily(
     max_tokens = synthesis_config.get("synthesis_max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
 
     # Call Claude API
-    client = anthropic.Anthropic()
+    client = client or anthropic.Anthropic()
     response = client.messages.create(
         model=model,
         max_tokens=max_tokens,

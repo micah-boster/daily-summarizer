@@ -196,6 +196,7 @@ def _parse_extraction_response(
 def extract_meeting(
     event: NormalizedEvent,
     config: dict,
+    client: anthropic.Anthropic | None = None,
 ) -> MeetingExtraction | None:
     """Extract structured information from a single meeting transcript.
 
@@ -237,7 +238,7 @@ def extract_meeting(
     max_tokens = synthesis_config.get("extraction_max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
 
     # Call Claude API
-    client = anthropic.Anthropic()
+    client = client or anthropic.Anthropic()
     response = client.messages.create(
         model=model,
         max_tokens=max_tokens,
@@ -275,6 +276,7 @@ def extract_meeting(
 def extract_all_meetings(
     events: list[NormalizedEvent],
     config: dict,
+    client: anthropic.Anthropic | None = None,
 ) -> list[MeetingExtraction]:
     """Extract structured information from all meetings with transcripts.
 
@@ -288,6 +290,7 @@ def extract_all_meetings(
     Returns:
         List of MeetingExtraction objects for events that had transcripts.
     """
+    client = client or anthropic.Anthropic()
     extractions: list[MeetingExtraction] = []
     skipped = 0
 
@@ -296,7 +299,7 @@ def extract_all_meetings(
             continue
 
         try:
-            extraction = extract_meeting(event, config)
+            extraction = extract_meeting(event, config, client=client)
             if extraction is not None:
                 extractions.append(extraction)
         except Exception as e:
