@@ -38,9 +38,9 @@
 
 ### Slack Ingestion (SLACK)
 
-- [ ] **SLACK-01**: Ingest messages from a curated list of Slack channels (user-configurable)
-- [ ] **SLACK-02**: Expand active threads (replies) for discussions above a configurable threshold
-- [ ] **SLACK-03**: Ingest direct messages (DMs and group DMs)
+- [x] **SLACK-01**: Ingest messages from a curated list of Slack channels (user-configurable)
+- [x] **SLACK-02**: Expand active threads (replies) for discussions above a configurable threshold
+- [x] **SLACK-03**: Ingest direct messages (DMs and group DMs)
 - [ ] **SLACK-04**: Discovery mode proposes active channels based on user's history; user confirms/rejects
 
 ### HubSpot Ingestion (HUBSPOT)
@@ -92,9 +92,9 @@
 |-------------|-------|--------|
 | MODEL-01 | Phase 6 | Complete |
 | MODEL-02 | Phase 6 | Complete |
-| SLACK-01 | Phase 7 | Pending |
-| SLACK-02 | Phase 7 | Pending |
-| SLACK-03 | Phase 7 | Pending |
+| SLACK-01 | Phase 7 | Complete |
+| SLACK-02 | Phase 7 | Complete |
+| SLACK-03 | Phase 7 | Complete |
 | SLACK-04 | Phase 7 | Pending |
 | SYNTH-05 | Phase 7 | Pending |
 | SYNTH-07 | Phase 7 | Pending |
