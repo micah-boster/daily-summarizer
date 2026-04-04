@@ -31,10 +31,13 @@ SYNTHESIS_PROMPT = """You are producing a daily intelligence brief. Be concise. 
 Date: {date}
 Number of meetings with transcripts: {transcript_count}
 Number of Slack sources: {slack_source_count}
+Number of Google Docs sources: {docs_source_count}
 
 {extractions_text}
 
 {slack_items_text}
+
+{docs_items_text}
 
 {priority_context}
 
@@ -42,15 +45,15 @@ Produce a daily summary with these exact sections:
 
 {executive_summary_instruction}## Substance
 One bullet per distinct thing that happened. Keep it concise but include enough context to be useful standalone.
-- [What happened] — [Source meeting or Slack attribution]
+- [What happened] — [Source meeting, Slack, or Google Doc attribution]
 
 ## Decisions
 One bullet per decision. Merge duplicates across meetings. Always include who decided.
-- [What was decided] — [Who decided] — [Source meeting or Slack attribution]
+- [What was decided] — [Who decided] — [Source meeting, Slack, or Google Doc attribution]
 
 ## Commitments
 One bullet per action item. ALWAYS include the owner name and deadline. Every commitment must have an owner.
-- [What] — [Owner] — [Deadline if stated, or "no deadline"] — [Source meeting or Slack attribution]
+- [What] — [Owner] — [Deadline if stated, or "no deadline"] — [Source meeting, Slack, or Google Doc attribution]
 
 CRITICAL RULES:
 - CONCISE: Each bullet should be 1-2 short sentences max. No filler words.
@@ -58,9 +61,10 @@ CRITICAL RULES:
 - OWNERS: Every commitment MUST name who owns it. Never write a commitment without an owner.
 - DEDUPLICATE: If the same topic came up in multiple meetings, write ONE bullet and list both meetings.
 - Slack items use their attribution format exactly as provided (e.g., "(per Slack #design-team)" or "(per Slack DM with Sarah Chen)").
-- Merge duplicate topics across meetings AND Slack. One bullet, multiple sources.
+- Google Docs items use their attribution format exactly as provided (e.g., "(per Google Doc Project Roadmap)").
+- Merge duplicate topics across meetings, Slack, AND Google Docs. One bullet, multiple sources.
 - NO PADDING: "Hire HubSpot vendor (<$5K)" not "Team decided to move forward with hiring an external vendor for HubSpot onboarding and professional flow building."
-- Source meeting or Slack attribution goes at end after an em dash.
+- Source meeting, Slack, or Google Doc attribution goes at end after an em dash.
 - Neutral tone. Facts only.
 - If a category has no items, write "No items for this day."
 """
@@ -156,6 +160,51 @@ def _format_slack_items_for_prompt(slack_items: list[SourceItem]) -> str:
     return "\n".join(blocks)
 
 
+def _format_docs_items_for_prompt(docs_items: list[SourceItem]) -> str:
+    """Format Google Docs SourceItems into readable text for the synthesis prompt.
+
+    Groups items by display_context (doc name). Each group gets a
+    header, then items listed with content and attribution.
+
+    Args:
+        docs_items: List of SourceItem objects from Google Docs ingestion.
+
+    Returns:
+        Formatted text block for inclusion in the synthesis prompt.
+    """
+    if not docs_items:
+        return ""
+
+    # Group by display_context
+    groups: dict[str, list[SourceItem]] = {}
+    for item in docs_items:
+        key = item.display_context or "Google Doc"
+        groups.setdefault(key, []).append(item)
+
+    blocks: list[str] = ["## Google Docs Activity\n"]
+
+    for context, items in groups.items():
+        blocks.append(f"### {context}")
+        for item in items:
+            if item.source_type == SourceType.GOOGLE_DOC_EDIT:
+                blocks.append(f"**Edited:** {item.title}")
+                if item.content and not item.content.startswith("["):
+                    # Show first 200 chars of content in prompt
+                    preview = item.content[:200]
+                    if len(item.content) > 200:
+                        preview += "..."
+                    blocks.append(f"  Content: {preview}")
+                else:
+                    blocks.append(f"  {item.content}")
+                blocks.append(f"  {item.attribution_text()}")
+            elif item.source_type == SourceType.GOOGLE_DOC_COMMENT:
+                ts_str = item.timestamp.strftime("%H:%M")
+                blocks.append(f"- {item.title}: {item.content} ({ts_str}) {item.attribution_text()}")
+        blocks.append("")
+
+    return "\n".join(blocks)
+
+
 def _parse_synthesis_response(response_text: str) -> dict:
     """Parse Claude's synthesis response into structured sections.
 
@@ -228,11 +277,12 @@ def synthesize_daily(
     target_date: date,
     config: dict,
     slack_items: list[SourceItem] | None = None,
+    docs_items: list[SourceItem] | None = None,
 ) -> dict:
-    """Produce daily synthesis from meeting extractions and Slack items.
+    """Produce daily synthesis from meeting extractions, Slack, and Docs items.
 
     Stage 2 of the two-stage pipeline. Takes all per-meeting extractions
-    and optional Slack SourceItems, builds the synthesis prompt, calls
+    and optional Slack/Docs SourceItems, builds the synthesis prompt, calls
     Claude, parses the response, and validates for evidence-only language.
 
     Args:
@@ -240,6 +290,7 @@ def synthesize_daily(
         target_date: The date being synthesized.
         config: Pipeline configuration dict.
         slack_items: Optional list of SourceItem from Slack ingestion.
+        docs_items: Optional list of SourceItem from Google Docs ingestion.
 
     Returns:
         Dict with keys: substance (list[str]), decisions (list[str]),
@@ -255,16 +306,19 @@ def synthesize_daily(
     # Filter out low-signal extractions
     substantive = [e for e in extractions if not e.low_signal]
     has_slack = bool(slack_items)
+    has_docs = bool(docs_items)
 
-    if not substantive and not has_slack:
-        logger.info("No substantive extractions or Slack items for %s, returning empty synthesis", target_date)
+    if not substantive and not has_slack and not has_docs:
+        logger.info("No substantive extractions, Slack, or Docs items for %s, returning empty synthesis", target_date)
         return empty_result
 
     # Build prompt
     extractions_text = _format_extractions_for_prompt(substantive)
     slack_items_text = _format_slack_items_for_prompt(slack_items or [])
+    docs_items_text = _format_docs_items_for_prompt(docs_items or [])
     transcript_count = len(substantive)
     slack_source_count = len(slack_items) if slack_items else 0
+    docs_source_count = len(docs_items) if docs_items else 0
 
     # Conditional executive summary for busy days (5+ meetings with transcripts)
     exec_instruction = ""
@@ -287,8 +341,10 @@ def synthesize_daily(
         date=target_date.isoformat(),
         transcript_count=transcript_count,
         slack_source_count=slack_source_count,
+        docs_source_count=docs_source_count,
         extractions_text=extractions_text,
         slack_items_text=slack_items_text,
+        docs_items_text=docs_items_text,
         executive_summary_instruction=exec_instruction,
         priority_context=priority_context,
     )
