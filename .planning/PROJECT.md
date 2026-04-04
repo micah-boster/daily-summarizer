@@ -8,18 +8,19 @@ A personal work intelligence system that ingests data from multiple work sources
 
 Every morning I open a structured daily summary of yesterday's work and find it accurate, useful, and worth 5 minutes of my time — without having produced it manually.
 
-## Current Milestone: v1.5 Expanded Ingest
+## Current Milestone: v1.5.1 Notion + Performance + Reliability
 
-**Goal:** Broaden the data surface beyond calendar and transcripts so synthesis sees the full picture of work activity.
+**Goal:** Complete the ingest surface with Notion, parallelize the pipeline for speed, harden configuration and caching, and migrate Claude API calls to structured outputs.
 
 **Target features:**
-- Slack message ingestion from curated channel list (discovery-based selection)
-- HubSpot activity ingestion (deal changes, contact notes, tasks)
-- Google Docs ingestion (documents created/edited that day)
-- Notion ingestion (page updates, database changes)
-- Cross-source normalization and deduplication
-- Source attribution in synthesis ("per Slack #channel", "per HubSpot deal")
-- Updated synthesis prompts for multi-source input
+- Notion page/database ingestion for daily summaries
+- Parallel ingest modules via asyncio (independent sources run concurrently)
+- Parallel per-meeting transcript extraction (concurrent Claude API calls)
+- Slack user batch resolution (users_list instead of N individual calls)
+- Algorithmic cross-source deduplication (supplement to LLM-based)
+- Typed config model with Pydantic validation on config.yaml load
+- Raw data cache retention policy (auto-delete after configurable TTL)
+- Migrate Claude API responses from markdown parsing to structured outputs (json_schema)
 
 ## Requirements
 
@@ -35,16 +36,25 @@ Every morning I open a structured daily summary of yesterday's work and find it 
 - ✓ Priority configuration (v1.0)
 - ✓ Slack digest notifications (v1.0)
 - ✓ Quality tracking and JSON sidecar (v1.0)
+- ✓ Slack message ingestion from curated channels (v1.5)
+- ✓ HubSpot activity ingestion (v1.5)
+- ✓ Google Docs ingestion (v1.5)
+- ✓ Cross-source deduplication via LLM (v1.5)
+- ✓ Source attribution throughout synthesis output (v1.5)
+- ✓ Multi-source synthesis prompts (v1.5)
+- ✓ Commitment extraction with structured deadlines (v1.5)
+- ✓ Pipeline hardening and reliability (v1.5)
 
 ### Active
 
-- [ ] Slack message ingestion from curated channels
-- [ ] HubSpot activity ingestion (deals, contacts, tasks)
-- [ ] Google Docs ingestion (created/edited documents)
-- [ ] Notion ingestion (page updates, database changes)
-- [ ] Cross-source deduplication (same event across multiple sources = one item)
-- [ ] Source attribution throughout synthesis output
-- [ ] Updated synthesis prompts for multi-source context
+- [ ] Notion page/database ingestion
+- [ ] Parallel ingest modules (asyncio)
+- [ ] Parallel per-meeting extraction (concurrent Claude calls)
+- [ ] Slack user batch resolution
+- [ ] Algorithmic cross-source deduplication
+- [ ] Typed config model (Pydantic validation)
+- [ ] Raw data cache retention policy
+- [ ] Claude API structured output migration (json_schema)
 
 ### Out of Scope
 
@@ -67,7 +77,13 @@ Every morning I open a structured daily summary of yesterday's work and find it 
 - Cross-source dedup is essential — same topic discussed in meeting, Slack, and email
 - Synthesis prompts need source-specific handling (Slack thread ≠ meeting transcript)
 
-**Platform vision:** v1.5 (expanded ingest) → v2.0 (entity layer) → v3.0 (action layer) → v4.0 (web UI). See docs/multi-version-platform-vision.md.
+**v1.5 learnings:**
+- Multi-source synthesis works well with single-pass LLM dedup at conservative threshold
+- Structured outputs (json_schema) eliminate brittle markdown parsing — migration overdue
+- Sequential pipeline acceptable at current scale but parallelization needed before adding more sources
+- Notion API complexity warranted deferral — no diff endpoint, breaking changes in Sept 2025
+
+**Platform vision:** v1.5 (expanded ingest) → v1.5.1 (Notion + perf + reliability) → v2.0 (entity layer) → v3.0 (action layer) → v4.0 (web UI). See docs/multi-version-platform-vision.md.
 
 ## Constraints
 
@@ -92,4 +108,4 @@ Every morning I open a structured daily summary of yesterday's work and find it 
 | Cross-source dedup at normalization layer | One event = one item regardless of how many sources mention it | — Pending |
 
 ---
-*Last updated: 2026-04-03 after milestone v1.5 start*
+*Last updated: 2026-04-04 after milestone v1.5.1 start*

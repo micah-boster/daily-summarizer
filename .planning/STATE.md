@@ -1,33 +1,31 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: Expanded Ingest
-status: unknown
-last_updated: "2026-04-04T16:24:43.850Z"
+milestone: v1.5.1
+milestone_name: Notion + Performance + Reliability
+status: defining_requirements
+last_updated: "2026-04-04"
 progress:
-  total_phases: 11
-  completed_phases: 11
-  total_plans: 24
-  completed_plans: 24
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-03)
+See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** Every morning I open a structured daily summary of yesterday's work and find it accurate, useful, and worth 5 minutes of my time -- without having produced it manually.
-**Current focus:** Phase 6 - Data Model Foundation
+**Current focus:** Defining requirements for v1.5.1
 
 ## Current Position
 
-Phase: 6 of 10 (Data Model Foundation) -- COMPLETE
-Plan: 1 of 1 in current phase
-Status: Phase 6 complete, ready for Phase 7
-Last activity: 2026-04-04 -- Phase 6 executed (06-01-PLAN.md complete)
-
-Progress: [██░░░░░░░░] 16% (1/6 v1.5 plans)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-04 — Milestone v1.5.1 started
 
 ## Performance Metrics
 
