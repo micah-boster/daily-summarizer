@@ -44,6 +44,14 @@ Number of HubSpot sources: {hubspot_source_count}
 
 {priority_context}
 
+CROSS-SOURCE DEDUPLICATION:
+- When the SAME specific topic appears across multiple sources, consolidate into ONE item.
+- "Same topic" = same project + same specific issue/decision/action. NOT just same project name.
+- Append all source attributions: "Timeline moved to Q3 (per standup, per Slack #proj-alpha)"
+- CONFLICTING details: show both with attribution: "Launch March 15 (per standup) vs March 22 (per Slack #releases)"
+- UNCERTAIN matches: keep SEPARATE. Two items > one incorrectly merged item.
+- Never merge items from different projects, even if they discuss similar themes.
+
 Produce a daily summary with these exact sections:
 
 {executive_summary_instruction}## Substance
@@ -55,14 +63,24 @@ One bullet per decision. Merge duplicates across meetings. Always include who de
 - [What was decided] — [Who decided] — [Source meeting, Slack, Google Doc, or HubSpot attribution]
 
 ## Commitments
-One bullet per action item. ALWAYS include the owner name and deadline. Every commitment must have an owner.
-- [What] — [Owner] — [Deadline if stated, or "no deadline"] — [Source meeting, Slack, Google Doc, or HubSpot attribution]
+One row per commitment. Extract ONLY explicit commitments (someone clearly said they will do something).
+Include everyone's commitments, not just the user's.
+Do NOT extract suggestions ("We should probably...") or observations ("The report needs updating").
+Only extract "I will..." / "X will..." / "X agreed to..." statements.
+
+| Who | What | By When | Source |
+|-----|------|---------|--------|
+| [First name or "TBD"] | [What they committed to] | [Normalized date relative to {date}, or "unspecified"] | [Source attribution(s)] |
+
+Date normalization: "by Friday" = next Friday's date. "next week" = "week of YYYY-MM-DD". "end of day" = "{date}". "soon" or no deadline = "unspecified".
 
 CRITICAL RULES:
 - CONCISE: Each bullet should be 1-2 short sentences max. No filler words.
 - CONTEXT: Every bullet must be understandable on its own without reading the full document. Include enough specifics.
 - OWNERS: Every commitment MUST name who owns it. Never write a commitment without an owner.
 - DEDUPLICATE: If the same topic came up in multiple meetings, write ONE bullet and list both meetings.
+- DEDUP COMMITMENTS: Same commitment in meeting AND Slack = one row with both sources.
+- COMMITMENTS TABLE: Every row must have a Who. Use "TBD" if unclear.
 - Slack items use their attribution format exactly as provided (e.g., "(per Slack #design-team)" or "(per Slack DM with Sarah Chen)").
 - Google Docs items use their attribution format exactly as provided (e.g., "(per Google Doc Project Roadmap)").
 - HubSpot items use their attribution format exactly as provided (e.g., "(per HubSpot deal Acme Renewal)" or "(per HubSpot contact John Smith)").
@@ -370,14 +388,33 @@ def _parse_synthesis_response(response_text: str) -> dict:
         ):
             continue
 
-        # Extract bullet items (lines starting with -)
         items: list[str] = []
-        for line in section_text.split("\n"):
-            stripped = line.strip()
-            if stripped.startswith("- "):
-                item = stripped[2:].strip()
-                if item:
-                    items.append(item)
+
+        if section_key == "commitments":
+            # Parse commitments as table rows (pipe-delimited) or bullet items
+            for line in section_text.split("\n"):
+                stripped = line.strip()
+                # Skip table header and separator rows
+                if stripped.startswith("| Who") or stripped.startswith("|--"):
+                    continue
+                # Parse pipe-delimited table rows
+                if stripped.startswith("|") and stripped.endswith("|"):
+                    item = stripped.strip()
+                    if item:
+                        items.append(item)
+                # Fallback: also accept bullet-list format for backward compatibility
+                elif stripped.startswith("- "):
+                    item = stripped[2:].strip()
+                    if item:
+                        items.append(item)
+        else:
+            # Extract bullet items (lines starting with -)
+            for line in section_text.split("\n"):
+                stripped = line.strip()
+                if stripped.startswith("- "):
+                    item = stripped[2:].strip()
+                    if item:
+                        items.append(item)
 
         result[result_key] = items
 
