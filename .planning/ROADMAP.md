@@ -122,7 +122,7 @@ Plans:
 - [x] **Phase 8: HubSpot Ingest** - Deal changes, contact notes, and CRM activity ingestion (completed 2026-04-04)
 - [x] **Phase 9: Google Docs Ingest** - Document edit detection and content extraction (completed 2026-04-04)
 - [x] **Phase 10: Cross-Source Synthesis + Commitments** - Deduplication tuning and structured commitment extraction across all sources (completed 2026-04-04)
-- [ ] **Phase 11: Pipeline Hardening** - Bug fixes, run_daily() decomposition, commitment model consolidation, dependency pinning
+- [x] **Phase 11: Pipeline Hardening** - Bug fixes, run_daily() decomposition, commitment model consolidation, dependency pinning (completed 2026-04-04)
 - [ ] **Phase 12: Reliability & Test Coverage** - API retry/backoff, token counting, pre-existing test fixes, pipeline orchestrator tests
 
 ## Phase Details
@@ -254,5 +254,5 @@ Phases 11-12 are sequential gap closure phases.
 | 8. HubSpot Ingest | v1.5 | 2/2 | Complete | 2026-04-04 |
 | 9. Google Docs Ingest | v1.5 | 2/2 | Complete | 2026-04-04 |
 | 10. Cross-Source Synthesis + Commitments | v1.5 | 2/2 | Complete | 2026-04-04 |
-| 11. Pipeline Hardening | 1/2 | In Progress|  | - |
+| 11. Pipeline Hardening | 2/2 | Complete   | 2026-04-04 | - |
 | 12. Reliability & Test Coverage | v1.5 | 0/0 | Not started | - |
