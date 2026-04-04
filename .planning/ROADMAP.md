@@ -164,10 +164,11 @@ Plans:
   2. Contact notes and activity from the target date appear in the summary with contact context
   3. HubSpot tickets, calls, emails, meetings, and tasks from the target date appear in the summary
   4. Every HubSpot-sourced item is attributed with "(per HubSpot [object type])"
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 08-01: TBD
+- [ ] 08-01-PLAN.md -- HubSpot ingest module: SDK setup, deal/contact/ticket/engagement fetching, ownership scoping, TDD
+- [ ] 08-02-PLAN.md -- Pipeline integration: wire into synthesizer, writer, template with cross-source dedup
 
 ### Phase 9: Google Docs Ingest
 **Goal**: Daily summaries include documents the user created or edited that day
