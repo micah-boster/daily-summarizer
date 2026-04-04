@@ -226,6 +226,20 @@ def run_daily(args: argparse.Namespace) -> None:
                 "Google Docs ingestion failed: %s. Continuing without Docs data.", e
             )
 
+        # --- HubSpot CRM ingestion (independent of Google auth) ---
+        hubspot_items: list = []
+        try:
+            hubspot_config = config.get("hubspot", {})
+            if hubspot_config.get("enabled", False):
+                from src.ingest.hubspot import fetch_hubspot_items
+
+                hubspot_items = fetch_hubspot_items(config, current)
+                logger.info("Fetched %d HubSpot items", len(hubspot_items))
+        except Exception as e:
+            logger.warning(
+                "HubSpot ingestion failed: %s. Continuing without HubSpot data.", e
+            )
+
         try:
             if calendar_service is not None:
                 # Full pipeline: fetch real calendar data
@@ -291,9 +305,11 @@ def run_daily(args: argparse.Namespace) -> None:
                 try:
                     from src.synthesis.synthesizer import synthesize_daily
 
-                    if extractions or slack_items or docs_items:
+                    if extractions or slack_items or docs_items or hubspot_items:
                         synthesis_result = synthesize_daily(
-                            extractions, current, config, slack_items=slack_items, docs_items=docs_items
+                            extractions, current, config,
+                            slack_items=slack_items, docs_items=docs_items,
+                            hubspot_items=hubspot_items,
                         )
                         logger.info("Daily synthesis complete")
                 except Exception as e:
@@ -364,7 +380,7 @@ def run_daily(args: argparse.Namespace) -> None:
             except Exception as e:
                 logger.warning("Quality tracking (detect) failed: %s", e)
 
-            path = write_daily_summary(synthesis, output_dir, template_dir, slack_items=slack_items, docs_items=docs_items)
+            path = write_daily_summary(synthesis, output_dir, template_dir, slack_items=slack_items, docs_items=docs_items, hubspot_items=hubspot_items)
             logger.info(
                 "Wrote daily summary for %s -> %s (%d meetings, %.1fh)",
                 current,

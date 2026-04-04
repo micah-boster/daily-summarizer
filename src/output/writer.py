@@ -103,6 +103,7 @@ def write_daily_summary(
     template_dir: Path,
     slack_items: list | None = None,
     docs_items: list | None = None,
+    hubspot_items: list | None = None,
 ) -> Path:
     """Render a DailySynthesis to markdown and write to the output directory.
 
@@ -115,6 +116,7 @@ def write_daily_summary(
         template_dir: Directory containing Jinja2 templates.
         slack_items: Optional list of Slack SourceItems for the activity section.
         docs_items: Optional list of Google Docs SourceItems for the activity section.
+        hubspot_items: Optional list of HubSpot SourceItems for the CRM activity section.
 
     Returns:
         Path to the written markdown file.
@@ -141,6 +143,8 @@ def write_daily_summary(
         slack_items=slack_items or [],
         slack_item_count=len(slack_items) if slack_items else 0,
         docs_items=docs_items or [],
+        hubspot_items=hubspot_items or [],
+        hubspot_item_count=len(hubspot_items) if hubspot_items else 0,
     )
 
     # Build output path: output_dir/daily/YYYY/MM/YYYY-MM-DD.md

@@ -32,6 +32,7 @@ Date: {date}
 Number of meetings with transcripts: {transcript_count}
 Number of Slack sources: {slack_source_count}
 Number of Google Docs sources: {docs_source_count}
+Number of HubSpot sources: {hubspot_source_count}
 
 {extractions_text}
 
@@ -39,21 +40,23 @@ Number of Google Docs sources: {docs_source_count}
 
 {docs_items_text}
 
+{hubspot_items_text}
+
 {priority_context}
 
 Produce a daily summary with these exact sections:
 
 {executive_summary_instruction}## Substance
 One bullet per distinct thing that happened. Keep it concise but include enough context to be useful standalone.
-- [What happened] — [Source meeting, Slack, or Google Doc attribution]
+- [What happened] — [Source meeting, Slack, Google Doc, or HubSpot attribution]
 
 ## Decisions
 One bullet per decision. Merge duplicates across meetings. Always include who decided.
-- [What was decided] — [Who decided] — [Source meeting, Slack, or Google Doc attribution]
+- [What was decided] — [Who decided] — [Source meeting, Slack, Google Doc, or HubSpot attribution]
 
 ## Commitments
 One bullet per action item. ALWAYS include the owner name and deadline. Every commitment must have an owner.
-- [What] — [Owner] — [Deadline if stated, or "no deadline"] — [Source meeting, Slack, or Google Doc attribution]
+- [What] — [Owner] — [Deadline if stated, or "no deadline"] — [Source meeting, Slack, Google Doc, or HubSpot attribution]
 
 CRITICAL RULES:
 - CONCISE: Each bullet should be 1-2 short sentences max. No filler words.
@@ -62,9 +65,10 @@ CRITICAL RULES:
 - DEDUPLICATE: If the same topic came up in multiple meetings, write ONE bullet and list both meetings.
 - Slack items use their attribution format exactly as provided (e.g., "(per Slack #design-team)" or "(per Slack DM with Sarah Chen)").
 - Google Docs items use their attribution format exactly as provided (e.g., "(per Google Doc Project Roadmap)").
-- Merge duplicate topics across meetings, Slack, AND Google Docs. One bullet, multiple sources.
+- HubSpot items use their attribution format exactly as provided (e.g., "(per HubSpot deal Acme Renewal)" or "(per HubSpot contact John Smith)").
+- Merge duplicate topics across meetings, Slack, Google Docs, AND HubSpot. One bullet, multiple sources.
 - NO PADDING: "Hire HubSpot vendor (<$5K)" not "Team decided to move forward with hiring an external vendor for HubSpot onboarding and professional flow building."
-- Source meeting, Slack, or Google Doc attribution goes at end after an em dash.
+- Source meeting, Slack, Google Doc, or HubSpot attribution goes at end after an em dash.
 - Neutral tone. Facts only.
 - If a category has no items, write "No items for this day."
 """
@@ -205,6 +209,114 @@ def _format_docs_items_for_prompt(docs_items: list[SourceItem]) -> str:
     return "\n".join(blocks)
 
 
+def _format_hubspot_items_for_prompt(hubspot_items: list[SourceItem]) -> str:
+    """Format HubSpot SourceItems into readable text for the synthesis prompt.
+
+    Groups items by source_type (deals, contacts, tickets, activities).
+
+    Args:
+        hubspot_items: List of SourceItem objects from HubSpot ingestion.
+
+    Returns:
+        Formatted text block for inclusion in the synthesis prompt.
+    """
+    if not hubspot_items:
+        return ""
+
+    # Group by source_type
+    deals = [i for i in hubspot_items if i.source_type == SourceType.HUBSPOT_DEAL]
+    contacts = [i for i in hubspot_items if i.source_type == SourceType.HUBSPOT_CONTACT]
+    tickets = [i for i in hubspot_items if i.source_type == SourceType.HUBSPOT_TICKET]
+    activities = [i for i in hubspot_items if i.source_type == SourceType.HUBSPOT_ACTIVITY]
+
+    blocks: list[str] = ["## HubSpot CRM Activity\n"]
+
+    if deals:
+        blocks.append(f"### Deals ({len(deals)})")
+        for item in deals:
+            blocks.append(f"- **{item.title}**: {item.content} {item.attribution_text()}")
+        blocks.append("")
+
+    if contacts:
+        blocks.append(f"### Contacts ({len(contacts)})")
+        for item in contacts:
+            blocks.append(f"- **{item.title}**: {item.content} {item.attribution_text()}")
+        blocks.append("")
+
+    if tickets:
+        blocks.append(f"### Tickets ({len(tickets)})")
+        for item in tickets:
+            blocks.append(f"- **{item.title}**: {item.content} {item.attribution_text()}")
+        blocks.append("")
+
+    if activities:
+        blocks.append(f"### Activities ({len(activities)})")
+        for item in activities:
+            blocks.append(f"- **{item.title}**: {item.content} {item.attribution_text()}")
+        blocks.append("")
+
+    return "\n".join(blocks)
+
+
+def _dedup_hubspot_items(
+    hubspot_items: list[SourceItem],
+    extractions: list,
+    slack_items: list[SourceItem] | None = None,
+) -> list[SourceItem]:
+    """Remove HubSpot items that duplicate content from other sources.
+
+    - HubSpot meetings: skip if a calendar event with matching start time exists
+    - HubSpot emails: skip if a matching email subject/timestamp exists in other sources
+
+    Args:
+        hubspot_items: Items from HubSpot ingestion.
+        extractions: Meeting extractions from calendar/transcript pipeline.
+        slack_items: Optional Slack items for comparison.
+
+    Returns:
+        Filtered list of HubSpot items with duplicates removed.
+    """
+    if not hubspot_items:
+        return []
+
+    # Collect calendar event times for dedup (within 5 min window)
+    calendar_times: set[int] = set()
+    for ext in extractions:
+        if hasattr(ext, "meeting_start") and ext.meeting_start:
+            try:
+                ts = ext.meeting_start
+                if hasattr(ts, "timestamp"):
+                    # Round to 5-min buckets for fuzzy matching
+                    calendar_times.add(int(ts.timestamp()) // 300)
+            except Exception:
+                pass
+
+    filtered: list[SourceItem] = []
+    for item in hubspot_items:
+        # Skip HubSpot meetings that match calendar events
+        if item.source_type == SourceType.HUBSPOT_ACTIVITY and "meeting" in item.id:
+            item_bucket = int(item.timestamp.timestamp()) // 300
+            if item_bucket in calendar_times:
+                logger.debug("Dedup: skipping HubSpot meeting %s (matches calendar event)", item.id)
+                continue
+
+        # Skip HubSpot emails that match calendar/gmail emails by timestamp bucket
+        if item.source_type == SourceType.HUBSPOT_ACTIVITY and "email" in item.id:
+            item_bucket = int(item.timestamp.timestamp()) // 120  # 2-min window
+            # For now, keep emails unless we have explicit gmail item comparison
+            # (Gmail items are in extractions, not separate SourceItems currently)
+
+        filtered.append(item)
+
+    if len(filtered) < len(hubspot_items):
+        logger.info(
+            "HubSpot dedup: removed %d duplicate items",
+            len(hubspot_items) - len(filtered),
+        )
+
+    return filtered
+
+
 def _parse_synthesis_response(response_text: str) -> dict:
     """Parse Claude's synthesis response into structured sections.
 
@@ -278,12 +390,13 @@ def synthesize_daily(
     config: dict,
     slack_items: list[SourceItem] | None = None,
     docs_items: list[SourceItem] | None = None,
+    hubspot_items: list[SourceItem] | None = None,
 ) -> dict:
-    """Produce daily synthesis from meeting extractions, Slack, and Docs items.
+    """Produce daily synthesis from meeting extractions, Slack, Docs, and HubSpot items.
 
     Stage 2 of the two-stage pipeline. Takes all per-meeting extractions
-    and optional Slack/Docs SourceItems, builds the synthesis prompt, calls
-    Claude, parses the response, and validates for evidence-only language.
+    and optional Slack/Docs/HubSpot SourceItems, builds the synthesis prompt,
+    calls Claude, parses the response, and validates for evidence-only language.
 
     Args:
         extractions: List of MeetingExtraction from Stage 1.
@@ -291,6 +404,7 @@ def synthesize_daily(
         config: Pipeline configuration dict.
         slack_items: Optional list of SourceItem from Slack ingestion.
         docs_items: Optional list of SourceItem from Google Docs ingestion.
+        hubspot_items: Optional list of SourceItem from HubSpot ingestion.
 
     Returns:
         Dict with keys: substance (list[str]), decisions (list[str]),
@@ -307,18 +421,24 @@ def synthesize_daily(
     substantive = [e for e in extractions if not e.low_signal]
     has_slack = bool(slack_items)
     has_docs = bool(docs_items)
+    has_hubspot = bool(hubspot_items)
 
-    if not substantive and not has_slack and not has_docs:
-        logger.info("No substantive extractions, Slack, or Docs items for %s, returning empty synthesis", target_date)
+    if not substantive and not has_slack and not has_docs and not has_hubspot:
+        logger.info("No substantive extractions, Slack, Docs, or HubSpot items for %s, returning empty synthesis", target_date)
         return empty_result
+
+    # Cross-source dedup for HubSpot items
+    deduped_hubspot = _dedup_hubspot_items(hubspot_items or [], substantive, slack_items)
 
     # Build prompt
     extractions_text = _format_extractions_for_prompt(substantive)
     slack_items_text = _format_slack_items_for_prompt(slack_items or [])
     docs_items_text = _format_docs_items_for_prompt(docs_items or [])
+    hubspot_items_text = _format_hubspot_items_for_prompt(deduped_hubspot)
     transcript_count = len(substantive)
     slack_source_count = len(slack_items) if slack_items else 0
     docs_source_count = len(docs_items) if docs_items else 0
+    hubspot_source_count = len(deduped_hubspot)
 
     # Conditional executive summary for busy days (5+ meetings with transcripts)
     exec_instruction = ""
@@ -342,9 +462,11 @@ def synthesize_daily(
         transcript_count=transcript_count,
         slack_source_count=slack_source_count,
         docs_source_count=docs_source_count,
+        hubspot_source_count=hubspot_source_count,
         extractions_text=extractions_text,
         slack_items_text=slack_items_text,
         docs_items_text=docs_items_text,
+        hubspot_items_text=hubspot_items_text,
         executive_summary_instruction=exec_instruction,
         priority_context=priority_context,
     )

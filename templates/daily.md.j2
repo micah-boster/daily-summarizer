@@ -2,7 +2,7 @@
 
 ## Overview
 
-{{ meeting_count }} meeting{{ "s" if meeting_count != 1 else "" }}, {{ "%.1f"|format(total_meeting_hours) }} hours of meetings, {{ transcript_count }} transcript{{ "s" if transcript_count != 1 else "" }} available.
+{{ meeting_count }} meeting{{ "s" if meeting_count != 1 else "" }}, {{ "%.1f"|format(total_meeting_hours) }} hours of meetings, {{ transcript_count }} transcript{{ "s" if transcript_count != 1 else "" }} available.{% if hubspot_item_count %} {{ hubspot_item_count }} HubSpot item{{ "s" if hubspot_item_count != 1 else "" }}.{% endif %}
 
 {% if executive_summary %}
 ## Executive Summary
@@ -59,6 +59,46 @@
 {% endif %}
 {% endfor %}
 
+{% endif %}
+{% if hubspot_items %}
+## HubSpot CRM Activity
+
+{% set deal_items = hubspot_items | selectattr("source_type.value", "equalto", "hubspot_deal") | list %}
+{% set contact_items = hubspot_items | selectattr("source_type.value", "equalto", "hubspot_contact") | list %}
+{% set ticket_items = hubspot_items | selectattr("source_type.value", "equalto", "hubspot_ticket") | list %}
+{% set activity_items = hubspot_items | selectattr("source_type.value", "equalto", "hubspot_activity") | list %}
+{% if deal_items %}
+### Deals ({{ deal_items | length }})
+
+{% for item in deal_items %}
+- **{{ item.title }}** — {{ item.content[:200] }}{% if item.content|length > 200 %}...{% endif %} {{ item.attribution_text() }}
+{% endfor %}
+
+{% endif %}
+{% if contact_items %}
+### Contacts ({{ contact_items | length }})
+
+{% for item in contact_items %}
+- **{{ item.title }}** — {{ item.content[:200] }}{% if item.content|length > 200 %}...{% endif %} {{ item.attribution_text() }}
+{% endfor %}
+
+{% endif %}
+{% if ticket_items %}
+### Tickets ({{ ticket_items | length }})
+
+{% for item in ticket_items %}
+- **{{ item.title }}** — {{ item.content[:200] }}{% if item.content|length > 200 %}...{% endif %} {{ item.attribution_text() }}
+{% endfor %}
+
+{% endif %}
+{% if activity_items %}
+### Other Activity ({{ activity_items | length }})
+
+{% for item in activity_items %}
+- **{{ item.title }}** — {{ item.content[:200] }}{% if item.content|length > 200 %}...{% endif %} {{ item.attribution_text() }}
+{% endfor %}
+
+{% endif %}
 {% endif %}
 {% if extractions %}
 ---
