@@ -56,9 +56,9 @@
 
 ### Synthesis Updates (SYNTH)
 
-- [ ] **SYNTH-05**: Source-aware synthesis prompts handle Slack, HubSpot, and Docs input alongside meetings
+- [x] **SYNTH-05**: Source-aware synthesis prompts handle Slack, HubSpot, and Docs input alongside meetings
 - [ ] **SYNTH-06**: Cross-source deduplication handled at synthesis time via LLM (same topic across sources = one consolidated item)
-- [ ] **SYNTH-07**: Source attribution in all output ("per Slack #channel", "per HubSpot deal", "per Google Doc")
+- [x] **SYNTH-07**: Source attribution in all output ("per Slack #channel", "per HubSpot deal", "per Google Doc")
 - [ ] **SYNTH-08**: Commitment deadlines extracted and structured (who/what/by-when) in synthesis output and JSON sidecar
 
 ## v1.5.x Requirements (Deferred)
@@ -96,8 +96,8 @@
 | SLACK-02 | Phase 7 | Complete |
 | SLACK-03 | Phase 7 | Complete |
 | SLACK-04 | Phase 7 | Complete |
-| SYNTH-05 | Phase 7 | Pending |
-| SYNTH-07 | Phase 7 | Pending |
+| SYNTH-05 | Phase 7 | Complete |
+| SYNTH-07 | Phase 7 | Complete |
 | HUBSPOT-01 | Phase 8 | Pending |
 | HUBSPOT-02 | Phase 8 | Pending |
 | HUBSPOT-03 | Phase 8 | Pending |
