@@ -121,7 +121,7 @@ Plans:
 - [ ] **Phase 7: Slack Ingest + Synthesis Integration** - Slack channel/DM ingestion with end-to-end synthesis validation
 - [ ] **Phase 8: HubSpot Ingest** - Deal changes, contact notes, and CRM activity ingestion
 - [ ] **Phase 9: Google Docs Ingest** - Document edit detection and content extraction
-- [ ] **Phase 10: Cross-Source Synthesis + Commitments** - Deduplication tuning and structured commitment extraction across all sources
+- [x] **Phase 10: Cross-Source Synthesis + Commitments** - Deduplication tuning and structured commitment extraction across all sources (completed 2026-04-04)
 
 ## Phase Details
 
@@ -216,4 +216,4 @@ Note: Phases 8 and 9 can execute in parallel (independent sources); both must co
 | 7. Slack Ingest + Synthesis Integration | v1.5 | 0/2 | Not started | - |
 | 8. HubSpot Ingest | v1.5 | 0/1 | Not started | - |
 | 9. Google Docs Ingest | v1.5 | 0/1 | Not started | - |
-| 10. Cross-Source Synthesis + Commitments | 1/2 | In Progress|  | - |
+| 10. Cross-Source Synthesis + Commitments | 2/2 | Complete   | 2026-04-04 | - |
