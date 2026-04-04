@@ -1,7 +1,15 @@
 """Tests for daily cross-meeting synthesis formatting and parsing."""
 
+from datetime import date, datetime, timezone
+from unittest.mock import MagicMock, patch
+
+from src.models.sources import ContentType, SourceItem, SourceType
 from src.synthesis.models import ExtractionItem, MeetingExtraction
-from src.synthesis.synthesizer import _format_extractions_for_prompt, _parse_synthesis_response
+from src.synthesis.synthesizer import (
+    _format_extractions_for_prompt,
+    _format_slack_items_for_prompt,
+    _parse_synthesis_response,
+)
 
 
 # --- Formatting tests ---
@@ -177,3 +185,95 @@ def test_synthesize_daily_all_low_signal():
     assert result["substance"] == []
     assert result["decisions"] == []
     assert result["commitments"] == []
+
+
+# --- Slack items integration tests ---
+
+
+def _make_slack_item(**overrides) -> SourceItem:
+    defaults = {
+        "id": "slack_C123_1234567890",
+        "source_type": SourceType.SLACK_MESSAGE,
+        "content_type": ContentType.MESSAGE,
+        "title": "Message from Alice",
+        "timestamp": datetime(2026, 4, 1, 10, 0, 0, tzinfo=timezone.utc),
+        "content": "Let's discuss the API redesign",
+        "source_url": "https://slack.com/archives/C123/p1234567890",
+        "display_context": "Slack #design-team",
+        "participants": ["Alice"],
+    }
+    defaults.update(overrides)
+    return SourceItem(**defaults)
+
+
+def test_format_slack_items_channel_message():
+    """Verify channel messages formatted with attribution."""
+    items = [_make_slack_item()]
+    text = _format_slack_items_for_prompt(items)
+    assert "Slack #design-team" in text
+    assert "Message from Alice" in text
+    assert "API redesign" in text
+    assert "(per Slack #design-team)" in text
+
+
+def test_format_slack_items_dm_message():
+    """Verify DM messages formatted with DM attribution."""
+    items = [
+        _make_slack_item(
+            display_context="Slack DM with Bob",
+            title="Message from Bob",
+            content="Project update",
+        )
+    ]
+    text = _format_slack_items_for_prompt(items)
+    assert "Slack DM with Bob" in text
+    assert "(per Slack DM with Bob)" in text
+
+
+def test_format_slack_items_thread():
+    """Verify thread items include full content."""
+    items = [
+        _make_slack_item(
+            source_type=SourceType.SLACK_THREAD,
+            content_type=ContentType.THREAD,
+            title="Thread: What do we think about...",
+            content="Alice: What do we think?\nBob: I agree\nCarol: Me too",
+        )
+    ]
+    text = _format_slack_items_for_prompt(items)
+    assert "Thread:" in text
+    assert "Alice: What do we think?" in text
+    assert "Bob: I agree" in text
+
+
+def test_format_slack_items_empty():
+    """Verify empty list produces empty string."""
+    assert _format_slack_items_for_prompt([]) == ""
+
+
+def test_synthesize_daily_accepts_slack_items_none():
+    """Verify backward compat: slack_items=None doesn't break."""
+    from src.synthesis.synthesizer import synthesize_daily
+
+    result = synthesize_daily([], date(2026, 4, 3), {}, slack_items=None)
+    assert result["substance"] == []
+
+
+@patch("src.synthesis.synthesizer.anthropic")
+def test_synthesize_daily_with_slack_only(mock_anthropic):
+    """Verify synthesis runs with only Slack items (no meeting extractions)."""
+    from src.synthesis.synthesizer import synthesize_daily
+
+    mock_client = MagicMock()
+    mock_anthropic.Anthropic.return_value = mock_client
+    mock_response = MagicMock()
+    mock_response.content = [
+        MagicMock(text="## Substance\n- API redesign discussed — (per Slack #design-team)\n\n## Decisions\nNo items for this day.\n\n## Commitments\nNo items for this day.\n")
+    ]
+    mock_client.messages.create.return_value = mock_response
+
+    items = [_make_slack_item()]
+    result = synthesize_daily([], date(2026, 4, 3), {}, slack_items=items)
+
+    assert len(result["substance"]) == 1
+    assert "API redesign" in result["substance"][0]

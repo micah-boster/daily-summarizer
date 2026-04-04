@@ -12,6 +12,7 @@ from datetime import date
 
 import anthropic
 
+from src.models.sources import SourceItem, SourceType
 from src.synthesis.models import MeetingExtraction
 from src.synthesis.validator import validate_evidence_only
 
@@ -29,8 +30,11 @@ SYNTHESIS_PROMPT = """You are producing a daily intelligence brief. Be concise. 
 
 Date: {date}
 Number of meetings with transcripts: {transcript_count}
+Number of Slack sources: {slack_source_count}
 
 {extractions_text}
+
+{slack_items_text}
 
 {priority_context}
 
@@ -38,23 +42,25 @@ Produce a daily summary with these exact sections:
 
 {executive_summary_instruction}## Substance
 One bullet per distinct thing that happened. Keep it concise but include enough context to be useful standalone.
-- [What happened] — [Source meeting]
+- [What happened] — [Source meeting or Slack attribution]
 
 ## Decisions
 One bullet per decision. Merge duplicates across meetings. Always include who decided.
-- [What was decided] — [Who decided] — [Source meeting]
+- [What was decided] — [Who decided] — [Source meeting or Slack attribution]
 
 ## Commitments
 One bullet per action item. ALWAYS include the owner name and deadline. Every commitment must have an owner.
-- [What] — [Owner] — [Deadline if stated, or "no deadline"] — [Source meeting]
+- [What] — [Owner] — [Deadline if stated, or "no deadline"] — [Source meeting or Slack attribution]
 
 CRITICAL RULES:
 - CONCISE: Each bullet should be 1-2 short sentences max. No filler words.
 - CONTEXT: Every bullet must be understandable on its own without reading the full document. Include enough specifics.
 - OWNERS: Every commitment MUST name who owns it. Never write a commitment without an owner.
 - DEDUPLICATE: If the same topic came up in multiple meetings, write ONE bullet and list both meetings.
+- Slack items use their attribution format exactly as provided (e.g., "(per Slack #design-team)" or "(per Slack DM with Sarah Chen)").
+- Merge duplicate topics across meetings AND Slack. One bullet, multiple sources.
 - NO PADDING: "Hire HubSpot vendor (<$5K)" not "Team decided to move forward with hiring an external vendor for HubSpot onboarding and professional flow building."
-- Source meeting goes at end after an em dash.
+- Source meeting or Slack attribution goes at end after an em dash.
 - Neutral tone. Facts only.
 - If a category has no items, write "No items for this day."
 """
@@ -108,6 +114,46 @@ def _format_extractions_for_prompt(extractions: list[MeetingExtraction]) -> str:
         blocks.append("\n".join(lines))
 
     return "\n---\n\n".join(blocks)
+
+
+def _format_slack_items_for_prompt(slack_items: list[SourceItem]) -> str:
+    """Format Slack SourceItems into readable text for the synthesis prompt.
+
+    Groups items by display_context (channel/DM name). Each group gets a
+    header, then items listed with sender name, content, and timestamp.
+
+    Args:
+        slack_items: List of SourceItem objects from Slack ingestion.
+
+    Returns:
+        Formatted text block for inclusion in the synthesis prompt.
+    """
+    if not slack_items:
+        return ""
+
+    # Group by display_context
+    groups: dict[str, list[SourceItem]] = {}
+    for item in slack_items:
+        key = item.display_context or "Slack"
+        groups.setdefault(key, []).append(item)
+
+    blocks: list[str] = ["## Slack Activity\n"]
+
+    for context, items in groups.items():
+        blocks.append(f"### {context}")
+        for item in items:
+            if item.source_type == SourceType.SLACK_THREAD:
+                # Thread: show full content block
+                blocks.append(f"**Thread:** {item.title}")
+                blocks.append(item.content)
+                blocks.append(f"  {item.attribution_text()}")
+            else:
+                # Individual message
+                ts_str = item.timestamp.strftime("%H:%M")
+                blocks.append(f"- {item.title}: {item.content} ({ts_str}) {item.attribution_text()}")
+        blocks.append("")
+
+    return "\n".join(blocks)
 
 
 def _parse_synthesis_response(response_text: str) -> dict:
@@ -181,17 +227,19 @@ def synthesize_daily(
     extractions: list[MeetingExtraction],
     target_date: date,
     config: dict,
+    slack_items: list[SourceItem] | None = None,
 ) -> dict:
-    """Produce daily synthesis from meeting extractions.
+    """Produce daily synthesis from meeting extractions and Slack items.
 
-    Stage 2 of the two-stage pipeline. Takes all per-meeting extractions,
-    builds the synthesis prompt, calls Claude, parses the response, and
-    validates for evidence-only language.
+    Stage 2 of the two-stage pipeline. Takes all per-meeting extractions
+    and optional Slack SourceItems, builds the synthesis prompt, calls
+    Claude, parses the response, and validates for evidence-only language.
 
     Args:
         extractions: List of MeetingExtraction from Stage 1.
         target_date: The date being synthesized.
         config: Pipeline configuration dict.
+        slack_items: Optional list of SourceItem from Slack ingestion.
 
     Returns:
         Dict with keys: substance (list[str]), decisions (list[str]),
@@ -206,13 +254,17 @@ def synthesize_daily(
 
     # Filter out low-signal extractions
     substantive = [e for e in extractions if not e.low_signal]
-    if not substantive:
-        logger.info("No substantive extractions for %s, returning empty synthesis", target_date)
+    has_slack = bool(slack_items)
+
+    if not substantive and not has_slack:
+        logger.info("No substantive extractions or Slack items for %s, returning empty synthesis", target_date)
         return empty_result
 
     # Build prompt
     extractions_text = _format_extractions_for_prompt(substantive)
+    slack_items_text = _format_slack_items_for_prompt(slack_items or [])
     transcript_count = len(substantive)
+    slack_source_count = len(slack_items) if slack_items else 0
 
     # Conditional executive summary for busy days (5+ meetings with transcripts)
     exec_instruction = ""
@@ -234,7 +286,9 @@ def synthesize_daily(
     prompt = SYNTHESIS_PROMPT.format(
         date=target_date.isoformat(),
         transcript_count=transcript_count,
+        slack_source_count=slack_source_count,
         extractions_text=extractions_text,
+        slack_items_text=slack_items_text,
         executive_summary_instruction=exec_instruction,
         priority_context=priority_context,
     )
