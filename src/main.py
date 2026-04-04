@@ -131,6 +131,7 @@ def run_daily(args: argparse.Namespace) -> None:
     calendar_service = None
     gmail_service = None
     user_email = None
+    creds = None
     try:
         from google.auth.transport.requests import Request
 
@@ -180,7 +181,7 @@ def run_daily(args: argparse.Namespace) -> None:
                     save_slack_state,
                 )
 
-                slack_items = fetch_slack_items(config)
+                slack_items = fetch_slack_items(config, target_date=current)
                 logger.info("Fetched %d Slack items", len(slack_items))
 
                 # --- Periodic new-channel auto-suggest ---
@@ -240,6 +241,16 @@ def run_daily(args: argparse.Namespace) -> None:
                 "HubSpot ingestion failed: %s. Continuing without HubSpot data.", e
             )
 
+        # Initialize synthesis_result before the calendar branch so it's always
+        # defined for commitment extraction, even in the no-creds path.
+        synthesis_result: dict = {
+            "substance": [],
+            "decisions": [],
+            "commitments": [],
+            "executive_summary": None,
+        }
+        extractions: list = []
+
         try:
             if calendar_service is not None:
                 # Full pipeline: fetch real calendar data
@@ -284,7 +295,6 @@ def run_daily(args: argparse.Namespace) -> None:
                 )
 
                 # --- Stage 1: Per-meeting extraction ---
-                extractions: list = []
                 try:
                     from src.synthesis.extractor import extract_all_meetings
 
@@ -296,12 +306,6 @@ def run_daily(args: argparse.Namespace) -> None:
                     logger.warning("Extraction failed: %s. Continuing without synthesis.", e)
 
                 # --- Stage 2: Daily synthesis ---
-                synthesis_result: dict = {
-                    "substance": [],
-                    "decisions": [],
-                    "commitments": [],
-                    "executive_summary": None,
-                }
                 try:
                     from src.synthesis.synthesizer import synthesize_daily
 
@@ -348,17 +352,39 @@ def run_daily(args: argparse.Namespace) -> None:
                     ),
                 )
             else:
-                # No credentials: produce empty summary
-                extractions = []
+                # No Google credentials: still synthesize Slack/HubSpot/Docs data if available
+                if slack_items or docs_items or hubspot_items:
+                    try:
+                        from src.synthesis.synthesizer import synthesize_daily
+
+                        synthesis_result = synthesize_daily(
+                            [], current, config,
+                            slack_items=slack_items, docs_items=docs_items,
+                            hubspot_items=hubspot_items,
+                        )
+                        logger.info("Daily synthesis complete (no-creds path)")
+                    except Exception as e:
+                        logger.warning("Synthesis failed (no-creds path): %s", e)
+
                 synthesis = DailySynthesis(
                     date=current,
                     generated_at=datetime.now(timezone.utc),
                     meeting_count=0,
                     total_meeting_hours=0.0,
                     transcript_count=0,
-                    substance=Section(title="Substance"),
-                    decisions=Section(title="Decisions"),
-                    commitments=Section(title="Commitments"),
+                    executive_summary=synthesis_result.get("executive_summary"),
+                    substance=Section(
+                        title="Substance",
+                        items=synthesis_result.get("substance", []),
+                    ),
+                    decisions=Section(
+                        title="Decisions",
+                        items=synthesis_result.get("decisions", []),
+                    ),
+                    commitments=Section(
+                        title="Commitments",
+                        items=synthesis_result.get("commitments", []),
+                    ),
                 )
 
             # --- Structured commitment extraction (second Claude call) ---

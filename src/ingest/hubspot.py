@@ -111,6 +111,9 @@ def _build_owner_map(client: HubSpot) -> dict[str, str]:
 def _resolve_owner_id(client: HubSpot, config: dict, owner_map: dict[str, str]) -> str | None:
     """Determine the owner ID filter based on ownership scope config.
 
+    Checks for explicit ``hubspot.owner_id`` first. If set, uses it directly
+    without querying the API. Otherwise falls back to ``ownership_scope`` logic.
+
     Args:
         client: HubSpot client instance.
         config: Pipeline config dict.
@@ -119,12 +122,22 @@ def _resolve_owner_id(client: HubSpot, config: dict, owner_map: dict[str, str]) 
     Returns:
         Owner ID string for filtering, or None for no filter (all scope).
     """
+    # Prefer explicit owner_id from config (most reliable)
+    explicit_owner_id = config.get("hubspot", {}).get("owner_id")
+    if explicit_owner_id is not None:
+        logger.info("Using explicit hubspot.owner_id from config: %s", explicit_owner_id)
+        return str(explicit_owner_id)
+
     scope = config.get("hubspot", {}).get("ownership_scope", "mine")
 
     if scope == "all":
         return None
 
     if scope == "mine":
+        logger.warning(
+            "hubspot.owner_id not set -- falling back to first owner in list. "
+            "Set hubspot.owner_id in config.yaml for reliable filtering."
+        )
         # Try to find the authenticated user's owner ID
         try:
             owners = client.crm.owners.owners_api.get_page(limit=500)

@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from slack_sdk.errors import SlackApiError
@@ -395,21 +395,33 @@ def _resolve_dm_partner(
         return channel_id
 
 
-def fetch_slack_items(config: dict) -> list[SourceItem]:
+def fetch_slack_items(
+    config: dict, target_date: date | None = None
+) -> list[SourceItem]:
     """Main orchestrator: fetch all Slack items and return as SourceItems.
 
     Fetches messages from configured channels and DMs, applies filtering,
     expands active threads, and converts to SourceItem objects.
 
+    When target_date is provided, fetches messages from that date's boundaries
+    in the configured timezone (for backfill). Otherwise defaults to today.
+
     Args:
         config: Full config dict with 'slack' section.
+        target_date: Date to fetch messages for. Defaults to today.
 
     Returns:
         List of SourceItems sorted by timestamp.
     """
+    from datetime import date as date_type
+    from zoneinfo import ZoneInfo
+
     slack_config = config.get("slack", {})
     if not slack_config.get("enabled", False):
         return []
+
+    if target_date is None:
+        target_date = date_type.today()
 
     client = build_slack_client()
     config_dir = Path("config")
@@ -418,22 +430,24 @@ def fetch_slack_items(config: dict) -> list[SourceItem]:
     max_per_channel = slack_config.get("max_messages_per_channel", 100)
 
     all_items: list[SourceItem] = []
-    now_ts = str(datetime.now(timezone.utc).timestamp())
+
+    # Compute time window from target_date boundaries in configured timezone
+    tz_name = config.get("pipeline", {}).get("timezone", "America/New_York")
+    tz = ZoneInfo(tz_name)
+    day_start = datetime(target_date.year, target_date.month, target_date.day, tzinfo=tz)
+    day_end = day_start + timedelta(days=1)
+    date_oldest_ts = str(day_start.timestamp())
+    date_latest_ts = str(day_end.timestamp())
 
     # --- Channels ---
     for channel_id in slack_config.get("channels", []):
         try:
-            # Determine time window
-            channel_state = state.get("channels", {}).get(channel_id, {})
-            oldest = channel_state.get("last_ts")
-            if not oldest:
-                # First run: 24h lookback
-                oldest = str(
-                    (datetime.now(timezone.utc) - timedelta(hours=24)).timestamp()
-                )
+            # Use target_date boundaries for the time window
+            oldest = date_oldest_ts
+            latest = date_latest_ts
 
             channel_name = _resolve_channel_name(client, channel_id)
-            messages = fetch_channel_messages(client, channel_id, oldest, now_ts)
+            messages = fetch_channel_messages(client, channel_id, oldest, latest)
 
             if not messages:
                 logger.info("No new messages in #%s", channel_name)
@@ -508,14 +522,11 @@ def fetch_slack_items(config: dict) -> list[SourceItem]:
     # --- DMs ---
     for dm_id in slack_config.get("dms", []):
         try:
-            dm_state = state.get("dms", {}).get(dm_id, {})
-            oldest = dm_state.get("last_ts")
-            if not oldest:
-                oldest = str(
-                    (datetime.now(timezone.utc) - timedelta(hours=24)).timestamp()
-                )
+            # Use target_date boundaries for the time window
+            oldest = date_oldest_ts
+            latest = date_latest_ts
 
-            messages = fetch_channel_messages(client, dm_id, oldest, now_ts)
+            messages = fetch_channel_messages(client, dm_id, oldest, latest)
 
             if not messages:
                 continue
