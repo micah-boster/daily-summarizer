@@ -67,6 +67,19 @@ def _format_month_name(month_num) -> str:
     return calendar.month_name[month_num]
 
 
+def _split_emdash(text: str, expected_cols: int = 3) -> list[str]:
+    """Split a synthesis bullet on em-dash separators into columns.
+
+    Returns a list padded/truncated to expected_cols length.
+    e.g. "Build reporting table — Micah — Account Review" -> ["Build reporting table", "Micah", "Account Review"]
+    """
+    parts = [p.strip() for p in text.split("—")]
+    # Pad with empty strings if fewer parts than expected
+    while len(parts) < expected_cols:
+        parts.append("")
+    return parts[:expected_cols]
+
+
 def create_jinja_env(template_dir: Path) -> Environment:
     """Create Jinja2 environment with custom filters for summary rendering."""
     env = Environment(
@@ -80,6 +93,7 @@ def create_jinja_env(template_dir: Path) -> Environment:
     env.filters["format_duration"] = _format_duration
     env.filters["format_date"] = _format_date
     env.filters["format_month_name"] = _format_month_name
+    env.filters["split_emdash"] = _split_emdash
     return env
 
 

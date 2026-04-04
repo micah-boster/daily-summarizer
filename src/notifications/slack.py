@@ -140,25 +140,58 @@ def _build_blocks(summary_content: str, target_date: date) -> list[dict]:
             "elements": [{"type": "mrkdwn", "text": "\n".join(stats_parts)}],
         })
 
-    # Decisions
+    # Decisions — structured with fields
     decisions = _extract_bullet_items(summary_content, "Decisions")
     if decisions:
         blocks.append({"type": "divider"})
-        bullet_text = "\n".join(f"• {d}" for d in decisions[:8])
         blocks.append({
             "type": "section",
-            "text": {"type": "mrkdwn", "text": f"*:white_check_mark: Decisions*\n{bullet_text}"},
+            "text": {"type": "mrkdwn", "text": "*:white_check_mark: Decisions*"},
         })
+        for item in decisions[:8]:
+            parts = [p.strip() for p in item.split("—")]
+            what = parts[0] if parts else item
+            who = parts[1] if len(parts) > 1 else ""
+            source = parts[2] if len(parts) > 2 else ""
+            fields = [{"type": "mrkdwn", "text": f"*{what}*"}]
+            meta = []
+            if who:
+                meta.append(who)
+            if source:
+                meta.append(f"_{source}_")
+            if meta:
+                fields.append({"type": "mrkdwn", "text": " · ".join(meta)})
+            blocks.append({"type": "section", "fields": fields})
 
-    # Commitments / Action Items
+    # Commitments / Action Items — structured with fields
     commitments = _extract_bullet_items(summary_content, "Commitments")
     if commitments:
         blocks.append({"type": "divider"})
-        bullet_text = "\n".join(f"• {d}" for d in commitments[:8])
         blocks.append({
             "type": "section",
-            "text": {"type": "mrkdwn", "text": f"*:point_right: Action Items*\n{bullet_text}"},
+            "text": {"type": "mrkdwn", "text": "*:point_right: Action Items*"},
         })
+        for item in commitments[:8]:
+            parts = [p.strip() for p in item.split("—")]
+            what = parts[0] if parts else item
+            owner = parts[1] if len(parts) > 1 else ""
+            deadline = parts[2] if len(parts) > 2 else ""
+            source = parts[3] if len(parts) > 3 else ""
+            left = f"*{what}*"
+            right_parts = []
+            if owner:
+                right_parts.append(f"👤 {owner}")
+            if deadline:
+                right_parts.append(f"📅 {deadline}")
+            if source:
+                right_parts.append(f"_{source}_")
+            blocks.append({
+                "type": "section",
+                "fields": [
+                    {"type": "mrkdwn", "text": left},
+                    {"type": "mrkdwn", "text": "\n".join(right_parts) if right_parts else " "},
+                ],
+            })
 
     # Open Questions
     questions = _extract_bullet_items(summary_content, "Open Questions")

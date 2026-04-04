@@ -21,16 +21,22 @@
 {% if decisions.items %}
 ## Decisions
 
+| Decision | Who | Meeting |
+|----------|-----|---------|
 {% for item in decisions.items %}
-- {{ item }}
+{% set cols = item|split_emdash(3) %}
+| {{ cols[0] }} | {{ cols[1] }} | {{ cols[2] }} |
 {% endfor %}
 
 {% endif %}
 {% if commitments.items %}
 ## Commitments
 
+| Action Item | Owner | Deadline | Meeting |
+|-------------|-------|----------|---------|
 {% for item in commitments.items %}
-- {{ item }}
+{% set cols = item|split_emdash(4) %}
+| {{ cols[0] }} | {{ cols[1] }} | {{ cols[2] }} | {{ cols[3] }} |
 {% endfor %}
 
 {% endif %}
@@ -79,10 +85,11 @@
 ## Calendar
 
 {% if timed_events %}
+| Time | Meeting | With |
+|------|---------|------|
 {% for event in timed_events %}
 {% if event.event_type != "workingLocation" %}
-- **{{ event.title }}** {{ event.start_time|format_time }}–{{ event.end_time|format_time }} ({{ event.duration_minutes|format_duration }}){% if event.attendees|format_attendees %} · {{ event.attendees|format_attendees }}{% endif %}{% if event.is_recurring %} ↻{% endif %}
-
+| {{ event.start_time|format_time }}–{{ event.end_time|format_time }} | {{ event.title }}{% if event.is_recurring %} ↻{% endif %} | {{ event.attendees|format_attendees }} |
 {% endif %}
 {% endfor %}
 {% else %}
