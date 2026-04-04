@@ -254,5 +254,5 @@ Phases 11-12 are sequential gap closure phases.
 | 8. HubSpot Ingest | v1.5 | 2/2 | Complete | 2026-04-04 |
 | 9. Google Docs Ingest | v1.5 | 2/2 | Complete | 2026-04-04 |
 | 10. Cross-Source Synthesis + Commitments | v1.5 | 2/2 | Complete | 2026-04-04 |
-| 11. Pipeline Hardening | v1.5 | 0/2 | Not started | - |
+| 11. Pipeline Hardening | 1/2 | In Progress|  | - |
 | 12. Reliability & Test Coverage | v1.5 | 0/0 | Not started | - |
