@@ -177,10 +177,11 @@ Plans:
   1. Documents the user edited on the target date appear in the daily summary with title and content extract
   2. Comments and suggestions on docs the user owns or is mentioned in appear in the summary
   3. Every Docs-sourced item is attributed with "(per Google Doc [title])"
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 09-01: TBD
+- [ ] 09-01-PLAN.md -- Google Docs ingest module: edit detection, content extraction, comment fetching, SourceItem conversion
+- [ ] 09-02-PLAN.md -- Synthesis pipeline integration: wire docs into synthesizer, pipeline, writer, and daily template
 
 ### Phase 10: Cross-Source Synthesis + Commitments
 **Goal**: Multi-source output is deduplicated and commitments are extracted with structured deadlines across all sources
