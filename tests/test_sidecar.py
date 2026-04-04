@@ -10,6 +10,7 @@ import pytest
 from src.models.events import Attendee, DailySynthesis, NormalizedEvent, Section
 from src.sidecar import (
     DailySidecar,
+    SidecarCommitment,
     SidecarDecision,
     SidecarTask,
     build_daily_sidecar,
@@ -217,3 +218,101 @@ class TestBuildDailySidecar:
         sidecar = build_daily_sidecar(sample_synthesis, [extraction])
 
         assert sidecar.tasks[0].owner is None
+
+
+class TestSidecarCommitment:
+    """Tests for SidecarCommitment model and commitments integration."""
+
+    def test_sidecar_commitment_model(self):
+        c = SidecarCommitment(
+            who="John",
+            what="Send deck to partners",
+            by_when="2026-04-10",
+            source=["standup", "Slack #proj-alpha"],
+        )
+        assert c.who == "John"
+        assert c.what == "Send deck to partners"
+        assert c.by_when == "2026-04-10"
+        assert c.source == ["standup", "Slack #proj-alpha"]
+
+    def test_sidecar_commitment_json_serialization(self):
+        c = SidecarCommitment(
+            who="Sarah",
+            what="Schedule vendor call",
+            by_when="unspecified",
+            source=["standup"],
+        )
+        data = json.loads(c.model_dump_json())
+        assert data["who"] == "Sarah"
+        assert data["source"] == ["standup"]
+
+    def test_daily_sidecar_backward_compat_no_commitments(self):
+        """Existing JSON without commitments key still deserializes."""
+        old_json = json.dumps({
+            "date": "2026-04-03",
+            "generated_at": "2026-04-03T08:00:00+00:00",
+            "meeting_count": 2,
+            "transcript_count": 1,
+            "tasks": [],
+            "decisions": [],
+            "source_meetings": [],
+        })
+        ds = DailySidecar.model_validate_json(old_json)
+        assert ds.commitments == []
+        assert ds.date == "2026-04-03"
+
+    def test_build_sidecar_with_extracted_commitments(self, sample_synthesis, sample_extractions):
+        """Extracted commitments are mapped to SidecarCommitment in sidecar."""
+        # Create mock extracted commitments with the right attributes
+        class MockCommitment:
+            def __init__(self, who, what, by_when, source):
+                self.who = who
+                self.what = what
+                self.by_when = by_when
+                self.source = source
+
+        commitments = [
+            MockCommitment("Sarah", "Send timeline", "2026-04-10", ["standup"]),
+            MockCommitment("Bob", "Review proposal", "unspecified", ["Slack #proj-alpha"]),
+        ]
+
+        sidecar = build_daily_sidecar(sample_synthesis, sample_extractions, extracted_commitments=commitments)
+        assert len(sidecar.commitments) == 2
+        assert sidecar.commitments[0].who == "Sarah"
+        assert sidecar.commitments[0].what == "Send timeline"
+        assert sidecar.commitments[0].by_when == "2026-04-10"
+        assert sidecar.commitments[0].source == ["standup"]
+        assert sidecar.commitments[1].who == "Bob"
+
+    def test_build_sidecar_without_extracted_commitments(self, sample_synthesis, sample_extractions):
+        """None extracted_commitments returns empty commitments list."""
+        sidecar = build_daily_sidecar(sample_synthesis, sample_extractions, extracted_commitments=None)
+        assert sidecar.commitments == []
+
+    def test_daily_sidecar_with_commitments_json_roundtrip(self):
+        """Full JSON round-trip with commitments populated."""
+        sidecar = DailySidecar(
+            date="2026-04-03",
+            generated_at="2026-04-03T08:00:00+00:00",
+            meeting_count=2,
+            transcript_count=1,
+            commitments=[
+                SidecarCommitment(
+                    who="John",
+                    what="Send deck",
+                    by_when="2026-04-10",
+                    source=["standup"],
+                ),
+            ],
+        )
+        json_str = sidecar.model_dump_json(indent=2)
+        parsed = json.loads(json_str)
+        assert "commitments" in parsed
+        assert len(parsed["commitments"]) == 1
+        assert parsed["commitments"][0]["who"] == "John"
+        assert parsed["commitments"][0]["source"] == ["standup"]
+
+        # Deserialize back
+        ds = DailySidecar.model_validate_json(json_str)
+        assert len(ds.commitments) == 1
+        assert ds.commitments[0].who == "John"
