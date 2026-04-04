@@ -215,7 +215,11 @@ Plans:
   7. Slack backfill for past dates uses the target date, not stale cursors
   8. HubSpot owner resolution uses configured owner ID, not first-result assumption
   9. REQUIREMENTS.md traceability and SUMMARY frontmatter are accurate
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 11-01-PLAN.md -- Bug fixes (no-creds commitment, Slack backfill, HubSpot owner), dead code removal, dependency pinning
+- [ ] 11-02-PLAN.md -- Pipeline decomposition, shared Anthropic client, module-level imports, bookkeeping
 
 ### Phase 12: Reliability & Test Coverage
 **Goal**: Pipeline gracefully handles transient API failures and has test coverage for orchestration logic and edge cases
@@ -250,5 +254,5 @@ Phases 11-12 are sequential gap closure phases.
 | 8. HubSpot Ingest | v1.5 | 2/2 | Complete | 2026-04-04 |
 | 9. Google Docs Ingest | v1.5 | 2/2 | Complete | 2026-04-04 |
 | 10. Cross-Source Synthesis + Commitments | v1.5 | 2/2 | Complete | 2026-04-04 |
-| 11. Pipeline Hardening | v1.5 | 0/0 | Not started | - |
+| 11. Pipeline Hardening | v1.5 | 0/2 | Not started | - |
 | 12. Reliability & Test Coverage | v1.5 | 0/0 | Not started | - |
