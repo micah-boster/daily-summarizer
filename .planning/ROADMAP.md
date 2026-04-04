@@ -192,10 +192,11 @@ Plans:
   1. When the same topic appears in both a meeting transcript and a Slack thread, the daily summary consolidates it into one item with both sources attributed
   2. Commitments with deadlines are extracted from all sources (meetings, Slack, HubSpot) and appear as structured who/what/by-when entries in both the markdown output and JSON sidecar
   3. The JSON sidecar contains a commitments array with machine-readable who, what, by_when, and source fields
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 10-01: TBD
+- [ ] 10-01-PLAN.md -- Enhanced synthesis prompt with cross-source dedup rules, Commitments table reordering
+- [ ] 10-02-PLAN.md -- Structured commitment extraction via Claude structured outputs, sidecar integration
 
 ## Progress
 
