@@ -73,7 +73,7 @@
 
 ### Notion Ingestion (NOTION)
 
-- [ ] **NOTION-01**: Ingest Notion page updates and database changes for the target date, with content extraction and SourceItem conversion
+- [x] **NOTION-01**: Ingest Notion page updates and database changes for the target date, with content extraction and SourceItem conversion
 
 ### Performance (PERF)
 
@@ -129,7 +129,7 @@
 | SYNTH-08 | Phase 10 | Complete |
 | CONFIG-01 | Phase 13 | Complete |
 | STRUCT-01 | Phase 14 | Pending |
-| NOTION-01 | Phase 15 | Pending |
+| NOTION-01 | Phase 15 | Complete |
 | PERF-03 | Phase 16 | Pending |
 | OPS-01 | Phase 16 | Pending |
 | DEDUP-01 | Phase 16 | Pending |
