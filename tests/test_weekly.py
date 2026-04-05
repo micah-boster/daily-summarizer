@@ -8,10 +8,11 @@ from pathlib import Path
 import pytest
 
 from src.models.rollups import ThreadEntry, WeeklySynthesis, WeeklyThread
+from src.synthesis.models import WeeklySynthesisOutput, WeeklyThreadOutput, WeeklyThreadEntryOutput, StillOpenItemOutput
 from src.synthesis.weekly import (
+    _convert_weekly_output,
     _extract_synthesis_sections,
     _get_week_date_range,
-    _parse_weekly_response,
     read_daily_summaries,
 )
 
@@ -178,7 +179,78 @@ class TestReadDailySummaries:
         assert len(result) == 1
 
 
-class TestParseWeeklyResponse:
+class TestWeeklyStructuredOutput:
+    """Tests for structured output models and converter."""
+
+    def test_weekly_output_schema_is_valid(self):
+        schema = WeeklySynthesisOutput.model_json_schema()
+        assert "properties" in schema
+        assert "threads" in schema["properties"]
+
+    def test_convert_weekly_output_to_domain(self):
+        output = WeeklySynthesisOutput(
+            reasoning="test reasoning",
+            threads=[
+                WeeklyThreadOutput(
+                    title="Q2 Planning",
+                    significance="high",
+                    status="open",
+                    tags=["decision"],
+                    progression="raised -> decided",
+                    entries=[
+                        WeeklyThreadEntryOutput(
+                            day_label="Monday, March 30",
+                            category="decision",
+                            content="Discussed Q2 priorities",
+                        )
+                    ],
+                )
+            ],
+            single_day_items=[
+                WeeklyThreadEntryOutput(
+                    day_label="Wednesday, April 1",
+                    category="substance",
+                    content="Budget review completed",
+                )
+            ],
+            still_open=[
+                StillOpenItemOutput(
+                    content="Budget proposal pending",
+                    owner="Mike",
+                    since="2026-03-30",
+                )
+            ],
+        )
+        summaries = [
+            {"date": date(2026, 3, 30)},
+            {"date": date(2026, 4, 1)},
+        ]
+        threads, single_day_items, still_open = _convert_weekly_output(output, summaries)
+
+        assert len(threads) == 1
+        assert threads[0].title == "Q2 Planning"
+        assert threads[0].significance == "high"
+        assert len(threads[0].entries) == 1
+        assert threads[0].entries[0].date == date(2026, 3, 30)
+        assert threads[0].entries[0].category == "decision"
+
+        assert len(single_day_items) == 1
+        assert single_day_items[0].date == date(2026, 4, 1)
+
+        assert len(still_open) == 1
+        assert "content" in still_open[0]
+        assert still_open[0]["owner"] == "Mike"
+
+    def test_convert_weekly_output_empty(self):
+        output = WeeklySynthesisOutput()
+        threads, single_day_items, still_open = _convert_weekly_output(output, [])
+        assert threads == []
+        assert single_day_items == []
+        assert still_open == []
+
+
+@pytest.mark.skip(reason="Legacy regex parser - replaced by structured output")
+class _LegacyTestParseWeeklyResponse:
     """Tests for parsing Claude's thread detection response."""
 
     def test_parses_threads_and_single_items(self):

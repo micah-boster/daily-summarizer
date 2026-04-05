@@ -87,3 +87,85 @@ class DailySynthesisOutput(BaseModel):
     substance: list[SynthesisItem] = Field(default_factory=list)
     decisions: list[SynthesisItem] = Field(default_factory=list)
     commitments: list[CommitmentRow] = Field(default_factory=list)
+
+
+# --- Weekly structured output models ---
+
+
+class WeeklyThreadEntryOutput(BaseModel):
+    """A single day's contribution to a thread in structured output format."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    day_label: str  # e.g. "Monday, March 30"
+    category: str  # "decision", "commitment", "substance"
+    content: str
+
+
+class StillOpenItemOutput(BaseModel):
+    """An unresolved item in structured output format."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    content: str
+    owner: str | None = None
+    since: str | None = None
+
+
+class WeeklyThreadOutput(BaseModel):
+    """A thread traced across multiple days in structured output format."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    significance: str  # "high" or "medium"
+    status: str  # "resolved", "open", "escalated"
+    tags: list[str] = Field(default_factory=list)
+    progression: str
+    entries: list[WeeklyThreadEntryOutput] = Field(default_factory=list)
+
+
+class WeeklySynthesisOutput(BaseModel):
+    """Structured output model for Claude weekly thread detection API response.
+
+    Used with json_schema constrained decoding. The reasoning field
+    is a scratchpad for Claude's thinking and is discarded downstream.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    reasoning: str = ""  # Scratchpad for Claude's thinking (discarded downstream)
+    threads: list[WeeklyThreadOutput] = Field(default_factory=list)
+    single_day_items: list[WeeklyThreadEntryOutput] = Field(default_factory=list)
+    still_open: list[StillOpenItemOutput] = Field(default_factory=list)
+
+
+# --- Monthly structured output models ---
+
+
+class ThematicArcOutput(BaseModel):
+    """A thematic arc in structured output format."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    trajectory: str  # "growing", "declining", "stable", "emerging", "resolved"
+    weeks_active: list[int] = Field(default_factory=list)
+    description: str
+    key_moments: list[str] = Field(default_factory=list)
+
+
+class MonthlySynthesisOutput(BaseModel):
+    """Structured output model for Claude monthly narrative API response.
+
+    Used with json_schema constrained decoding. The reasoning field
+    is a scratchpad for Claude's thinking and is discarded downstream.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    reasoning: str = ""  # Scratchpad for Claude's thinking (discarded downstream)
+    thematic_arcs: list[ThematicArcOutput] = Field(default_factory=list)
+    strategic_shifts: list[str] = Field(default_factory=list)
+    emerging_risks: list[str] = Field(default_factory=list)
+    still_open: list[StillOpenItemOutput] = Field(default_factory=list)

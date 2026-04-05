@@ -8,10 +8,11 @@ from pathlib import Path
 import pytest
 
 from src.models.rollups import MonthlyMetrics, MonthlySynthesis, ThematicArc
+from src.synthesis.models import MonthlySynthesisOutput, ThematicArcOutput, StillOpenItemOutput
 from src.synthesis.monthly import (
     _aggregate_monthly_metrics,
+    _convert_monthly_output,
     _get_weeks_in_month,
-    _parse_monthly_response,
     read_weekly_summaries,
 )
 
@@ -89,7 +90,62 @@ class TestAggregateMonthlyMetrics:
         assert metrics.total_hours == 0.0
 
 
-class TestParseMonthlyResponse:
+class TestMonthlyStructuredOutput:
+    """Tests for structured output models and converter."""
+
+    def test_monthly_output_schema_is_valid(self):
+        schema = MonthlySynthesisOutput.model_json_schema()
+        assert "properties" in schema
+        assert "thematic_arcs" in schema["properties"]
+
+    def test_convert_monthly_output_to_domain(self):
+        output = MonthlySynthesisOutput(
+            reasoning="test reasoning",
+            thematic_arcs=[
+                ThematicArcOutput(
+                    title="Hiring Push",
+                    trajectory="growing",
+                    weeks_active=[14, 15],
+                    description="Team expanded rapidly in Q2.",
+                    key_moments=["Three roles approved"],
+                )
+            ],
+            strategic_shifts=["Focus shifted to hiring"],
+            emerging_risks=["Competing offers from other firms"],
+            still_open=[
+                StillOpenItemOutput(
+                    content="Complete remaining hires",
+                    owner="HR",
+                    since="2026-04-01",
+                )
+            ],
+        )
+        arcs, shifts, risks, still_open = _convert_monthly_output(output)
+
+        assert len(arcs) == 1
+        assert arcs[0].title == "Hiring Push"
+        assert arcs[0].trajectory == "growing"
+        assert arcs[0].weeks_active == [14, 15]
+        assert arcs[0].description == "Team expanded rapidly in Q2."
+        assert arcs[0].key_moments == ["Three roles approved"]
+
+        assert shifts == ["Focus shifted to hiring"]
+        assert risks == ["Competing offers from other firms"]
+
+        assert len(still_open) == 1
+        assert still_open[0]["content"] == "Complete remaining hires"
+
+    def test_convert_monthly_output_empty(self):
+        output = MonthlySynthesisOutput()
+        arcs, shifts, risks, still_open = _convert_monthly_output(output)
+        assert arcs == []
+        assert shifts == []
+        assert risks == []
+        assert still_open == []
+
+
+@pytest.mark.skip(reason="Legacy regex parser - replaced by structured output")
+class _LegacyTestParseMonthlyResponse:
     """Tests for parsing Claude's monthly narrative response."""
 
     def test_parses_arcs_and_shifts(self):
