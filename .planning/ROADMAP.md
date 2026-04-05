@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 Daily Intelligence Pipeline** - Phases 0-5 (shipped 2026-04-03)
-- 🚧 **v1.5 Expanded Ingest** - Phases 6-12 (in progress)
+- ✅ **v1.5 Expanded Ingest** - Phases 6-12 (shipped 2026-04-05)
 - 📋 **v1.5.1 Notion + Performance + Reliability** - Phases 13-17 (planned)
 
 ## Phases
@@ -115,7 +115,7 @@ Plans:
 </details>
 
 <details>
-<summary>v1.5 Expanded Ingest (Phases 6-12) - IN PROGRESS</summary>
+<summary>v1.5 Expanded Ingest (Phases 6-12) - SHIPPED 2026-04-05</summary>
 
 **Milestone Goal:** Broaden the data surface beyond calendar and transcripts so synthesis sees the full picture of work activity.
 
@@ -125,7 +125,7 @@ Plans:
 - [x] **Phase 9: Google Docs Ingest** - Document edit detection and content extraction (completed 2026-04-04)
 - [x] **Phase 10: Cross-Source Synthesis + Commitments** - Deduplication tuning and structured commitment extraction across all sources (completed 2026-04-04)
 - [x] **Phase 11: Pipeline Hardening** - Bug fixes, run_daily() decomposition, commitment model consolidation, dependency pinning (completed 2026-04-04)
-- [ ] **Phase 12: Reliability & Test Coverage** - API retry/backoff, token counting, pre-existing test fixes, pipeline orchestrator tests
+- [x] **Phase 12: Reliability & Test Coverage** - API retry/backoff, token counting, pre-existing test fixes, pipeline orchestrator tests (completed 2026-04-05)
 
 ### Phase 6: Data Model Foundation
 **Goal**: All new source data has a well-defined structure that ingest modules and synthesis can depend on
@@ -232,7 +232,12 @@ Plans:
   4. `main.py` pipeline orchestration has test coverage (at least happy path + single-source-failure path)
   5. Claude response parsers have tests for malformed/empty/unexpected responses
   6. All tests pass: `uv run pytest` exits 0
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [x] 12-01-PLAN.md -- Shared retry decorator with tenacity, API call site wrapping, token budget estimation and truncation
+- [x] 12-02-PLAN.md -- Fix broken test imports and assertions, add parser edge case tests
+- [x] 12-03-PLAN.md -- Pipeline orchestration tests and GitHub Actions CI workflow
 
 </details>
 
@@ -324,7 +329,7 @@ Each phase builds on the stability of the prior phase. Phase 17 (async) goes las
 | 9. Google Docs Ingest | v1.5 | 2/2 | Complete | 2026-04-04 |
 | 10. Cross-Source Synthesis + Commitments | v1.5 | 2/2 | Complete | 2026-04-04 |
 | 11. Pipeline Hardening | v1.5 | 2/2 | Complete | 2026-04-04 |
-| 12. Reliability & Test Coverage | v1.5 | 0/0 | Not started | - |
+| 12. Reliability & Test Coverage | v1.5 | 3/3 | Complete | 2026-04-05 |
 | 13. Typed Config Foundation | v1.5.1 | 0/0 | Not started | - |
 | 14. Structured Output Migration | v1.5.1 | 0/0 | Not started | - |
 | 15. Notion Ingestion | v1.5.1 | 0/0 | Not started | - |
