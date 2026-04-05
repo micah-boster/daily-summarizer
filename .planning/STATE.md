@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 Phase: 18-structured-output-completion (gap closure)
 Plan: 2/2 complete
 Status: Phase 18 complete
-Last activity: 2026-04-05 — Completed 18-02 beta header cleanup
+Last activity: 2026-04-05 — Completed 18-01 weekly/monthly structured output migration
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1 (v2.0 gap closure, Phase 18 Plan 02)
+- Total plans completed: 2 (v2.0 gap closure, Phase 18 Plans 01+02)
 - Prior milestones: 14 (v1.0) + 7 (v1.5) + 12 (v1.5.1) = 33 plans
 
 ## Accumulated Context
@@ -40,6 +40,7 @@ Last activity: 2026-04-05 — Completed 18-02 beta header cleanup
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [18-01]: Migrated weekly.py and monthly.py to json_schema structured outputs, eliminating last regex parsers
 - [18-02]: Removed fallback tests since beta header fallback was already broken (400 errors) and code path deleted
 - [v2.0 scoping]: Entity registry in SQLite (first non-flat-file storage)
 - [v2.0 scoping]: People/partners first, initiatives second
@@ -61,5 +62,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-04-05
-Stopped at: Completed 18-02-PLAN.md (beta header cleanup)
+Stopped at: Completed 18-01-PLAN.md (weekly/monthly structured output migration)
 Resume file: None
