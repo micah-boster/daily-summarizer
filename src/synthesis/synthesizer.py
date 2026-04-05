@@ -110,6 +110,75 @@ CRITICAL RULES:
 """
 
 
+def _estimate_and_truncate(
+    extractions_text: str,
+    slack_items_text: str,
+    docs_items_text: str,
+    hubspot_items_text: str,
+    base_prompt_chars: int = 3000,
+) -> tuple[str, str, str, str, list[str]]:
+    """Estimate token usage and truncate low-priority sources if over budget.
+
+    Sources are truncated in priority order (lowest first):
+    1. Google Docs (lowest priority)
+    2. HubSpot
+    3. Slack
+    4. Meeting transcripts (NEVER truncated — highest priority)
+
+    Args:
+        extractions_text: Formatted meeting extractions text.
+        slack_items_text: Formatted Slack items text.
+        docs_items_text: Formatted Google Docs items text.
+        hubspot_items_text: Formatted HubSpot items text.
+        base_prompt_chars: Estimated character count for the base prompt template.
+
+    Returns:
+        Tuple of (extractions_text, slack_text, docs_text, hubspot_text, truncated_sources).
+        truncated_sources is a list of source names that were removed.
+    """
+    total = (
+        len(extractions_text)
+        + len(slack_items_text)
+        + len(docs_items_text)
+        + len(hubspot_items_text)
+        + base_prompt_chars
+    )
+
+    if total <= EFFECTIVE_CHAR_BUDGET:
+        return extractions_text, slack_items_text, docs_items_text, hubspot_items_text, []
+
+    truncated: list[str] = []
+
+    # Truncate in priority order: Docs -> HubSpot -> Slack -> (never transcripts)
+    if total > EFFECTIVE_CHAR_BUDGET and docs_items_text:
+        total -= len(docs_items_text)
+        docs_items_text = ""
+        truncated.append("Google Docs")
+        logger.warning("Token budget: truncated Google Docs items (%d chars over budget)", total - EFFECTIVE_CHAR_BUDGET if total > EFFECTIVE_CHAR_BUDGET else 0)
+
+    if total > EFFECTIVE_CHAR_BUDGET and hubspot_items_text:
+        total -= len(hubspot_items_text)
+        hubspot_items_text = ""
+        truncated.append("HubSpot")
+        logger.warning("Token budget: truncated HubSpot items")
+
+    if total > EFFECTIVE_CHAR_BUDGET and slack_items_text:
+        total -= len(slack_items_text)
+        slack_items_text = ""
+        truncated.append("Slack")
+        logger.warning("Token budget: truncated Slack items")
+
+    if truncated:
+        logger.warning(
+            "Token budget enforcement: truncated %s (estimated %d chars / %d budget)",
+            ", ".join(truncated),
+            total + sum(len(s) for s in [docs_items_text, hubspot_items_text, slack_items_text]),
+            EFFECTIVE_CHAR_BUDGET,
+        )
+
+    return extractions_text, slack_items_text, docs_items_text, hubspot_items_text, truncated
+
+
 def _format_extractions_for_prompt(extractions: list[MeetingExtraction]) -> str:
     """Format meeting extractions into readable text for the synthesis prompt.
 
@@ -486,11 +555,17 @@ def synthesize_daily(
     # Cross-source dedup for HubSpot items
     deduped_hubspot = _dedup_hubspot_items(hubspot_items or [], substantive, slack_items)
 
-    # Build prompt
+    # Build prompt components
     extractions_text = _format_extractions_for_prompt(substantive)
     slack_items_text = _format_slack_items_for_prompt(slack_items or [])
     docs_items_text = _format_docs_items_for_prompt(docs_items or [])
     hubspot_items_text = _format_hubspot_items_for_prompt(deduped_hubspot)
+
+    # Token budget enforcement: truncate if over budget
+    extractions_text, slack_items_text, docs_items_text, hubspot_items_text, truncated_sources = (
+        _estimate_and_truncate(extractions_text, slack_items_text, docs_items_text, hubspot_items_text)
+    )
+
     transcript_count = len(substantive)
     slack_source_count = len(slack_items) if slack_items else 0
     docs_source_count = len(docs_items) if docs_items else 0
@@ -551,13 +626,18 @@ def synthesize_daily(
     # Parse response
     result = _parse_synthesis_response(response_text)
 
+    # Track truncated sources for downstream consumers
+    if truncated_sources:
+        result["truncated_sources"] = truncated_sources
+
     logger.info(
-        "Synthesis for %s: %d substance, %d decisions, %d commitments%s",
+        "Synthesis for %s: %d substance, %d decisions, %d commitments%s%s",
         target_date,
         len(result["substance"]),
         len(result["decisions"]),
         len(result["commitments"]),
         " (with executive summary)" if result["executive_summary"] else "",
+        f" [truncated: {', '.join(truncated_sources)}]" if truncated_sources else "",
     )
 
     return result
