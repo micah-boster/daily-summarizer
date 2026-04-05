@@ -77,7 +77,7 @@
 
 ### Performance (PERF)
 
-- [ ] **PERF-01**: Parallel ingest modules via asyncio (independent sources run concurrently, sequential dependencies preserved)
+- [x] **PERF-01**: Parallel ingest modules via asyncio (independent sources run concurrently, sequential dependencies preserved)
 - [x] **PERF-02**: Parallel per-meeting transcript extraction (concurrent Claude API calls with rate-limit-aware semaphore)
 - [x] **PERF-03**: Slack user batch resolution (users_list instead of N individual users_info calls)
 
@@ -133,7 +133,7 @@
 | PERF-03 | Phase 16 | Complete |
 | OPS-01 | Phase 16 | Complete |
 | DEDUP-01 | Phase 16 | Complete |
-| PERF-01 | Phase 17 | Pending |
+| PERF-01 | Phase 17 | Complete |
 | PERF-02 | Phase 17 | Complete |
 
 **Coverage:**

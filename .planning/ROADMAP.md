@@ -249,7 +249,7 @@ Plans:
 - [x] **Phase 14: Structured Output Migration** - Claude API calls migrated from markdown parsing to json_schema structured outputs (completed 2026-04-05)
 - [x] **Phase 15: Notion Ingestion** - Notion page and database ingestion completing the work source surface (completed 2026-04-05)
 - [x] **Phase 16: Reliability Quick Wins** - Slack batch resolution, cache retention policy, and algorithmic dedup pre-filter (completed 2026-04-05)
-- [ ] **Phase 17: Asyncio Parallelization** - Concurrent ingest modules and parallel per-meeting extraction via asyncio
+- [x] **Phase 17: Asyncio Parallelization** - Concurrent ingest modules and parallel per-meeting extraction via asyncio (completed 2026-04-05)
 
 ## Phase Details
 
@@ -355,4 +355,4 @@ Each phase builds on the stability of the prior phase. Phase 17 (async) goes las
 | 14. Structured Output Migration | 2/2 | Complete    | 2026-04-05 | - |
 | 15. Notion Ingestion | 3/3 | Complete    | 2026-04-05 | - |
 | 16. Reliability Quick Wins | v1.5.1 | 0/3 | Not started | - |
-| 17. Asyncio Parallelization | 1/2 | In Progress|  | - |
+| 17. Asyncio Parallelization | 2/2 | Complete   | 2026-04-05 | - |
