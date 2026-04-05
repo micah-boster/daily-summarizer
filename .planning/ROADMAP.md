@@ -4,7 +4,7 @@
 
 - ✅ **v1.0 Daily Intelligence Pipeline** - Phases 0-5 (shipped 2026-04-03)
 - ✅ **v1.5 Expanded Ingest** - Phases 6-12 (shipped 2026-04-05)
-- 📋 **v1.5.1 Notion + Performance + Reliability** - Phases 13-17 (planned)
+- 📋 **v1.5.1 Notion + Performance + Reliability** - Phases 13-18 (planned)
 
 ## Phases
 
@@ -330,11 +330,27 @@ Plans:
 - [ ] 17-01-PLAN.md -- Async extraction functions with AsyncAnthropic, semaphore rate limiting, config field
 - [ ] 17-02-PLAN.md -- Async pipeline orchestrator with parallel ingest via asyncio.gather, timing instrumentation
 
+### Phase 18: Structured Output Completion
+**Goal**: Close STRUCT-01 gap — migrate weekly.py and monthly.py to structured outputs, fix deprecated beta header causing production 400 errors, clean up dead imports
+**Depends on**: Phase 14, Phase 17
+**Requirements**: STRUCT-01
+**Gap Closure**: Closes gaps from v1.5.1 milestone audit
+**Success Criteria** (what must be TRUE):
+  1. weekly.py uses json_schema structured outputs with a Pydantic model instead of free-text markdown + regex parsing
+  2. monthly.py uses json_schema structured outputs with a Pydantic model instead of free-text markdown + regex parsing
+  3. Deprecated output-format-2025-01-24 beta header removed from all API call sites — no 400 errors on extraction
+  4. Dead import of dedup_source_items removed from pipeline.py
+  5. All existing tests pass; new tests cover structured output paths for weekly and monthly
+**Plans**: 0 plans
+
+Plans:
+(to be planned)
+
 ## Progress
 
 **Execution Order:**
-Phases 13-17 execute sequentially: 13 -> 14 -> 15 -> 16 -> 17.
-Each phase builds on the stability of the prior phase. Phase 17 (async) goes last because it changes execution semantics and benefits from all other features being stable.
+Phases 13-18 execute sequentially: 13 -> 14 -> 15 -> 16 -> 17 -> 18.
+Phase 18 is a gap closure phase from the v1.5.1 milestone audit.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -356,3 +372,4 @@ Each phase builds on the stability of the prior phase. Phase 17 (async) goes las
 | 15. Notion Ingestion | 3/3 | Complete    | 2026-04-05 | - |
 | 16. Reliability Quick Wins | v1.5.1 | 0/3 | Not started | - |
 | 17. Asyncio Parallelization | 2/2 | Complete    | 2026-04-05 | - |
+| 18. Structured Output Completion | v1.5.1 | 0/0 | Not started | - |

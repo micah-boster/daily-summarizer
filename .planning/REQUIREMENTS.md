@@ -128,7 +128,7 @@
 | SYNTH-06 | Phase 10 | Complete |
 | SYNTH-08 | Phase 10 | Complete |
 | CONFIG-01 | Phase 13 | Complete |
-| STRUCT-01 | Phase 14 | Pending |
+| STRUCT-01 | Phase 18 (gap closure) | Pending |
 | NOTION-01 | Phase 15 | Complete |
 | PERF-03 | Phase 16 | Complete |
 | OPS-01 | Phase 16 | Complete |
