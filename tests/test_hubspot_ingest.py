@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.config import make_test_config
 from src.models.sources import ContentType, SourceItem, SourceType
 
 
@@ -107,8 +108,8 @@ def _mock_owner(owner_id: str, first: str, last: str, email: str):
 
 
 def _base_config(enabled=True, scope="all"):
-    return {
-        "hubspot": {
+    return make_test_config(
+        hubspot={
             "enabled": enabled,
             "ownership_scope": scope,
             "max_deals": 50,
@@ -117,8 +118,7 @@ def _base_config(enabled=True, scope="all"):
             "max_activities_per_type": 25,
             "portal_url": "https://app.hubspot.com/contacts/12345678",
         },
-        "pipeline": {"timezone": "America/New_York"},
-    }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -352,8 +352,14 @@ class TestVolumeCaps:
 
         stage_map = {"s1": "Stage 1"}
         owner_map = {"1001": "Jane Smith"}
-        config = _base_config()
-        config["hubspot"]["max_deals"] = 3  # Cap at 3
+        config = make_test_config(
+            hubspot={
+                "enabled": True,
+                "ownership_scope": "all",
+                "max_deals": 3,
+                "portal_url": "https://app.hubspot.com/contacts/12345678",
+            },
+        )
 
         items = _fetch_deals(client, 0, 100, config, stage_map, owner_map)
         assert len(items) <= 3

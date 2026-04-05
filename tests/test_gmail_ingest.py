@@ -10,6 +10,7 @@ from src.ingest.gmail import (
     extract_body_text,
     extract_headers,
 )
+from src.config import make_test_config
 from src.ingest.transcripts import parse_gemini_transcript, strip_filler
 
 
@@ -161,7 +162,7 @@ def test_build_transcript_query():
 
 def test_parse_gemini_transcript():
     """Test full Gemini parsing pipeline with mock message."""
-    config = {"transcripts": {"preprocessing": {"strip_filler": True}}}
+    config = make_test_config(transcripts={"preprocessing": {"strip_filler": True}})
     message = _make_message(
         subject="Transcript for Weekly Team Sync",
         from_addr="calendar-notification@google.com",
@@ -184,7 +185,7 @@ def test_parse_gemini_transcript():
 
 def test_parse_gemini_transcript_empty_body():
     """Test that empty body returns None."""
-    config = {"transcripts": {"preprocessing": {"strip_filler": True}}}
+    config = make_test_config(transcripts={"preprocessing": {"strip_filler": True}})
     message = _make_message(body_text="", subject="Transcript for Empty Meeting")
 
     # Need to handle empty body - manually create message with empty data
@@ -195,7 +196,7 @@ def test_parse_gemini_transcript_empty_body():
 
 def test_parse_gemini_transcript_meeting_notes_prefix():
     """Test subject prefix 'Meeting notes: ' is stripped."""
-    config = {"transcripts": {"preprocessing": {"strip_filler": False}}}
+    config = make_test_config(transcripts={"preprocessing": {"strip_filler": False}})
     message = _make_message(
         subject="Meeting notes: Product Review",
         body_text="Reviewed product roadmap.",

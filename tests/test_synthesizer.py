@@ -3,6 +3,7 @@
 from datetime import date, datetime, timezone
 from unittest.mock import MagicMock, patch
 
+from src.config import make_test_config
 from src.models.sources import ContentType, SourceItem, SourceType
 from src.synthesis.models import ExtractionItem, MeetingExtraction
 from src.synthesis.synthesizer import (
@@ -160,7 +161,7 @@ def test_synthesize_daily_no_extractions():
     from src.synthesis.synthesizer import synthesize_daily
     from datetime import date
 
-    result = synthesize_daily([], date(2026, 4, 3), {})
+    result = synthesize_daily([], date(2026, 4, 3), make_test_config())
 
     assert result["substance"] == []
     assert result["decisions"] == []
@@ -181,7 +182,7 @@ def test_synthesize_daily_all_low_signal():
         ),
     ]
 
-    result = synthesize_daily(extractions, date(2026, 4, 3), {})
+    result = synthesize_daily(extractions, date(2026, 4, 3), make_test_config())
 
     assert result["substance"] == []
     assert result["decisions"] == []
@@ -256,7 +257,7 @@ def test_synthesize_daily_accepts_slack_items_none():
     """Verify backward compat: slack_items=None doesn't break."""
     from src.synthesis.synthesizer import synthesize_daily
 
-    result = synthesize_daily([], date(2026, 4, 3), {}, slack_items=None)
+    result = synthesize_daily([], date(2026, 4, 3), make_test_config(), slack_items=None)
     assert result["substance"] == []
 
 
@@ -274,7 +275,7 @@ def test_synthesize_daily_with_slack_only(mock_anthropic):
     mock_client.messages.create.return_value = mock_response
 
     items = [_make_slack_item()]
-    result = synthesize_daily([], date(2026, 4, 3), {}, slack_items=items)
+    result = synthesize_daily([], date(2026, 4, 3), make_test_config(), slack_items=items)
 
     assert len(result["substance"]) == 1
     assert "API redesign" in result["substance"][0]

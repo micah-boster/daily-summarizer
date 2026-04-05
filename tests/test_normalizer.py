@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from src.config import make_test_config
 from src.ingest.normalizer import (
     build_normalized_output,
     deduplicate_events,
@@ -114,10 +115,7 @@ def test_match_transcripts_gemini_priority():
         title="Product Review", hour=14, minute=3, source="gong", text="Gong version"
     )
 
-    config = {
-        "transcripts": {"matching": {"time_window_minutes": 30}},
-        "pipeline": {"timezone": "America/New_York"},
-    }
+    config = make_test_config(transcripts={"matching": {"time_window_minutes": 30}})
 
     events, unmatched = match_transcripts_to_events(
         [gemini_t, gong_t], [event], config
@@ -167,10 +165,7 @@ def test_unmatched_transcripts_surfaced():
     event = _make_event(title="Weekly Sync", start_hour=10)
     orphan = _make_transcript(title="Random Call", hour=20, minute=0)
 
-    config = {
-        "transcripts": {"matching": {"time_window_minutes": 30}},
-        "pipeline": {"timezone": "America/New_York"},
-    }
+    config = make_test_config(transcripts={"matching": {"time_window_minutes": 30}})
 
     events, unmatched = match_transcripts_to_events([orphan], [event], config)
     assert len(unmatched) == 1
@@ -201,10 +196,7 @@ def test_build_normalized_output_integration():
         ),
     ]
 
-    config = {
-        "transcripts": {"matching": {"time_window_minutes": 30}},
-        "pipeline": {"timezone": "America/New_York"},
-    }
+    config = make_test_config(transcripts={"matching": {"time_window_minutes": 30}})
 
     updated, unmatched = build_normalized_output(events_categorized, transcripts, config)
 

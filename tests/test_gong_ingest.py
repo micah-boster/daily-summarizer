@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 from unittest.mock import MagicMock, patch
 
+from src.config import make_test_config
 from src.ingest.transcripts import (
     fetch_all_transcripts,
     parse_gong_transcript,
@@ -39,7 +40,7 @@ def _make_message(
 
 def test_parse_gong_transcript_basic():
     """Test parsing a mock Gong email with 'Call with' subject."""
-    config = {"transcripts": {"preprocessing": {"strip_filler": True}}}
+    config = make_test_config(transcripts={"preprocessing": {"strip_filler": True}})
     message = _make_message(
         subject="Call with John Smith",
         body_text="Discussed quarterly targets and pipeline review. Action items were assigned.",
@@ -56,7 +57,7 @@ def test_parse_gong_transcript_basic():
 
 def test_parse_gong_transcript_conversation_subject():
     """Test subject format 'Conversation: Product Review'."""
-    config = {"transcripts": {"preprocessing": {"strip_filler": False}}}
+    config = make_test_config(transcripts={"preprocessing": {"strip_filler": False}})
     message = _make_message(
         subject="Conversation: Product Review",
         body_text="Team reviewed product roadmap milestones.",
@@ -70,7 +71,7 @@ def test_parse_gong_transcript_conversation_subject():
 
 def test_parse_gong_transcript_empty_body():
     """Test that empty body returns None."""
-    config = {"transcripts": {"preprocessing": {"strip_filler": True}}}
+    config = make_test_config(transcripts={"preprocessing": {"strip_filler": True}})
     message = _make_message(body_text="")
     # Encode empty string
     message["payload"]["body"]["data"] = base64.urlsafe_b64encode(b"").decode("ascii")
@@ -81,7 +82,7 @@ def test_parse_gong_transcript_empty_body():
 
 def test_parse_gong_transcript_filler_stripped():
     """Test that filler words in Gong summary are stripped when configured."""
-    config = {"transcripts": {"preprocessing": {"strip_filler": True}}}
+    config = make_test_config(transcripts={"preprocessing": {"strip_filler": True}})
     message = _make_message(
         body_text="So um we discussed uh the pipeline and ah decided to proceed.",
     )
@@ -96,19 +97,17 @@ def test_parse_gong_transcript_filler_stripped():
 
 def test_fetch_all_transcripts_combines_sources():
     """Verify combined list contains transcripts from both sources."""
-    config = {
-        "transcripts": {
-            "gemini": {
-                "sender_patterns": ["calendar-notification@google.com"],
-                "subject_patterns": ["Transcript"],
-            },
-            "gong": {
-                "sender_patterns": ["notifications@gong.io"],
-                "subject_patterns": ["call"],
-            },
-            "preprocessing": {"strip_filler": False},
-        }
-    }
+    config = make_test_config(transcripts={
+        "gemini": {
+            "sender_patterns": ["calendar-notification@google.com"],
+            "subject_patterns": ["Transcript"],
+        },
+        "gong": {
+            "sender_patterns": ["notifications@gong.io"],
+            "subject_patterns": ["call"],
+        },
+        "preprocessing": {"strip_filler": False},
+    })
 
     mock_service = MagicMock()
 

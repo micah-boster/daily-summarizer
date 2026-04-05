@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
+from src.config import make_test_config
 from src.ingest.slack_discovery import (
     MIN_ACTIVITY_THRESHOLD,
     check_new_channels,
@@ -103,7 +104,7 @@ class TestDiscoverChannels:
             "response_metadata": {"next_cursor": ""},
         }
 
-        config = {"slack": {"channels": ["C_EXISTING"]}}
+        config = make_test_config(slack={"channels": ["C_EXISTING"]})
         state = {"channels": {}}
 
         # User says 'n' to new channel
@@ -126,7 +127,7 @@ class TestDiscoverChannels:
             "response_metadata": {"next_cursor": ""},
         }
 
-        config = {"slack": {"channels": []}}
+        config = make_test_config(slack={"channels": []})
         state = {"channels": {}}
 
         inputs = iter(["y"])
@@ -149,7 +150,7 @@ class TestDiscoverChannels:
             "response_metadata": {"next_cursor": ""},
         }
 
-        config = {"slack": {"channels": []}}
+        config = make_test_config(slack={"channels": []})
         state = {"channels": {}}
 
         inputs = iter(["q"])
@@ -176,7 +177,7 @@ class TestDiscoverChannels:
             "response_metadata": {"next_cursor": ""},
         }
 
-        config = {"slack": {"channels": []}}
+        config = make_test_config(slack={"channels": []})
         state = {"channels": {}}
 
         # Should not be prompted at all
@@ -216,7 +217,7 @@ class TestCheckNewChannels:
 
         client.conversations_history.side_effect = mock_history
 
-        config = {"slack": {"channels": ["C_TRACKED"]}}
+        config = make_test_config(slack={"channels": ["C_TRACKED"]})
         state = {"channels": {}}
 
         result = check_new_channels(client, state, config)
@@ -233,7 +234,7 @@ class TestCheckNewChannels:
             "response_metadata": {"next_cursor": ""},
         }
 
-        config = {"slack": {"channels": ["C1"]}}
+        config = make_test_config(slack={"channels": ["C1"]})
         state = {"channels": {}}
 
         result = check_new_channels(client, state, config)
@@ -282,7 +283,7 @@ class TestRunDiscovery:
         # Patch config path
         monkeypatch.chdir(tmp_path)
 
-        config = {"slack": {"enabled": True, "channels": [], "dms": []}}
+        config = make_test_config(slack={"enabled": True, "channels": [], "dms": []})
         run_discovery(config)
 
         assert "C_FOUND" in saved_state.get("channels", {})

@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.config import make_test_config
 from src.models.sources import ContentType, SourceType
 
 
@@ -58,7 +59,7 @@ def _make_comment(
     return comment
 
 
-def _base_config(enabled: bool = True, **overrides) -> dict:
+def _base_config(enabled: bool = True, **overrides):
     docs_config = {
         "enabled": enabled,
         "content_max_chars": 2500,
@@ -68,7 +69,7 @@ def _base_config(enabled: bool = True, **overrides) -> dict:
         "exclude_title_patterns": [],
     }
     docs_config.update(overrides)
-    return {"google_docs": docs_config}
+    return make_test_config(google_docs=docs_config)
 
 
 def _mock_drive_service(files: list[dict] | None = None, comments: list[dict] | None = None):

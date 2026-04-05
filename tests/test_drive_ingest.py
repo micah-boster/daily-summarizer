@@ -4,6 +4,7 @@ from datetime import datetime
 
 import pytest
 
+from src.config import make_test_config
 from src.ingest.drive import (
     _extract_time_from_doc_name,
     _extract_title_from_doc_name,
@@ -55,7 +56,7 @@ class TestParseDriveTranscript:
             "name": "Team Sync - 2026/03/18 10:00 EDT - Notes by Gemini",
             "createdTime": "2026-03-18T14:00:00.000Z",
         }
-        result = parse_drive_transcript(meta, "Meeting content here", {})
+        result = parse_drive_transcript(meta, "Meeting content here", make_test_config())
         assert result is not None
         assert result["source"] == "gemini_drive"
         assert result["title"] == "Team Sync"
@@ -64,15 +65,15 @@ class TestParseDriveTranscript:
 
     def test_empty_text_returns_none(self):
         meta = {"id": "doc123", "name": "Empty Meeting - Notes by Gemini"}
-        assert parse_drive_transcript(meta, "", {}) is None
-        assert parse_drive_transcript(meta, "   ", {}) is None
+        assert parse_drive_transcript(meta, "", make_test_config()) is None
+        assert parse_drive_transcript(meta, "   ", make_test_config()) is None
 
     def test_filler_stripping(self):
         meta = {
             "id": "doc123",
             "name": "Test - 2026/03/18 10:00 EDT - Notes by Gemini",
         }
-        config = {"transcripts": {"preprocessing": {"strip_filler": True}}}
+        config = make_test_config(transcripts={"preprocessing": {"strip_filler": True}})
         result = parse_drive_transcript(meta, "So um we discussed the the plan", config)
         assert result is not None
         assert "um" not in result["transcript_text"]
@@ -83,7 +84,7 @@ class TestParseDriveTranscript:
             "name": "Weird Format - Notes by Gemini",
             "createdTime": "2026-03-18T14:00:00.000Z",
         }
-        result = parse_drive_transcript(meta, "Some content", {})
+        result = parse_drive_transcript(meta, "Some content", make_test_config())
         assert result is not None
         assert result["meeting_time"] is not None
         assert result["meeting_time"].year == 2026

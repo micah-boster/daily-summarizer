@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.config import make_test_config
 from src.models.events import DailySynthesis, NormalizedEvent, Section
 from src.models.sources import SourceItem, SourceType, ContentType
 from src.pipeline import PipelineContext, _ingest_slack, _ingest_hubspot, _ingest_docs, run_pipeline
@@ -15,12 +16,10 @@ from src.pipeline import PipelineContext, _ingest_slack, _ingest_hubspot, _inges
 
 def _make_ctx(tmp_path: Path, **overrides) -> PipelineContext:
     """Build a minimal PipelineContext for testing."""
+    if "config" not in overrides:
+        overrides["config"] = make_test_config()
     defaults = {
-        "config": {
-            "slack": {"enabled": False},
-            "hubspot": {"enabled": False},
-            "google_docs": {"enabled": False},
-        },
+        "config": make_test_config(),
         "target_date": date(2026, 4, 1),
         "output_dir": tmp_path,
         "template_dir": Path("templates"),
@@ -51,7 +50,7 @@ def _make_source_item(title: str = "Test Item", source: str = "slack") -> Source
 
 class TestIngestSlack:
     def test_slack_disabled_returns_empty(self, tmp_path: Path):
-        ctx = _make_ctx(tmp_path, config={"slack": {"enabled": False}})
+        ctx = _make_ctx(tmp_path, config=make_test_config(slack={"enabled": False}))
         result = _ingest_slack(ctx)
         assert result == []
 
@@ -63,9 +62,7 @@ class TestIngestSlack:
     def test_slack_enabled_success(
         self, mock_check, mock_save, mock_load, mock_build, mock_fetch, tmp_path: Path
     ):
-        ctx = _make_ctx(tmp_path, config={
-            "slack": {"enabled": True, "bot_token": "xoxb-test", "channels": ["general"]},
-        })
+        ctx = _make_ctx(tmp_path, config=make_test_config(slack={"enabled": True, "channels": ["general"]}))
         mock_build.return_value = MagicMock()
         mock_load.return_value = {}
         items = [_make_source_item("Slack 1"), _make_source_item("Slack 2")]
@@ -75,9 +72,7 @@ class TestIngestSlack:
 
     @patch("src.pipeline.build_slack_client")
     def test_slack_failure_returns_empty(self, mock_build, tmp_path: Path):
-        ctx = _make_ctx(tmp_path, config={
-            "slack": {"enabled": True, "bot_token": "xoxb-test", "channels": ["general"]},
-        })
+        ctx = _make_ctx(tmp_path, config=make_test_config(slack={"enabled": True, "channels": ["general"]}))
         mock_build.side_effect = Exception("Slack API down")
         result = _ingest_slack(ctx)
         assert result == []
@@ -85,15 +80,13 @@ class TestIngestSlack:
 
 class TestIngestHubspot:
     def test_hubspot_disabled_returns_empty(self, tmp_path: Path):
-        ctx = _make_ctx(tmp_path, config={"hubspot": {"enabled": False}})
+        ctx = _make_ctx(tmp_path, config=make_test_config(hubspot={"enabled": False}))
         result = _ingest_hubspot(ctx)
         assert result == []
 
     @patch("src.pipeline.fetch_hubspot_items")
     def test_hubspot_failure_returns_empty(self, mock_fetch, tmp_path: Path):
-        ctx = _make_ctx(tmp_path, config={
-            "hubspot": {"enabled": True, "access_token": "test", "owner_id": "123"},
-        })
+        ctx = _make_ctx(tmp_path, config=make_test_config(hubspot={"enabled": True, "owner_id": "123"}))
         mock_fetch.side_effect = Exception("HubSpot API down")
         result = _ingest_hubspot(ctx)
         assert result == []
@@ -101,14 +94,12 @@ class TestIngestHubspot:
 
 class TestIngestDocs:
     def test_docs_disabled_returns_empty(self, tmp_path: Path):
-        ctx = _make_ctx(tmp_path, config={"google_docs": {"enabled": False}})
+        ctx = _make_ctx(tmp_path, config=make_test_config(google_docs={"enabled": False}))
         result = _ingest_docs(ctx)
         assert result == []
 
     def test_docs_no_creds_returns_empty(self, tmp_path: Path):
-        ctx = _make_ctx(tmp_path, config={
-            "google_docs": {"enabled": True},
-        }, google_creds=None)
+        ctx = _make_ctx(tmp_path, config=make_test_config(google_docs={"enabled": True}), google_creds=None)
         result = _ingest_docs(ctx)
         assert result == []
 
@@ -153,11 +144,7 @@ class TestRunPipeline:
         tmp_path: Path,
     ):
         """Slack enabled: items flow through to synthesize_daily."""
-        ctx = _make_ctx(tmp_path, config={
-            "slack": {"enabled": True, "bot_token": "xoxb-test", "channels": ["general"]},
-            "hubspot": {"enabled": False},
-            "google_docs": {"enabled": False},
-        })
+        ctx = _make_ctx(tmp_path, config=make_test_config(slack={"enabled": True, "channels": ["general"]}))
         mock_build.return_value = MagicMock()
         mock_load.return_value = {}
         slack_items = [_make_source_item("Slack item")]
@@ -193,11 +180,10 @@ class TestRunPipeline:
         tmp_path: Path,
     ):
         """Slack fails but HubSpot succeeds: pipeline continues with partial data."""
-        ctx = _make_ctx(tmp_path, config={
-            "slack": {"enabled": True, "bot_token": "xoxb-test", "channels": ["general"]},
-            "hubspot": {"enabled": True, "access_token": "test", "owner_id": "123"},
-            "google_docs": {"enabled": False},
-        })
+        ctx = _make_ctx(tmp_path, config=make_test_config(
+            slack={"enabled": True, "channels": ["general"]},
+            hubspot={"enabled": True, "owner_id": "123"},
+        ))
         # Slack fails
         mock_build_slack.side_effect = Exception("Slack down")
         # HubSpot succeeds
@@ -237,11 +223,7 @@ class TestRunPipeline:
         tmp_path: Path,
     ):
         """Synthesis fails: pipeline still writes a summary with empty synthesis."""
-        ctx = _make_ctx(tmp_path, config={
-            "slack": {"enabled": True, "bot_token": "xoxb-test", "channels": ["general"]},
-            "hubspot": {"enabled": False},
-            "google_docs": {"enabled": False},
-        })
+        ctx = _make_ctx(tmp_path, config=make_test_config(slack={"enabled": True, "channels": ["general"]}))
         mock_build.return_value = MagicMock()
         mock_load.return_value = {}
         mock_fetch.return_value = [_make_source_item("Item")]

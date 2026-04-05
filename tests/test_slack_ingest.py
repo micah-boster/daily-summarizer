@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from src.config import make_test_config
 from src.ingest.slack import (
     build_slack_client,
     load_slack_state,
@@ -226,37 +227,37 @@ class TestShouldExpandThread:
 
     def test_expands_when_both_thresholds_met(self):
         msg = {"reply_count": 5, "reply_users_count": 3}
-        config = {"slack": {"thread_min_replies": 3, "thread_min_participants": 2}}
+        config = make_test_config(slack={"thread_min_replies": 3, "thread_min_participants": 2})
         assert should_expand_thread(msg, config) is True
 
     def test_does_not_expand_below_reply_threshold(self):
         msg = {"reply_count": 2, "reply_users_count": 3}
-        config = {"slack": {"thread_min_replies": 3, "thread_min_participants": 2}}
+        config = make_test_config(slack={"thread_min_replies": 3, "thread_min_participants": 2})
         assert should_expand_thread(msg, config) is False
 
     def test_does_not_expand_below_participant_threshold(self):
         msg = {"reply_count": 5, "reply_users_count": 1}
-        config = {"slack": {"thread_min_replies": 3, "thread_min_participants": 2}}
+        config = make_test_config(slack={"thread_min_replies": 3, "thread_min_participants": 2})
         assert should_expand_thread(msg, config) is False
 
     def test_does_not_expand_both_below_threshold(self):
         msg = {"reply_count": 1, "reply_users_count": 1}
-        config = {"slack": {"thread_min_replies": 3, "thread_min_participants": 2}}
+        config = make_test_config(slack={"thread_min_replies": 3, "thread_min_participants": 2})
         assert should_expand_thread(msg, config) is False
 
     def test_uses_defaults_when_config_missing(self):
         msg = {"reply_count": 3, "reply_users_count": 2}
-        config = {}  # No slack section
+        config = make_test_config()  # Uses default slack settings
         assert should_expand_thread(msg, config) is True
 
     def test_exact_threshold_matches(self):
         msg = {"reply_count": 3, "reply_users_count": 2}
-        config = {"slack": {"thread_min_replies": 3, "thread_min_participants": 2}}
+        config = make_test_config(slack={"thread_min_replies": 3, "thread_min_participants": 2})
         assert should_expand_thread(msg, config) is True
 
     def test_missing_reply_fields_default_to_zero(self):
         msg = {}
-        config = {"slack": {"thread_min_replies": 3, "thread_min_participants": 2}}
+        config = make_test_config(slack={"thread_min_replies": 3, "thread_min_participants": 2})
         assert should_expand_thread(msg, config) is False
 
 
@@ -468,15 +469,13 @@ class TestVolumeCap:
         ]
         mock_fetch_msgs.return_value = messages
 
-        config = {
-            "slack": {
-                "enabled": True,
-                "channels": ["C_TEST"],
-                "dms": [],
-                "max_messages_per_channel": 100,
-                "bot_allowlist": [],
-            }
-        }
+        config = make_test_config(slack={
+            "enabled": True,
+            "channels": ["C_TEST"],
+            "dms": [],
+            "max_messages_per_channel": 100,
+            "bot_allowlist": [],
+        })
 
         items = fetch_slack_items(config)
         assert len(items) == 100
