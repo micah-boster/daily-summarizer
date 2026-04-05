@@ -4,7 +4,7 @@
 
 - ✅ **v1.0 Daily Intelligence Pipeline** - Phases 0-5 (shipped 2026-04-03)
 - ✅ **v1.5 Expanded Ingest** - Phases 6-12 (shipped 2026-04-05)
-- ✅ **v1.5.1 Notion + Performance + Reliability** - Phases 13-18 (shipped 2026-04-05)
+- 🔧 **v1.5.1 Notion + Performance + Reliability** - Phases 13-18.1 (gap closure in progress)
 - 🚧 **v2.0 Entity Layer** - Phases 19-23 (in progress)
 
 ## Phases
@@ -253,6 +253,7 @@ Plans:
 - [x] **Phase 16: Reliability Quick Wins** - Slack batch resolution, cache retention policy, and algorithmic dedup pre-filter (completed 2026-04-05)
 - [x] **Phase 17: Asyncio Parallelization** - Concurrent ingest modules and parallel per-meeting extraction via asyncio (completed 2026-04-05)
 - [x] **Phase 18: Structured Output Completion** - Gap closure: weekly/monthly structured outputs, deprecated beta header removal (completed 2026-04-05)
+- [ ] **Phase 18.1: Milestone Audit Gap Closure** - Verify Phase 16, fix notion_discovery.py bug, remove dead sync pipeline code
 
 ### Phase 13: Typed Config Foundation
 **Goal**: Pipeline configuration is validated at startup with typed access, catching misconfigurations immediately instead of failing deep in a run
@@ -348,6 +349,22 @@ Plans:
 Plans:
 - [x] 18-01-PLAN.md -- Migrate weekly.py and monthly.py to structured outputs with Pydantic output models and converter functions (TDD)
 - [x] 18-02-PLAN.md -- Remove deprecated beta header fallback from extractor/synthesizer/commitments, remove dead dedup import from pipeline.py
+
+### Phase 18.1: Milestone Audit Gap Closure
+**Goal**: Close remaining v1.5.1 audit gaps -- verify Phase 16 requirements (PERF-03, OPS-01, DEDUP-01), fix notion_discovery.py str→Path crash, remove dead sync pipeline code
+**Depends on**: Phase 18
+**Requirements**: PERF-03, OPS-01, DEDUP-01, NOTION-01
+**Gap Closure**: Closes gaps from v1.5.1 re-audit
+**Success Criteria** (what must be TRUE):
+  1. Phase 16 has a VERIFICATION.md confirming PERF-03, OPS-01, DEDUP-01 are satisfied
+  2. `python -m src.main discover-notion --config config.yaml` reaches the Notion token check without crashing
+  3. No dead `_ingest_calendar` function or `extract_all_meetings` import remains in pipeline.py
+  4. All existing tests pass
+**Plans**: 2 plans
+
+Plans:
+- [ ] 18.1-01-PLAN.md -- Verify Phase 16 and fix notion_discovery.py str→Path bug
+- [ ] 18.1-02-PLAN.md -- Remove dead sync pipeline code from pipeline.py
 
 </details>
 
@@ -468,6 +485,7 @@ Phases 19-23 execute sequentially: 19 -> 20 -> 21 -> 22 -> 23.
 | 16. Reliability Quick Wins | v1.5.1 | 3/3 | Complete | 2026-04-05 |
 | 17. Asyncio Parallelization | v1.5.1 | 2/2 | Complete | 2026-04-05 |
 | 18. Structured Output Completion | v1.5.1 | 2/2 | Complete | 2026-04-05 |
+| 18.1. Milestone Audit Gap Closure | v1.5.1 | 0/2 | Not started | - |
 | 19. Entity Registry Foundation | v2.0 | 0/2 | Not started | - |
 | 20. Entity Discovery + Backfill | v2.0 | 0/3 | Not started | - |
 | 21. Entity Attribution | v2.0 | 0/2 | Not started | - |
