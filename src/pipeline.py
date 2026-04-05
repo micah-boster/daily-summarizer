@@ -18,7 +18,6 @@ import anthropic
 
 from src.cache_cleanup import cleanup_raw_cache
 from src.config import PipelineConfig, load_config
-from src.dedup import dedup_source_items
 from src.ingest.calendar import build_calendar_service, cache_raw_response, fetch_events_for_date
 from src.ingest.gmail import build_gmail_service, cache_raw_emails
 from src.ingest.google_docs import fetch_google_docs_items
