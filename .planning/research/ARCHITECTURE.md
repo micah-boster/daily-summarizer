@@ -1,467 +1,564 @@
-# Architecture Patterns
+# Architecture Research
 
-**Domain:** Multi-source work intelligence pipeline -- expanding ingestion layer
-**Researched:** 2026-04-03
+**Domain:** Pipeline enhancement -- integrating Notion ingestion, asyncio parallelization, Claude structured outputs, algorithmic dedup, typed config, and cache management into existing daily intelligence pipeline
+**Researched:** 2026-04-04
+**Confidence:** HIGH (based on direct codebase analysis + official documentation)
 
 ## Current Architecture (Baseline)
 
-The existing pipeline follows a clean three-stage pattern:
-
 ```
-INGEST                    NORMALIZE                EXTRACT/SYNTHESIZE        OUTPUT
-calendar.py ──┐
-transcripts.py ┼──> normalizer.py ──> extractor.py ──> synthesizer.py ──> writer.py
-drive.py ──────┘     (match + dedup)   (per-meeting)    (daily rollup)     (markdown)
-gmail.py ──────┘                                                            slack.py
-```
-
-Key characteristics:
-- **NormalizedEvent** is the universal internal model (Pydantic), tightly coupled to calendar events
-- **Two-stage synthesis:** Stage 1 extracts per-meeting, Stage 2 cross-references into daily brief
-- **Transcript-to-event matching:** Transcripts are attached to calendar events by time+title similarity
-- **DailySynthesis** model aggregates events into substance/decisions/commitments sections
-- **Config-driven:** YAML config controls source patterns, model selection, output paths
-- **Batch processing:** End-of-day run for a target date, no real-time component
-
-## Problem: NormalizedEvent Is Meeting-Centric
-
-The current NormalizedEvent model assumes everything is a calendar event with optional transcript. New sources break this assumption:
-
-| Source | Nature | Fits NormalizedEvent? |
-|--------|--------|----------------------|
-| Calendar + Transcripts | Time-bounded meeting with attendees | YES (designed for this) |
-| Slack messages | Async threads across channels | NO -- no start/end time, no attendees list, thread-based |
-| HubSpot activities | CRM events: deal stage changes, notes, tasks | NO -- structured data, not meetings |
-| Google Docs edits | Document activity for a date | NO -- content changes, not events |
-| Notion page updates | Page/database mutations | NO -- structured properties, not meetings |
-
-**This is the central architectural decision for v1.5.**
-
-## Recommended Architecture
-
-### New Model: SourceItem (Sibling to NormalizedEvent)
-
-Do NOT force new sources into NormalizedEvent. Instead, introduce a parallel normalized model for non-meeting intelligence:
-
-```python
-class SourceItem(BaseModel):
-    """A normalized unit of work intelligence from any non-meeting source."""
-    id: str
-    source: str                          # "slack", "hubspot", "google_docs", "notion"
-    source_channel: str | None = None    # "#product-dev", "Deal: Acme Corp", etc.
-    timestamp: datetime
-    date: str                            # YYYY-MM-DD for date-based grouping
-    item_type: str                       # "message", "thread_summary", "deal_change",
-                                         # "note", "doc_edit", "page_update", "task"
-    title: str                           # Thread topic, deal name, doc title, page title
-    content: str                         # The substantive text content
-    participants: list[str] = []         # People involved (names/handles)
-    metadata: dict = {}                  # Source-specific structured data
-    url: str | None = None               # Deep link back to source
-    raw_data: dict | None = None         # Original API response
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Entry Point (main.py)                        │
+│   CLI parsing, date range loop, Google auth, PipelineContext setup  │
+├─────────────────────────────────────────────────────────────────────┤
+│                     Pipeline Runner (pipeline.py)                    │
+│         run_pipeline(ctx) -- sequential orchestration                │
+├───────────┬───────────┬───────────┬──────────────┬──────────────────┤
+│ _ingest_  │ _ingest_  │ _ingest_  │ _ingest_     │                  │
+│ calendar  │ slack     │ hubspot   │ docs         │  (sequential)    │
+│ +transcr  │           │           │              │                  │
+├───────────┴───────────┴───────────┴──────────────┴──────────────────┤
+│                    Synthesis Layer (two-stage)                       │
+│  Stage 1: extract_all_meetings (sequential per-meeting Claude calls)│
+│  Stage 2: synthesize_daily (single cross-source Claude call)        │
+│  Stage 3: extract_commitments (single Claude call, structured out)  │
+├─────────────────────────────────────────────────────────────────────┤
+│                        Output Layer                                  │
+│  write_daily_summary (markdown) + write_daily_sidecar (JSON)        │
+│  quality tracking, Slack notification                                │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Why Not Extend NormalizedEvent?
+### Key Architectural Facts from Codebase
 
-NormalizedEvent has 15+ calendar-specific fields (attendees with response status, meeting links, recurring flags, all-day detection, calendar IDs). Cramming Slack messages or HubSpot deal changes into this model creates a god object where most fields are None for most records. Separate models that converge at synthesis is cleaner.
+| Aspect | Current State | Implication for v1.5.1 |
+|--------|--------------|------------------------|
+| Orchestration | `run_pipeline()` is synchronous, calls ingest functions sequentially | Must wrap in `asyncio.run()` or convert to async |
+| Claude client | `anthropic.Anthropic` (sync), one instance in `PipelineContext` | Need `AsyncAnthropic` for parallel Claude calls |
+| Ingest modules | Each returns `list[SourceItem]` or tuple, catches own errors | Clean fit for `asyncio.gather()` with `return_exceptions=True` |
+| Calendar ingest | Coupled: calendar -> transcripts -> normalizer -> extraction | Cannot fully decouple; extraction depends on transcript fetch |
+| Config | `load_config()` returns untyped `dict`, no validation | Clean replacement point; all consumers use `ctx.config` param |
+| Module caches | `_user_cache`, `_channel_name_cache` (Slack), `_user_email_cache` (Docs) as mutable module globals | Not async-safe; must convert to instance-level or pass-through |
+| Claude API calls | New `Anthropic()` fallback in each function if client not passed | Single client reuse via `PipelineContext.claude_client` already works |
+| Synthesis parsing | `_parse_synthesis_response()` and `_parse_extraction_response()` use regex/string splitting of markdown | Primary targets for structured output migration |
+| Commitment extraction | `commitments.py` already uses `output_config` with `json_schema` | Proven pattern to extend to extractor and synthesizer |
 
-### Updated Pipeline Flow
-
-```
-INGEST (existing)              NORMALIZE              EXTRACT              SYNTHESIZE         OUTPUT
-calendar.py ──┐
-transcripts.py ┼──> normalizer.py ──> [NormalizedEvent] ──┐
-drive.py ──────┘     (match + dedup)                       │
-                                                           ├──> extractor.py ──> synthesizer.py ──> writer.py
-INGEST (new)                                               │    (Stage 1)       (Stage 2)
-slack.py ──────┐                                           │
-hubspot.py ────┤                                           │
-google_docs.py ┤──> source_normalizer.py ──> [SourceItem] ─┘
-notion.py ─────┘     (dedup across sources)
-```
-
-### Component Boundaries
-
-| Component | Responsibility | New/Modified | Communicates With |
-|-----------|---------------|--------------|-------------------|
-| `src/ingest/slack.py` | Fetch messages from curated channels for target date | NEW | Slack API via slack_sdk |
-| `src/ingest/hubspot.py` | Fetch deal changes, notes, tasks for target date | NEW | HubSpot API via hubspot-api-client |
-| `src/ingest/google_docs.py` | Fetch docs created/edited on target date | NEW | Google Drive + Docs API (existing creds) |
-| `src/ingest/notion.py` | Fetch page updates, database changes for target date | NEW | Notion API via notion-client |
-| `src/models/events.py` | Add SourceItem model alongside NormalizedEvent | MODIFIED | All ingest + synthesis modules |
-| `src/ingest/source_normalizer.py` | Cross-source dedup, normalize SourceItems | NEW | All new ingest modules |
-| `src/synthesis/extractor.py` | Add source_item extraction (non-meeting) | MODIFIED | New extraction prompt for SourceItems |
-| `src/synthesis/synthesizer.py` | Merge meeting + source extractions | MODIFIED | Both extraction paths |
-| `src/synthesis/prompts.py` | Add prompts for source-specific extraction | MODIFIED | extractor.py |
-| `src/models/events.py` | Update DailySynthesis to include source_items | MODIFIED | writer.py, synthesizer.py |
-| `src/output/writer.py` | Render source attribution in output | MODIFIED | DailySynthesis model |
-| `config/config.yaml` | Add source configuration sections | MODIFIED | All new ingest modules |
-| `src/auth/slack_auth.py` | Slack bot token management | NEW | slack.py |
-| `src/auth/hubspot_auth.py` | HubSpot private app token | NEW | hubspot.py |
-| `src/auth/notion_auth.py` | Notion integration token | NEW | notion.py |
-| `src/main.py` | Orchestrate new ingest sources in run_daily() | MODIFIED | All ingest modules |
-
-## Data Flow Per Source
-
-### Slack
+## Target Architecture (v1.5.1)
 
 ```
-1. Read curated channel list from config (slack.channels)
-2. For each channel:
-   a. conversations.history(channel, oldest=start_of_day, latest=end_of_day)
-   b. For messages with thread_ts != ts (thread parents with replies):
-      conversations.replies(channel, ts) to get full thread
-   c. Filter: skip bot messages, join/leave, reactions-only
-3. Collapse threads into single SourceItem per thread
-   - title = first message or channel topic
-   - content = thread summary (collapse to key points if >N messages)
-   - participants = unique human posters in thread
-   - source_channel = "#channel-name"
-   - url = deep link to thread
-4. For high-volume channels: pre-filter with keyword/participant matching
+┌─────────────────────────────────────────────────────────────────────┐
+│                     Entry Point (main.py)                            │
+│   CLI parsing, config load + Pydantic validate, asyncio.run()       │
+├─────────────────────────────────────────────────────────────────────┤
+│                  Pipeline Runner (pipeline.py)                       │
+│       async run_pipeline(ctx) -- parallel orchestration              │
+├────────────────────────────┬────────────────────────────────────────┤
+│   Parallel Ingest Phase    │   Calendar Ingest (sequential chain)   │
+│   (asyncio.gather)         │                                        │
+│ ┌─────────┐ ┌──────────┐  │  calendar -> transcripts -> normalizer │
+│ │  Slack   │ │ HubSpot  │  │       -> parallel extraction           │
+│ └─────────┘ └──────────┘  │         (asyncio.gather)                │
+│ ┌─────────┐ ┌──────────┐  │                                        │
+│ │  Docs   │ │  Notion  │  │                                        │
+│ └─────────┘ └──────────┘  │                                        │
+├────────────────────────────┴────────────────────────────────────────┤
+│                  Algorithmic Dedup Layer (NEW)                       │
+│   Fingerprint-based cross-source dedup before LLM synthesis         │
+├─────────────────────────────────────────────────────────────────────┤
+│                    Synthesis Layer (two-stage)                       │
+│  Stage 1: extract_all_meetings (parallel Claude, structured output) │
+│  Stage 2: synthesize_daily (structured output -> Pydantic model)    │
+│  Stage 3: extract_commitments (unchanged, already structured)       │
+├─────────────────────────────────────────────────────────────────────┤
+│                        Output Layer (unchanged)                      │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-**Rate limit concern:** Slack's conversations.history is rate-limited. For new non-Marketplace apps, starting May 2025 it is 1 request/minute with max 15 messages per request. If the app is an existing Marketplace-distributed app or was installed before the cutoff, older limits apply (50 req/min, 100 messages/request). For a curated list of 5-10 channels, even the restrictive limits work within a batch pipeline that runs once daily -- but the code must handle pagination and backoff gracefully.
+## Component Responsibilities
 
-**Thread collapsing strategy:** Slack threads are the unit of intelligence, not individual messages. A 30-message thread about "should we hire a HubSpot contractor" is one SourceItem with content summarizing the thread outcome, not 30 items. For threads with >10 messages, consider an LLM pre-summarization step (cheap, fast, Haiku-tier) before feeding into the main extraction pipeline.
+| Component | Responsibility | v1.5.1 Change |
+|-----------|---------------|---------------|
+| `config.py` | Load and validate config | **REWRITE**: Returns Pydantic model instead of raw dict |
+| `models/config.py` | Typed config model | **NEW**: Pydantic BaseModel for config.yaml structure |
+| `pipeline.py` | Orchestrate daily pipeline | **MODIFY**: async, parallel ingest, parallel extraction |
+| `PipelineContext` | Shared state for pipeline run | **MODIFY**: Add `async_claude_client`, `notion_client`, typed config |
+| `ingest/notion.py` | Fetch Notion pages/databases | **NEW**: Follows established SourceItem pattern |
+| `ingest/slack.py` | Fetch Slack messages | **MODIFY**: Batch `users.list()` resolution, no module globals |
+| `ingest/google_docs.py` | Fetch Docs edits/comments | **MODIFY**: Remove `_user_email_cache` module global |
+| `synthesis/extractor.py` | Per-meeting extraction | **MODIFY**: async + structured output (replace markdown parsing) |
+| `synthesis/synthesizer.py` | Cross-source daily synthesis | **MODIFY**: structured output (replace `_parse_synthesis_response`) |
+| `synthesis/commitments.py` | Commitment extraction | **UNCHANGED**: Already uses structured outputs |
+| `models/sources.py` | SourceItem, SourceType | **MODIFY**: Add NOTION_PAGE, NOTION_DATABASE types |
+| `models/outputs.py` | Structured output schemas | **NEW**: Pydantic schemas for Claude structured responses |
+| `dedup/fingerprint.py` | Algorithmic cross-source dedup | **NEW**: Pre-LLM dedup using content fingerprints |
+| `cache/manager.py` | Cache retention policy | **NEW**: TTL-based cleanup of raw data files |
 
-### HubSpot
-
-```
-1. Read HubSpot scope from config (hubspot.object_types, hubspot.pipeline_ids)
-2. Fetch recent activity:
-   a. CRM search API: deals updated in date range
-      - Filter by lastmodifieddate within target day
-      - Include properties: dealname, dealstage, amount, closedate, pipeline
-      - Include associations: contacts, companies
-   b. Engagements API: notes, tasks, calls created on target date
-      - Filter by hs_timestamp or hs_createdate
-      - Include body text and associations
-3. Normalize each into SourceItem:
-   - Deal stage change: item_type="deal_change", content="Deal X moved from Stage A to Stage B"
-   - Note: item_type="note", content=note body, title=associated deal/contact name
-   - Task: item_type="task", content=task body, participants=[owner]
-   - metadata = {deal_id, pipeline, stage_from, stage_to, amount}
-```
-
-**Authentication:** HubSpot private app tokens are the simplest path. Create a private app in HubSpot settings, grant CRM scopes (crm.objects.deals.read, crm.objects.contacts.read, crm.objects.companies.read), store the token in .env.
-
-**Scope constraint from PROJECT.md:** Activity logs, deal changes, notes -- not full CRM dump. The ingest module should fetch only records modified on the target date, not enumerate all deals.
-
-### Google Docs
+## Recommended Project Structure Changes
 
 ```
-1. Reuse existing Google OAuth credentials (already have Drive + Docs scopes)
-2. Drive API: search for docs modified on target date
-   - query: "mimeType='application/vnd.google-apps.document'
-             and modifiedTime >= '{date}T00:00:00'
-             and modifiedTime < '{next_date}T00:00:00'"
-   - Exclude "Notes by Gemini" docs (already handled by drive.py transcript path)
-3. For each doc:
-   a. Get file metadata: name, modifiedTime, owners, lastModifyingUser
-   b. Get revision list to determine if created vs. edited
-   c. Docs API: extract document content (reuse _extract_doc_text from drive.py)
-4. Normalize into SourceItem:
-   - item_type = "doc_created" or "doc_edited"
-   - title = document name
-   - content = first N paragraphs or document summary
-   - participants = [lastModifyingUser, owners]
-   - url = doc URL
-   - metadata = {doc_id, revision_count, word_count}
+src/
+├── config.py              # REWRITE: load_config returns PipelineConfig
+├── pipeline.py            # MODIFY: async run_pipeline, parallel orchestration
+├── main.py                # MODIFY: asyncio.run(), PipelineConfig usage
+├── models/
+│   ├── config.py          # NEW: PipelineConfig, SlackConfig, NotionConfig, etc.
+│   ├── sources.py         # MODIFY: Add NOTION_PAGE, NOTION_DATABASE types
+│   ├── outputs.py         # NEW: structured output schemas for Claude responses
+│   ├── events.py          # Unchanged
+│   └── rollups.py         # Unchanged
+├── ingest/
+│   ├── notion.py          # NEW: Notion page/database ingestion
+│   ├── slack.py           # MODIFY: batch user resolution, instance caches
+│   ├── google_docs.py     # MODIFY: instance cache
+│   ├── calendar.py        # Unchanged
+│   ├── transcripts.py     # Unchanged
+│   ├── hubspot.py         # Unchanged
+│   ├── normalizer.py      # Unchanged
+│   └── ...
+├── dedup/
+│   ├── __init__.py
+│   └── fingerprint.py     # NEW: algorithmic cross-source dedup
+├── cache/
+│   ├── __init__.py
+│   └── manager.py         # NEW: TTL-based cache file cleanup
+├── synthesis/
+│   ├── extractor.py       # MODIFY: async + structured output
+│   ├── synthesizer.py     # MODIFY: structured output
+│   ├── commitments.py     # Unchanged
+│   ├── models.py          # MODIFY: Add structured output schemas (or use models/outputs.py)
+│   ├── weekly.py          # Optional: structured output migration
+│   └── monthly.py         # Out of scope for v1.5.1
+├── output/                # Unchanged
+├── notifications/         # Unchanged
+└── validation/            # Unchanged
 ```
 
-**Key distinction from existing drive.py:** The current drive.py searches specifically for "Notes by Gemini" meeting transcripts. google_docs.py handles everything else -- docs the user created or edited that day. The filter must exclude Gemini notes to avoid double-processing.
+## Architectural Patterns
 
-**Content handling:** For long documents, do NOT send full content through the extraction pipeline. Instead, send the first 2000 characters + document metadata. The synthesis prompt can note "Document X was edited" without needing the full 50-page doc.
+### Pattern 1: Async Facade over Sync Modules
 
-### Notion
+**What:** Convert `run_pipeline()` to async while keeping existing ingest modules synchronous. Wrap them with `asyncio.to_thread()` for parallel execution. Only Claude API calls and Notion (native async SDK) use true async.
 
-```
-1. Read Notion config (notion.database_ids, notion.page_ids_to_watch)
-2. For each tracked database:
-   a. databases.query(database_id, filter={
-        "timestamp": "last_edited_time",
-        "last_edited_time": {"on_or_after": start_of_day_iso}
-      })
-   b. For each returned page: extract title, properties, last_edited_by
-3. For tracked individual pages:
-   a. pages.retrieve(page_id) -- check last_edited_time
-   b. If edited on target date: blocks.children.list(page_id) for content
-4. Normalize into SourceItem:
-   - item_type = "page_update" or "database_entry"
-   - title = page title
-   - content = property changes summary or page content snippet
-   - participants = [last_edited_by]
-   - source_channel = database name or parent page
-   - url = Notion page URL
-   - metadata = {page_id, database_id, properties_changed}
-```
+**When to use:** When most I/O is HTTP-based but you have sync-only SDKs (Google API client, Slack SDK `WebClient`).
 
-**Authentication:** Notion internal integration token. Created in Notion settings, must be explicitly shared with target pages/databases. Store token in .env.
+**Trade-offs:** Simpler migration path (don't rewrite every module). `asyncio.to_thread()` uses a thread pool, so parallelism is real but not as lightweight as pure async. For 4-5 concurrent ingest sources, this is perfectly fine.
 
-**Scope management:** Unlike Slack (where you choose channels) or HubSpot (where you query by date), Notion requires explicitly connecting the integration to each page/database. Config should list database IDs and page IDs to monitor, with the integration shared to those resources in Notion.
-
-## Cross-Source Deduplication
-
-This is the hardest architectural problem in v1.5. The same topic can appear across multiple sources:
-
-```
-Meeting transcript: "Decided to hire HubSpot contractor"
-Slack #product-dev: Thread about HubSpot contractor budget
-HubSpot: New task created "Interview HubSpot contractors"
-Notion: Updated hiring tracker page
-```
-
-### Strategy: Dedup at Synthesis, Not Ingestion
-
-Do NOT try to match SourceItems to NormalizedEvents or to each other at the normalization layer. Instead:
-
-1. **Ingest everything.** Each source produces its own SourceItems independently.
-2. **Extract independently.** Run extraction on meetings and source items separately.
-3. **Dedup at synthesis.** The Stage 2 synthesis prompt explicitly instructs Claude to merge duplicate topics across sources, noting all source attributions.
-
-This is the right call because:
-- Cross-source matching by title/content is fragile (different phrasing across sources)
-- LLMs are good at recognizing "these three items are about the same thing"
-- Source attribution is preserved ("per meeting X, Slack #channel, HubSpot deal Y")
-- The existing synthesizer already deduplicates across meetings; extending to sources is natural
-
-### Updated Synthesis Prompt Pattern
-
-The SYNTHESIS_PROMPT needs to be updated to include source items alongside meeting extractions:
-
-```
-Meeting Extractions:
-{extractions_text}
-
-Source Activity:
-{source_items_text}
-
-DEDUPLICATION: If the same topic appears in a meeting AND in Slack/HubSpot/Docs/Notion,
-write ONE bullet with all sources attributed. Example:
-- Decided to hire HubSpot contractor (<$5K) -- Micah -- Leadership Sync, Slack #product-dev
-```
-
-## Extraction Strategy for Non-Meeting Sources
-
-### Option A: Per-item extraction (NOT recommended)
-Send each SourceItem individually to Claude for extraction. Too many API calls, too expensive for low-signal items.
-
-### Option B: Batch extraction by source (Recommended for Slack)
-Group SourceItems by source, send one prompt per source type per day:
-
-```
-"Here are today's Slack threads from curated channels. Extract substance, decisions, and commitments:"
-[All Slack SourceItems for the day]
-```
-
-This produces a SourceExtraction model (parallel to MeetingExtraction) that feeds into the Stage 2 synthesizer alongside meeting extractions.
-
-### Option C: Skip extraction, feed raw to synthesis (Recommended for HubSpot/Docs/Notion)
-For low-volume sources, the raw SourceItems may be compact enough to feed directly into the Stage 2 synthesis prompt without a separate extraction step. Reserve extraction for high-volume sources.
-
-**Recommendation:** Use Option B for Slack (high volume, needs filtering). Use Option C for HubSpot/Docs/Notion (lower volume, already structured).
-
-## Config Structure Extension
-
-```yaml
-# New sections in config/config.yaml
-
-slack:
-  enabled: true
-  bot_token_env: "SLACK_BOT_TOKEN"    # env var name
-  channels:                            # curated channel list
-    - id: "C01ABCDEF"
-      name: "product-dev"
-    - id: "C02GHIJKL"
-      name: "leadership"
-  exclude_bot_messages: true
-  thread_collapse_threshold: 10        # threads > N messages get pre-summarized
-  max_messages_per_channel: 200        # safety cap
-
-hubspot:
-  enabled: true
-  access_token_env: "HUBSPOT_ACCESS_TOKEN"
-  object_types:
-    - deals
-    - notes
-    - tasks
-  pipeline_ids: []                     # empty = all pipelines
-
-google_docs:
-  enabled: true
-  # Reuses existing Google OAuth credentials
-  exclude_patterns:
-    - "Notes by Gemini"               # already handled by transcript pipeline
-  max_content_chars: 2000             # truncate doc content for extraction
-
-notion:
-  enabled: true
-  token_env: "NOTION_TOKEN"
-  databases:
-    - id: "abc123..."
-      name: "Project Tracker"
-    - id: "def456..."
-      name: "Hiring Pipeline"
-  pages: []                            # individual pages to monitor
-```
-
-## Patterns to Follow
-
-### Pattern 1: Source Module Interface Contract
-Every new ingest module must follow the same interface pattern.
-
-**What:** Each source module exports a single top-level fetch function that accepts (target_date, config) and returns list[SourceItem].
-**When:** Every new data source.
 **Example:**
 ```python
-# src/ingest/slack.py
-def fetch_slack_activity(target_date: date, config: dict) -> list[SourceItem]:
-    """Fetch and normalize all Slack activity for a target date."""
-    ...
+async def run_pipeline(ctx: PipelineContext) -> None:
+    # Independent ingest sources run in parallel via thread pool
+    slack_task = asyncio.to_thread(_ingest_slack, ctx)
+    hubspot_task = asyncio.to_thread(_ingest_hubspot, ctx)
+    docs_task = asyncio.to_thread(_ingest_docs, ctx)
+    notion_task = asyncio.to_thread(_ingest_notion, ctx)
+    calendar_task = asyncio.to_thread(_ingest_calendar, ctx)
 
-# src/ingest/hubspot.py
-def fetch_hubspot_activity(target_date: date, config: dict) -> list[SourceItem]:
-    """Fetch and normalize all HubSpot activity for a target date."""
-    ...
+    results = await asyncio.gather(
+        slack_task, hubspot_task, docs_task, notion_task, calendar_task,
+        return_exceptions=True,
+    )
+
+    # Unpack results, treat exceptions as empty returns
+    slack_items = results[0] if not isinstance(results[0], Exception) else []
+    hubspot_items = results[1] if not isinstance(results[1], Exception) else []
+    # ... etc
 ```
 
-### Pattern 2: Graceful Degradation Per Source
-Each source fails independently without blocking the pipeline.
+**Why this over pure async rewrite:** Google API Python client and `slack_sdk.web.WebClient` are synchronous. Rewriting them to use httpx async would be massive scope expansion for marginal benefit. `asyncio.to_thread()` gives real concurrency with minimal code change.
 
-**What:** Wrap each source's fetch in try/except in main.py, log warning, continue with available data.
-**When:** Always. This is the existing pattern for transcripts and must be maintained.
+**Confidence:** HIGH -- `asyncio.to_thread()` is standard library, well-understood behavior.
+
+### Pattern 2: Parallel Per-Meeting Extraction with AsyncAnthropic
+
+**What:** Use `anthropic.AsyncAnthropic` for concurrent Claude API calls during per-meeting extraction. This is the single biggest performance win.
+
+**When to use:** When you have N independent Claude API calls (per-meeting extraction currently processes 5-10 meetings sequentially).
+
+**Trade-offs:** True async (no thread pool), but requires converting `extract_meeting` and `extract_all_meetings` to async functions. The Anthropic Python SDK natively supports `AsyncAnthropic` with identical API surface.
+
 **Example:**
 ```python
-# In run_daily():
-source_items: list[SourceItem] = []
+from anthropic import AsyncAnthropic
 
-for fetch_fn, source_name in [
-    (fetch_slack_activity, "Slack"),
-    (fetch_hubspot_activity, "HubSpot"),
-    (fetch_google_docs_activity, "Google Docs"),
-    (fetch_notion_activity, "Notion"),
-]:
-    try:
-        items = fetch_fn(current, config)
-        source_items.extend(items)
-        logger.info("Fetched %d items from %s", len(items), source_name)
-    except Exception as e:
-        logger.warning("%s ingestion failed: %s. Continuing.", source_name, e)
+async def extract_meeting_async(
+    event: NormalizedEvent,
+    config: dict,
+    client: AsyncAnthropic,
+) -> MeetingExtraction | None:
+    if not event.transcript_text:
+        return None
+
+    response = await client.messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        messages=[{"role": "user", "content": prompt}],
+        output_config={
+            "format": {
+                "type": "json_schema",
+                "schema": MeetingExtractionOutput.model_json_schema(),
+            }
+        },
+    )
+    data = json.loads(response.content[0].text)
+    return MeetingExtractionOutput.model_validate(data)
+
+async def extract_all_meetings_async(
+    events: list[NormalizedEvent],
+    config: dict,
+    client: AsyncAnthropic,
+) -> list[MeetingExtraction]:
+    tasks = [
+        extract_meeting_async(e, config, client)
+        for e in events if e.transcript_text
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    return [r for r in results if isinstance(r, MeetingExtraction)]
 ```
 
-### Pattern 3: Raw Response Caching
-Cache raw API responses for debugging and reprocessing.
+**Performance impact:** 8 meetings at 3-5s each: sequential = 24-40s, parallel = 3-5s. This is the dominant bottleneck.
 
-**What:** Each source writes its raw API response to output/raw/YYYY/MM/DD/{source}.json, matching the existing calendar caching pattern in calendar.py's cache_raw_response().
-**When:** Every source, every run.
+**Confidence:** HIGH -- `AsyncAnthropic` is documented first-class in the Anthropic Python SDK.
 
-### Pattern 4: Date-Bounded Queries
-Every API call is scoped to the target date.
+### Pattern 3: Structured Output Migration (Replace Markdown Parsing)
 
-**What:** Use each API's native date filtering at query time, never fetch-all-then-filter.
-**When:** Every API call.
+**What:** Replace `_parse_extraction_response()` and `_parse_synthesis_response()` with Claude structured outputs (`output_config` with `json_schema`), getting guaranteed-valid Pydantic models instead of regex-parsing markdown.
+
+**Migration targets:**
+
+| Call Site | Current Parsing | New Schema | Priority |
+|-----------|----------------|------------|----------|
+| `extractor.py` `extract_meeting()` | `_parse_extraction_response()` -- regex `## ` header splitting, pipe-delimited items | `MeetingExtractionOutput` | HIGH (most fragile parser) |
+| `synthesizer.py` `synthesize_daily()` | `_parse_synthesis_response()` -- regex `## ` header splitting, bullet/table extraction | `DailySynthesisOutput` | HIGH (most complex parser) |
+| `commitments.py` `extract_commitments()` | Already uses `output_config` + `CommitmentsOutput` | No change | DONE |
+| `weekly.py` weekly rollup | Markdown parsing of thread detection | `WeeklySynthesisOutput` | MEDIUM (lower frequency) |
+| `monthly.py` monthly narrative | Markdown parsing | Out of v1.5.1 scope | LOW |
+
+**New Pydantic schemas needed:**
+
+```python
+# models/outputs.py
+
+class MeetingExtractionOutput(BaseModel):
+    """Structured output for per-meeting extraction (replaces markdown parsing)."""
+    model_config = ConfigDict(extra="forbid")
+
+    decisions: list[ExtractionItem] = Field(default_factory=list)
+    commitments: list[ExtractionItem] = Field(default_factory=list)
+    substance: list[ExtractionItem] = Field(default_factory=list)
+    open_questions: list[ExtractionItem] = Field(default_factory=list)
+    tensions: list[ExtractionItem] = Field(default_factory=list)
+
+class DailySynthesisOutput(BaseModel):
+    """Structured output for daily synthesis (replaces markdown parsing)."""
+    model_config = ConfigDict(extra="forbid")
+
+    executive_summary: str | None = None
+    substance: list[str] = Field(default_factory=list)
+    decisions: list[str] = Field(default_factory=list)
+    commitments: list[str] = Field(default_factory=list)
+```
+
+**API call pattern (GA, proven in commitments.py):**
+```python
+response = client.messages.create(
+    model=model,
+    max_tokens=max_tokens,
+    messages=[{"role": "user", "content": prompt}],
+    output_config={
+        "format": {
+            "type": "json_schema",
+            "schema": MeetingExtractionOutput.model_json_schema(),
+        }
+    },
+)
+data = json.loads(response.content[0].text)
+result = MeetingExtractionOutput.model_validate(data)
+```
+
+**What this eliminates:** All of `_parse_extraction_response()` (67 lines), `_parse_section_items()` (40 lines), `_parse_legacy_blocks()` (43 lines), and `_parse_synthesis_response()` (84 lines). That is ~234 lines of fragile parsing code replaced by schema definitions.
+
+**Confidence:** HIGH -- `commitments.py` already proves the `output_config` pattern works in this codebase with fallback to beta header.
+
+### Pattern 4: Pydantic Config Model (Replace Untyped Dict)
+
+**What:** Replace `load_config() -> dict` with a typed Pydantic model. All downstream code accesses typed fields instead of `.get()` chains with default fallbacks.
+
 **Example:**
 ```python
-# Slack: oldest/latest params (Unix timestamps)
-client.conversations_history(channel=ch, oldest=str(day_start.timestamp()),
-                             latest=str(day_end.timestamp()))
+# models/config.py
+from pydantic import BaseModel, Field
 
-# HubSpot: search filter on lastmodifieddate
-filter = {"propertyName": "hs_lastmodifieddate", "operator": "BETWEEN",
-          "value": day_start_ms, "highValue": day_end_ms}
+class SlackConfig(BaseModel):
+    enabled: bool = False
+    channels: list[dict] = Field(default_factory=list)
+    dms: list[dict] = Field(default_factory=list)
+    thread_min_replies: int = 3
+    thread_min_participants: int = 2
+    max_messages_per_channel: int = 100
+    bot_allowlist: list[str] = Field(default_factory=list)
+    discovery_check_days: int = 7
 
-# Google Docs: Drive query with modifiedTime
-q = f"mimeType='application/vnd.google-apps.document' and modifiedTime > '{iso_start}'"
+class NotionConfig(BaseModel):
+    enabled: bool = False
+    databases: list[dict] = Field(default_factory=list)
+    pages: list[str] = Field(default_factory=list)
 
-# Notion: database query with last_edited_time filter
-filter = {"timestamp": "last_edited_time",
-          "last_edited_time": {"on_or_after": iso_start}}
+class CacheConfig(BaseModel):
+    retention_days: int = 30
+
+class PipelineConfig(BaseModel):
+    pipeline: PipelineSettings
+    calendars: CalendarSettings
+    transcripts: TranscriptSettings
+    synthesis: SynthesisSettings
+    slack: SlackConfig = SlackConfig()
+    google_docs: GoogleDocsConfig = GoogleDocsConfig()
+    hubspot: HubSpotConfig = HubSpotConfig()
+    notion: NotionConfig = NotionConfig()
+    cache: CacheConfig = CacheConfig()
 ```
+
+**Migration strategy:** Change `PipelineContext.config` type from `dict` to `PipelineConfig`. Update all `config.get("x", {}).get("y", default)` to `config.x.y`. This is mechanical but touches many files -- do it as the first step before adding new features.
+
+**Why Pydantic BaseModel over pydantic-settings BaseSettings:** The existing config loading is file-based YAML with a few env var overrides. BaseSettings is designed for env-var-first configuration. Use plain BaseModel with manual YAML loading and env var override logic (which already exists in `load_config()`).
+
+**Confidence:** HIGH -- Pydantic is already used for all models in the codebase.
+
+### Pattern 5: Content Fingerprint Dedup
+
+**What:** Pre-LLM algorithmic deduplication using content fingerprinting. Catches obvious duplicates before they reach the synthesis prompt, supplementing (not replacing) the LLM-based dedup.
+
+**How it works:** Combine normalized title + timestamp bucket + sorted participants into a fingerprint. Items with matching fingerprints are duplicates. This generalizes the existing `_dedup_hubspot_items()` logic in `synthesizer.py` (which already does time-bucket matching for HubSpot meetings vs calendar events).
+
+**Example:**
+```python
+import hashlib
+
+def fingerprint_item(item: SourceItem) -> str:
+    normalized_title = item.title.lower().strip()
+    time_bucket = int(item.timestamp.timestamp()) // 300  # 5-min buckets
+    participants = ",".join(sorted(p.lower() for p in item.participants))
+    raw = f"{normalized_title}|{time_bucket}|{participants}"
+    return hashlib.md5(raw.encode()).hexdigest()
+
+def dedup_source_items(items: list[SourceItem]) -> list[SourceItem]:
+    seen: dict[str, SourceItem] = {}
+    for item in items:
+        fp = fingerprint_item(item)
+        if fp not in seen:
+            seen[fp] = item
+        else:
+            # Keep the one with more content
+            if len(item.content) > len(seen[fp].content):
+                seen[fp] = item
+    return list(seen.values())
+```
+
+**Placement in pipeline:** After all ingest modules return, before synthesis. Replaces the current `_dedup_hubspot_items()` with a generalized version.
+
+## Data Flow
+
+### Current Flow
+```
+config.yaml (unvalidated dict)
+    |
+PipelineContext(config=dict, claude_client=Anthropic)
+    |
+_ingest_slack(ctx)     -> list[SourceItem]     --+
+_ingest_hubspot(ctx)   -> list[SourceItem]       |  (sequential)
+_ingest_docs(ctx)      -> list[SourceItem]       |
+_ingest_calendar(ctx)  -> (categorized, ...)   --+
+    |
+_dedup_hubspot_items() -> filtered list
+    |
+extract_all_meetings() -> list[MeetingExtraction]  (sequential Claude calls)
+    |
+synthesize_daily()     -> dict (parsed from markdown)
+    |
+extract_commitments()  -> list[ExtractedCommitment] (structured output)
+    |
+write_daily_summary() + write_daily_sidecar()
+```
+
+### Target Flow (v1.5.1)
+```
+config.yaml -> PipelineConfig (Pydantic validated at load time)
+    |
+PipelineContext(config=PipelineConfig, claude_client=Anthropic,
+                async_claude=AsyncAnthropic)
+    |
+asyncio.gather(                                    --+
+    to_thread(_ingest_slack),    -> list[SourceItem]  |
+    to_thread(_ingest_hubspot),  -> list[SourceItem]  |  PARALLEL
+    to_thread(_ingest_docs),     -> list[SourceItem]  |
+    _ingest_notion(async native),-> list[SourceItem]  |  (NEW)
+    to_thread(_ingest_calendar), -> (categorized,...) |
+)                                                  --+
+    |
+dedup_source_items(all_items)   -> deduplicated list  (NEW: algorithmic)
+    |
+extract_all_meetings_async()    -> list[MeetingExtraction]  (PARALLEL Claude)
+    |                                                        (structured output)
+synthesize_daily()              -> DailySynthesisOutput      (structured output)
+    |
+extract_commitments()           -> list[ExtractedCommitment] (unchanged)
+    |
+write_daily_summary() + write_daily_sidecar()
+cache_manager.cleanup()         (NEW: TTL-based cache purge)
+```
+
+## Integration Points
+
+### New External Services
+
+| Service | SDK | Auth | Notes |
+|---------|-----|------|-------|
+| Notion API | `notion-client` (ramnes/notion-sdk-py) | Bearer token via `NOTION_TOKEN` env var | `AsyncClient` for native async; query databases by ID list from config |
+| Anthropic (async) | `anthropic` (same package, `AsyncAnthropic` class) | Same `ANTHROPIC_API_KEY` | Alongside existing sync `Anthropic` for backward compat |
+
+### Internal Boundary Changes
+
+| Boundary | Current | v1.5.1 | Notes |
+|----------|---------|--------|-------|
+| pipeline -> ingest | Sync function calls in sequence | `asyncio.to_thread()` wrappers; native async for Notion | Ingest functions stay sync except Notion |
+| pipeline -> synthesis | Sync `extract_all_meetings()` | Async `extract_all_meetings_async()` with `AsyncAnthropic` | Biggest performance improvement |
+| config -> everything | `config.get()` chains with defaults | Typed attribute access on Pydantic model | Mechanical refactor, many files |
+| ingest -> cache (module globals) | `_user_cache`, `_channel_name_cache`, `_user_email_cache` as mutable module-level dicts | Instance-level or passed through context | Required for async safety |
+
+### Notion Integration Specifics
+
+**What Notion provides for daily summaries:**
+- Pages the user edited today (via database query with `last_edited_time` filter)
+- Database items modified today (same filter)
+- Page content extraction (block children API, recursive)
+
+**Notion API constraints (from official docs):**
+- No "diff" endpoint -- full current page only, not what changed
+- Rate limit: 3 requests/second per integration
+- Block children are paginated (100 per page), nested blocks require recursive fetch
+- Rich text is block-based -- requires traversal to extract plain text
+- Integration must be explicitly shared with each page/database in Notion UI
+
+**Recommended approach:**
+1. Config lists database IDs to monitor
+2. Query each database with `last_edited_time` filter for target date
+3. For returned pages: fetch title + top-level block children only (one API call per page)
+4. Convert to `SourceItem` with `source_type=NOTION_PAGE` or `NOTION_DATABASE`
+5. Do NOT recursively fetch nested blocks -- title + first-level content is sufficient for synthesis context
+
+### Cache Retention
+
+**Current cache locations:**
+- `output/{date}/raw_events.json` -- raw calendar API response
+- `output/{date}/raw_emails_transcripts.json` -- raw email data
+- In-memory module globals (Slack users, channel names, Docs user email)
+
+**Recommended cache manager:**
+- Walk `output/` directory for date-stamped subdirectories
+- Delete `raw_*.json` files older than configurable TTL (default 30 days)
+- Run at pipeline end (post-output, non-blocking)
+- Config: `cache.retention_days: 30`
+
+## Recommended Build Order
+
+Dependency graph:
+```
+Typed Config (foundation) ------> every other feature reads config
+    |
+    +-- Structured Outputs ------> independent of async, schema-only change
+    |       |
+    |       +-- Extractor migration (drop _parse_extraction_response)
+    |       +-- Synthesizer migration (drop _parse_synthesis_response)
+    |
+    +-- Notion Ingest -----------> needs config for database IDs
+    |
+    +-- Algorithmic Dedup -------> needs all SourceItems from all sources
+    |
+    +-- Slack Batch Resolution --> prerequisite for async safety (no module globals)
+    |
+    +-- Asyncio Parallelization -> capstone, benefits from all prior changes
+    |
+    +-- Cache Retention ---------> independent, lowest risk
+```
+
+**Recommended order:**
+
+1. **Typed Config** (`models/config.py` + rewrite `config.py`) -- Foundation. All other features reference config. Pure refactor, no new behavior, easy to validate. Touch this first because later features add new config sections.
+
+2. **Structured Output Migration** (`models/outputs.py` + modify `extractor.py` + modify `synthesizer.py`) -- Independent of async work. Migrate to `output_config` + Pydantic schemas. Delete ~234 lines of markdown parsing code. Test with existing sequential pipeline to isolate correctness from concurrency.
+
+3. **Notion Ingest** (`ingest/notion.py` + modify `models/sources.py` + modify `pipeline.py`) -- New module following established `SourceItem` pattern. Wire into `pipeline.py` sequentially first. Test independently before parallelization.
+
+4. **Algorithmic Dedup** (`dedup/fingerprint.py` + modify `pipeline.py`) -- Insert between ingest and synthesis. Replaces `_dedup_hubspot_items()` with generalized fingerprint-based dedup. Test with existing sources to verify no false positives before adding Notion data.
+
+5. **Slack Batch Resolution + Cache Cleanup** (modify `ingest/slack.py` + modify `ingest/google_docs.py`) -- Use `users.list()` instead of per-user `users.info()` calls. Move caches from module globals to function-local dicts. Required prerequisite for async safety.
+
+6. **Asyncio Parallelization** (modify `pipeline.py` + modify `main.py` + modify `extractor.py`) -- The capstone. Convert `run_pipeline()` to async, wrap sync ingest with `asyncio.to_thread()`, convert `extract_all_meetings()` to async with `AsyncAnthropic`. Benefits from all prior changes being stable.
+
+7. **Cache Retention** (`cache/manager.py`) -- Lowest risk, lowest dependency. Can be done at any point. TTL-based cleanup of raw data files.
+
+**Rationale for this order:** Each step can be tested independently. Typed config is pure refactor (no behavior change). Structured outputs are testable with the existing sequential pipeline. Notion adds a new module without changing existing ones. Dedup is an insert, not a rewrite. Async is the riskiest change and goes last so all other features are stable.
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: God Model
-**What:** Extending NormalizedEvent with 20+ nullable fields to handle every source type.
-**Why bad:** Every consumer of NormalizedEvent must now handle a superset of fields that are mostly None. Type safety degrades. The model name becomes a lie -- it is no longer "normalized."
-**Instead:** Separate SourceItem model that converges with NormalizedEvent at the synthesis layer.
+### Anti-Pattern 1: Converting All Ingest Modules to Native Async
 
-### Anti-Pattern 2: Real-Time Ingestion
-**What:** Setting up webhooks or socket connections for live data.
-**Why bad:** The system is a batch pipeline. Real-time adds WebSocket management, webhook endpoints, persistent processes, retry queues. All for data that will be synthesized once daily anyway.
-**Instead:** Batch fetch for target date at pipeline runtime. Per PROJECT.md: "end-of-day batch sufficient."
+**What people do:** Rewrite every ingest module (calendar, slack, hubspot, docs) to use async HTTP clients.
+**Why it's wrong:** Google API Python client and `slack_sdk.web.WebClient` are synchronous. Replacing them with raw httpx/aiohttp means losing SDK pagination, error handling, and OAuth token refresh logic.
+**Do this instead:** Use `asyncio.to_thread()` for sync ingest modules. True async only for Notion (native `AsyncClient`) and Claude API calls (`AsyncAnthropic`).
 
-### Anti-Pattern 3: Pre-Synthesis Cross-Source Matching
-**What:** Building an entity resolution system to link Slack messages to calendar events to HubSpot deals before synthesis.
-**Why bad:** Fragile heuristic matching, high false-positive rate, massive engineering effort. This is literally what v2.0's entity layer is designed for.
-**Instead:** Let the LLM do cross-source dedup at synthesis time. It is better at fuzzy topic matching than any heuristic system you would build in a week.
+### Anti-Pattern 2: Module-Level Mutable State with Async
 
-### Anti-Pattern 4: Full Content Ingestion
-**What:** Sending entire Slack channel histories or full Google Docs content to Claude.
-**Why bad:** Token costs explode, context windows fill with noise, extraction quality drops.
-**Instead:** Thread-level collapsing for Slack, first-N-chars for Docs, structured properties for HubSpot/Notion.
+**What people do:** Keep `_user_cache` and `_channel_name_cache` as module globals while running ingest functions in parallel threads.
+**Why it's wrong:** Concurrent writes to unsynchronized dicts corrupt data. Even with CPython's GIL, dict operations are not atomic at the application level.
+**Do this instead:** For Slack, the batch `users.list()` call eliminates per-user caching entirely. For remaining caches, pass through function parameters or store on `PipelineContext`.
 
-### Anti-Pattern 5: Generic API Client Wrapper
-**What:** Building an abstraction layer over all four APIs.
-**Why bad:** Each API has fundamentally different data models, pagination, and auth. Abstraction would be leaky.
-**Instead:** Each ingest module uses its SDK directly; normalization happens at the output (SourceItem model).
+### Anti-Pattern 3: Combining Structured Output and Async Migration
 
-## Scalability Considerations
+**What people do:** Convert to structured outputs AND async at the same time.
+**Why it's wrong:** Two variables changing simultaneously makes debugging impossible. Is the failure in the new schema, the prompt adjustment, or the async behavior?
+**Do this instead:** Migrate to structured outputs first with the sequential pipeline. Verify correctness. Then convert to async as a separate step.
 
-| Concern | Current (2 sources) | v1.5 (6 sources) | v2.0+ (entity layer) |
-|---------|---------------------|-------------------|-----------------------|
-| API calls per run | ~5-10 (Calendar + Gmail + Drive) | ~20-40 (add Slack channels + HubSpot + Notion) | Same; entity resolution is post-processing |
-| LLM API calls | 1 per meeting + 1 synthesis | +1 Slack batch extraction + 1 synthesis | +entity extraction pass |
-| Token consumption | ~2K-8K per meeting extraction | +~3K-5K for source batch extractions | +~2K for entity extraction |
-| Runtime | ~2-5 min | ~5-10 min (mostly API latency) | ~10-15 min |
-| Config complexity | Simple YAML | Moderate (channel lists, DB IDs) | Needs config validation |
+### Anti-Pattern 4: Deep Recursive Notion Block Fetching
 
-## Pipeline Orchestration Update
+**What people do:** Recursively fetch all nested blocks for every Notion page to get full document content.
+**Why it's wrong:** Notion blocks can be deeply nested, each level requiring a separate API call. A page with 10 nested sections means 10+ calls at 3 req/sec rate limit = 3+ seconds per page. For a daily summary, you need context, not the full document.
+**Do this instead:** Fetch title + top-level blocks only (one API call per page). Properties from database items are already structured -- use them directly.
 
-The updated `run_daily()` flow in main.py:
+### Anti-Pattern 5: TaskGroup Instead of gather for Ingest
 
-```
-1. Auth: Load Google creds, Slack token, HubSpot token, Notion token
-2. Calendar ingest: fetch_events_for_date() -> categorized events
-3. Transcript ingest: fetch_all_transcripts() -> match to events
-4. Source ingest (parallel-safe, independent):
-   a. fetch_slack_activity(date, config) -> list[SourceItem]
-   b. fetch_hubspot_activity(date, config) -> list[SourceItem]
-   c. fetch_google_docs_activity(date, config) -> list[SourceItem]
-   d. fetch_notion_activity(date, config) -> list[SourceItem]
-5. Cache all raw responses
-6. Stage 1a: extract_all_meetings(events_with_transcripts) -> list[MeetingExtraction]
-7. Stage 1b: extract_source_items(slack_items, config) -> list[SourceExtraction]
-         (HubSpot/Docs/Notion skip this step -- fed raw into Stage 2)
-8. Stage 2: synthesize_daily(meeting_extractions, source_extractions,
-                             raw_hubspot_items, raw_docs_items, raw_notion_items)
-9. Build DailySynthesis model (updated with source_item_count, source_summary)
-10. Write output (markdown, sidecar, Slack notification)
-```
+**What people do:** Use `asyncio.TaskGroup` (Python 3.11+) instead of `asyncio.gather()` for ingest parallelization.
+**Why it's wrong for this use case:** TaskGroup cancels remaining tasks when one fails. The entire design of the pipeline is that one source failing should NOT block others.
+**Do this instead:** Use `asyncio.gather(return_exceptions=True)` which lets all tasks complete and returns exceptions as values you can check individually.
 
-Steps 4a-4d can run concurrently (ThreadPoolExecutor) since they hit different APIs with no interdependencies.
+## Scaling Considerations
 
-## Suggested Build Order
+| Concern | Current (5 sources) | With Notion (6 sources) | Future (10+ sources) |
+|---------|---------------------|------------------------|---------------------|
+| Wall-clock ingest time | ~30-45s (sequential) | ~35-50s (sequential) | Would grow linearly |
+| Wall-clock with async | ~10-15s (parallel) | ~10-15s (parallel) | ~10-15s (parallel, bottleneck = slowest source) |
+| Per-meeting extraction | ~25-40s (8 meetings sequential) | Same | Same |
+| Per-meeting with async | ~3-5s (8 meetings parallel) | Same | Add semaphore if >20 meetings |
 
-Based on dependency analysis and value delivery:
+### First Bottleneck: Sequential Per-Meeting Claude Calls
+8 meetings x 3-5s each = 24-40s. Parallelizing drops this to ~5s total. This is the single largest improvement.
 
-1. **SourceItem model + source_normalizer.py** -- Foundation everything else depends on
-2. **Slack ingest** -- Highest signal source per PROJECT.md learnings, fills the "async work" gap
-3. **Updated synthesis prompts + extractor changes** -- Needed to actually use Slack data in output
-4. **HubSpot ingest** -- Structured CRM data, independent from Slack work
-5. **Google Docs ingest** -- Leverages existing Google OAuth, straightforward
-6. **Notion ingest** -- Separate auth, separate API, can be last
-7. **Cross-source dedup tuning** -- Refine synthesis prompts based on real multi-source data
-8. **DailySynthesis model updates + writer changes** -- Source attribution in output
+### Second Bottleneck: Sequential Ingest
+Slack + HubSpot + Docs + Calendar each take 3-10s. Parallelizing overlaps them, saving ~15-25s.
 
-**Rationale:** Model first (everything depends on it), then highest-value source (Slack), then synthesis integration (to validate the pattern works end-to-end before adding more sources), then remaining sources in order of signal value. Writer updates come last because the synthesis pipeline must produce multi-source output before the writer can render it.
+### Future Concern: Notion Rate Limit
+At 3 req/sec, monitoring 10 databases with 5 changed pages each = 60 API calls = 20 seconds minimum. Add `asyncio.Semaphore(3)` to cap concurrent Notion requests.
 
 ## Sources
 
-- Existing codebase analysis (all src/ files read directly): models/events.py, ingest/normalizer.py, ingest/calendar.py, ingest/transcripts.py, ingest/drive.py, synthesis/extractor.py, synthesis/synthesizer.py, synthesis/prompts.py, main.py, config.py
-- [Slack conversations.history API](https://api.slack.com/methods/conversations.history) -- rate limits, pagination
-- [Slack Python SDK](https://tools.slack.dev/python-slack-sdk/legacy/conversations) -- conversations API usage
-- [HubSpot Python SDK](https://github.com/HubSpot/hubspot-api-python) -- CRM object access patterns
-- [Notion API](https://developers.notion.com) -- database query, page retrieval
-- [Notion Python SDK (notion-sdk-py)](https://github.com/ramnes/notion-sdk-py) -- community Python client
-- PROJECT.md -- scope constraints, v1.0 learnings, design decisions
+- Anthropic Claude API Structured Outputs documentation: https://platform.claude.com/docs/en/build-with-claude/structured-outputs
+- Anthropic Python SDK (AsyncAnthropic): https://github.com/anthropics/anthropic-sdk-python
+- notion-sdk-py (sync + async client): https://github.com/ramnes/notion-sdk-py
+- Notion API Reference (database query, pagination): https://developers.notion.com/reference/post-database-query
+- Python asyncio documentation (gather, to_thread): https://docs.python.org/3/library/asyncio-task.html
+- Pydantic documentation (BaseModel, Settings): https://docs.pydantic.dev/latest/concepts/pydantic_settings/
+- Direct codebase analysis: `src/pipeline.py`, `src/synthesis/extractor.py`, `src/synthesis/synthesizer.py`, `src/synthesis/commitments.py`, `src/ingest/slack.py`, `src/ingest/google_docs.py`, `src/config.py`, `src/models/sources.py`, `src/models/events.py`
+
+---
+*Architecture research for: Work Intelligence System v1.5.1 pipeline enhancement*
+*Researched: 2026-04-04*

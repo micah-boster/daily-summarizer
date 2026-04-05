@@ -1,237 +1,292 @@
-# Feature Research: Multi-Source Data Ingestion (v1.5)
+# Feature Research: v1.5.1 -- Notion + Performance + Reliability
 
-**Domain:** Work intelligence -- expanded data source integrations (Slack, HubSpot, Google Docs, Notion)
-**Researched:** 2026-04-03
-**Confidence:** MEDIUM -- API capabilities well-documented; cross-source dedup patterns are less standardized and need implementation validation
+**Domain:** Work intelligence pipeline -- Notion ingestion, performance, reliability, structured outputs
+**Researched:** 2026-04-04
+**Confidence:** HIGH (existing codebase well-understood, API docs verified)
 
 ## Feature Landscape
 
 ### Table Stakes (Users Expect These)
 
-These are the minimum features that make each new source actually useful in the daily synthesis. Without these, adding the source adds noise without signal.
-
-#### Slack Ingestion
+Features that complete the v1.5.1 milestone promise. Without these, the milestone is incomplete.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Channel message fetch for curated list | Core value: see async decisions that never surface in meetings | LOW | `conversations.history` with date range filter. Internal/custom apps retain Tier 3 limits (50+ req/min, 1000 msg/req) -- rate limits only punitive for non-Marketplace commercially distributed apps |
-| Thread resolution (fetch replies) | Slack threads are where decisions actually happen; top-level messages alone are misleading | MEDIUM | `conversations.replies` per thread. Requires detecting which messages have thread_ts != ts, then batch-fetching. Can be chatty on API calls for active channels |
-| Channel discovery + curation config | User needs to select high-signal channels, not ingest all 50+ | LOW | `conversations.list` to enumerate, store curated list in config YAML. Already a project decision |
-| Bot/app message filtering | Bot spam (deploy notifications, CI alerts) drowns signal | LOW | Filter by `subtype` field and `bot_id` presence. Configurable allow/block list |
-| Source attribution in output | "Per Slack #channel-name" lets reader trace back to source | LOW | Attach channel name to each normalized item. Existing pattern in transcript source attribution |
-
-#### HubSpot Ingestion
-
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Deal stage changes for target date | Deal movement is the primary CRM signal for a manager/exec | MEDIUM | Use CRM search API with `lastmodifieddate` filter on deals, then check `dealstage` property changes via property history. Requires `hubspot-api-python` SDK |
-| Contact activity notes | Manual notes logged by team members are high-signal, low-volume | LOW | Engagements API filtered by type=NOTE and date range |
-| Task creation/completion | Tasks represent commitments that should flow into daily commitments section | LOW | Engagements API filtered by type=TASK with `hs_timestamp` date filter |
-| Meeting logs (HubSpot meetings, not calendar) | Some meetings are logged in HubSpot but not calendar | LOW | Engagements API filtered by type=MEETING. Cross-reference with calendar events for dedup |
-| Deal-level attribution | "Per HubSpot: [Deal Name]" in synthesis output | LOW | Attach deal name from association lookups |
-
-#### Google Docs Ingestion
-
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Detect docs created/edited today | Know what documents were worked on, even without meeting context | LOW | Google Drive API `files.list` with `modifiedTime` filter and `mimeType='application/vnd.google-apps.document'`. Already have Google OAuth creds |
-| Extract document title + brief content summary | Title alone is insufficient; need enough content to understand what the doc is about | MEDIUM | Google Docs API `documents.get` returns structured JSON. Need to extract text from body elements. For long docs, truncate to first N paragraphs or use LLM summarization |
-| Distinguish "I edited" vs "shared with me" | Only surface docs the user actually worked on, not every shared doc | LOW | `modifiedByMeTime` field in Drive API distinguishes user edits from others' edits |
-| Source attribution | "Per Google Docs: [Doc Title]" | LOW | Straightforward metadata attachment |
-
-#### Notion Ingestion
-
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Detect pages updated today | Surface Notion work activity that doesn't appear anywhere else | MEDIUM | Use database query with `last_edited_time` timestamp filter. Requires knowing which databases/spaces to monitor -- needs a curated list like Slack channels. **IMPORTANT:** Notion API version 2025-09-03 introduced breaking changes for multi-source databases; must use `data_source_id` |
-| Page title + property changes | Know what changed, not just that something changed | MEDIUM | Retrieve page properties via pages API. For content changes, need to use blocks API to get page content -- Notion doesn't expose diffs, only current state |
-| Database entry changes | Track structured data changes (e.g., project status updates, task completions) | MEDIUM | Query database with date filter, compare against previous run's snapshot to detect changes. Notion has no native "what changed" API -- must diff against stored state |
-| Workspace/database curation config | Like Slack channels: user picks which Notion databases matter | LOW | Config YAML list of database IDs to monitor |
-| Source attribution | "Per Notion: [Page Title]" or "Per Notion: [Database Name]" | LOW | Metadata from page/database objects |
-
-### Cross-Source Features (Table Stakes for v1.5)
-
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Normalized event model expansion | All sources must produce items the synthesis pipeline can consume | MEDIUM | Current `NormalizedEvent` is calendar-centric (start_time, attendees, transcript). Need a broader `NormalizedItem` or add a `source_type` discriminator with source-specific fields. **Key dependency: this shapes everything downstream** |
-| Source-aware synthesis prompts | Slack threads need different extraction than meeting transcripts or HubSpot deal changes | MEDIUM | Current `EXTRACTION_PROMPT` assumes meeting transcript format. Need source-type-specific prompt templates, or a unified prompt that handles heterogeneous input |
-| Cross-source deduplication | Same topic in meeting + Slack + HubSpot = one synthesized item, not three | HIGH | This is the hardest feature. Time-proximity + title-similarity (current approach) won't work across source types. Needs LLM-assisted or embedding-based topic matching. Start with simple heuristics (same people + same day + keyword overlap) and iterate |
-| Source attribution throughout output | Every bullet in substance/decisions/commitments traces back to origin source | LOW | Extend existing `(per [source])` pattern. Already works for meetings; apply consistently to all sources |
-| Per-source error isolation | One source failing should not block the entire pipeline | LOW | Existing pattern: transcript failures don't block calendar. Apply same try/except isolation to each new source |
+| Notion page/database ingestion | Notion is the last major daily-use tool not yet ingested; PROJECT.md lists it as primary user tool | MEDIUM | Notion API has no diff endpoint -- must query by `last_edited_time` filter and compare content. SDK: `notion-sdk-py` (ramnes) supports sync+async. |
+| Typed config model (Pydantic validation) | Current `load_config()` returns raw dict, zero validation. Typos in config silently produce wrong behavior (e.g., `enbled: true`). Every ingest module does its own `.get()` with fallback defaults scattered across the codebase. | LOW-MEDIUM | Pydantic already a dependency (v2.12+). Define nested BaseModel classes mirroring config.yaml structure. Validate on startup, fail fast with field-specific errors. |
+| Claude API structured output migration | PROJECT.md explicitly states "migration overdue." Current extractors parse markdown with brittle regex (`_parse_section_items`, `_parse_legacy_blocks`, `_parse_synthesis_response`). Multiple parsing formats maintained for backward compat. Any Claude response format drift breaks extraction. | MEDIUM | Use `output_config.format` with `json_schema` type (GA on Sonnet 4.5+). Anthropic SDK has `client.messages.parse()` with native Pydantic model support. Eliminates ~200 lines of regex parsing in extractor.py and synthesizer.py. |
+| Raw data cache retention policy | Pipeline caches raw API responses to disk (calendar JSON, transcript emails). No cleanup mechanism exists. Over time, output/ directory grows unbounded. | LOW | Scan output dirs older than TTL, delete raw_* files. Config: `pipeline.cache_retention_days: 30`. Run at pipeline start or as separate CLI command. |
 
 ### Differentiators (Competitive Advantage)
 
-Features that make this system genuinely more useful than reading each source individually. Not required for launch, but high-value.
+Features that make v1.5.1 meaningfully better than v1.5, beyond just adding another source.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Cross-source thread detection | "This HubSpot deal was also discussed in Slack #sales and in Tuesday's meeting" -- connecting dots across sources that humans miss | HIGH | Requires entity/topic matching across source types. Could use LLM to identify topic clusters across normalized items. **Strong candidate for v1.5.1 iteration rather than v1.5.0 launch** |
-| Slack signal scoring | Auto-rank Slack messages by likely importance: messages mentioning user, messages with decisions/commitments, threads with high reply count | MEDIUM | Heuristic scoring: mentions of user, reaction count, reply count, message length, presence of keywords. Reduces noise before LLM processing |
-| Incremental ingestion with state tracking | Only fetch what's new since last run, not re-fetch entire day | MEDIUM | Store last-fetched timestamp/cursor per source. Slack has `oldest`/`latest` params. HubSpot has `lastmodifieddate`. Drive has `changes.list` with page tokens. Notion has `last_edited_time` filter. Saves API calls and processing time |
-| Commitment deadline extraction from all sources | Structured who/what/by-when from Slack messages and HubSpot tasks, not just meetings | MEDIUM | Extend existing commitment extraction to all source types. HubSpot tasks already have structured deadlines. Slack commitments need LLM extraction. Already on the PROJECT.md active requirements list |
-| HubSpot deal stage narrative | "Deal X moved from Proposal to Negotiation" as a synthesized event rather than raw property change | LOW | Transform HubSpot property history into human-readable narrative. Low complexity, high readability impact |
+| Parallel ingest modules (asyncio) | Current pipeline runs 4-5 ingest sources sequentially. With 5+ API sources, wall-clock time scales linearly. Parallelizing independent sources cuts total ingest time to the slowest source. | MEDIUM | Pipeline.py is synchronous. Need `asyncio.gather()` for independent sources. Calendar+transcripts have internal dependencies so stay sequential internally but run parallel with other sources. Use `asyncio.Semaphore` to cap concurrent API calls. Anthropic SDK supports async via `AsyncAnthropic`. |
+| Parallel per-meeting transcript extraction | `extract_all_meetings()` iterates meetings sequentially, one Claude API call per meeting. With 5-8 meetings/day at ~3-5s each = 15-40s. Parallel calls reduce to ~5s. | LOW-MEDIUM | `asyncio.gather()` over async Claude calls. Anthropic rate limits are per-minute, so 5-8 concurrent calls are well within limits. |
+| Slack user batch resolution | Current `resolve_user_names()` makes one `users.info` API call per unique user ID. With 10-20 unique users, that is 10-20 serial API calls. `users.list` returns all workspace users in one call. | LOW | Replace N `users.info` calls with one paginated `users.list` call. Build full user_id -> display_name map upfront. For typical company scale (<500 users), single call is fine. |
+| Algorithmic cross-source deduplication | Current dedup is LLM-based only (prompt instructs Claude to merge duplicates). Non-deterministic and costs tokens. Pre-LLM algorithmic pass catches obvious duplicates cheaply and deterministically. | MEDIUM | TF-IDF + cosine similarity on SourceItem content/title. Scikit-learn `TfidfVectorizer`. Threshold ~0.85 for conservative matching. Supplements LLM dedup, does not replace it. |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| Full Slack workspace ingestion | "Don't miss anything" | 50+ channels at 100+ messages/day = massive noise, high LLM cost, slow pipeline. Most channels are zero-signal for an exec | Curated channel list (5-15 channels). Discovery command to suggest high-activity channels, user confirms |
-| Google Docs full-text ingestion | "Understand what I wrote" | Long documents (10+ pages) blow up context windows and LLM costs. Most doc content is not relevant to daily intelligence | Title + first 500 words + any comments/suggestions. Or LLM-summarize to 200 words max |
-| Real-time Slack monitoring | "See decisions as they happen" | Breaks batch architecture, adds webhook complexity, creates intraday noise. System is designed for end-of-day synthesis | End-of-day batch fetch. Already an explicit out-of-scope decision in PROJECT.md |
-| Notion full page content ingestion | "Know everything that changed" | Notion pages can be huge (entire wikis). Block-by-block content retrieval is API-intensive | Title + property changes + first-level blocks only. Content summary for pages with significant changes |
-| HubSpot full CRM sync | "See all customer activity" | Full CRM dump includes hundreds of contacts, thousands of activities. Most is irrelevant daily noise | Scoped to deal stage changes, notes, and tasks on deals the user owns or is associated with |
-| Automatic channel/database discovery without curation | "Just figure out what's important" | What's important is highly personal and context-dependent. Auto-discovery over-includes | Discovery command that suggests, user curates. Config file is the source of truth |
-| Email body ingestion (beyond transcripts) | "My inbox is where work happens" | Email is the noisiest source by far. Spam, newsletters, automated notifications. Signal extraction is extremely hard | Defer to v2.0+ or never. Current transcript-from-email approach is the right scoping |
-| Notion webhook subscriptions | "Get notified of changes" | Over-engineering for batch; adds webhook server complexity | Polling via search API in daily batch |
-| Slack DM ingestion | "Decisions happen in DMs too" | Privacy boundary; DMs mix personal and work context | Public/private channels only from curated list |
-| Google Docs change tracking (revision diffs) | "Show me what changed" | Revision API is slow and diffs are noisy at document scale | Fetch current content of docs modified that day; title + summary is sufficient |
+| Real-time Notion webhook ingestion | "Get Notion changes as they happen" | Notion webhooks (automations API) are limited to triggers within Notion, not external consumers. No reliable webhook-to-external-URL path. Adds always-on server requirement for a batch pipeline. | Poll by `last_edited_time` filter during daily pipeline run. Batch is sufficient per PROJECT.md constraints. |
+| Full Notion workspace crawl | "Ingest everything from Notion" | Workspaces contain thousands of pages. Most are stale reference material. Crawling everything wastes API quota and drowns signal in noise. | Configure specific database IDs and/or page IDs. Filter by `last_edited_time` for pages changed on target date. Mirror the Google Docs pattern: curated scope + recency filter. |
+| Embedding-based dedup (sentence transformers) | "Use semantic embeddings for better duplicate detection" | Adds heavy dependency (sentence-transformers, torch) for marginal improvement over TF-IDF at this scale (~50-100 items/day). Increases install size by hundreds of MB. | TF-IDF + cosine similarity handles 70-85% of lexical duplicates. LLM-based dedup (already in place) catches semantic remainder. Two-layer approach is sufficient. |
+| Full async rewrite of entire pipeline | "Make everything async for maximum performance" | Calendar/transcript pipeline has inherent sequential dependencies (fetch events, then fetch transcripts, then match, then extract). Making everything async adds complexity without meaningful speedup for serial-dependency paths. | Targeted async: parallelize independent sources and independent Claude calls. Keep sequential logic sequential. This is the 80/20 approach. |
+| Config hot-reload | "Auto-detect config changes without restart" | Adds file-watching complexity and partial-state concerns for a CLI tool that runs once per day. | Validate config on startup. Fail fast with clear error. Re-run pipeline after fixing. |
+| Notion content diffing via stored snapshots | "Show me what changed in each Notion page" | Requires storing full page content snapshots, running diffs, managing storage growth. Over-engineered for daily intelligence use case. | Fetch current content of pages modified today. Title + content excerpt is sufficient for daily synthesis. |
 
 ## Feature Dependencies
 
 ```
-[Normalized Item Model Expansion]
-    |
-    +--requires--> [Slack Ingestion]
-    +--requires--> [HubSpot Ingestion]
-    +--requires--> [Google Docs Ingestion]
-    +--requires--> [Notion Ingestion]
-    |
-    +--requires--> [Source-Aware Synthesis Prompts]
-                       |
-                       +--requires--> [Cross-Source Deduplication]
-                                          |
-                                          +--enhances--> [Cross-Source Thread Detection] (differentiator)
+[Typed Config Model]
+    +--enables--> [Notion Ingestion] (new config section validated at startup)
+    +--enables--> [Cache Retention Policy] (retention_days from typed config)
+    +--enables--> [All Ingest Modules] (typed access replaces .get() fallbacks)
 
-[Google OAuth Credentials] --already exists--> [Google Docs Ingestion]
-                                           \--> [Google Drive file listing]
+[Parallel Ingest (asyncio)]
+    +--requires--> [Notion Ingestion exists] (to parallelize it with other sources)
+    +--enables--> [Parallel Per-Meeting Extraction] (same async infrastructure)
 
-[Slack Channel Discovery] --enables--> [Slack Ingestion]
+[Structured Output Migration]
+    +--independent-- (no dependency on other v1.5.1 features)
+    +--enables--> [Notion extraction quality] (Notion items parsed via structured outputs)
 
-[HubSpot Auth Setup] --enables--> [HubSpot Ingestion]
+[Algorithmic Dedup]
+    +--requires--> [Notion Ingestion] (so Notion items are included in dedup)
+    +--enhances--> [Existing LLM Dedup] (pre-filter before synthesis prompt)
 
-[Notion Auth Setup] --enables--> [Notion Ingestion]
+[Slack Batch User Resolution]
+    +--independent-- (pure optimization, can be done anytime)
 
-[Per-Source Error Isolation] --enhances--> [All Source Ingestion]
-
-[Incremental State Tracking] --enhances--> [All Source Ingestion] (differentiator, can defer)
+[Cache Retention]
+    +--independent-- (pure maintenance, can be done anytime)
 ```
 
 ### Dependency Notes
 
-- **Normalized Item Model must come first:** Every source ingestion module depends on a data model that can represent non-calendar items. The current `NormalizedEvent` is too calendar-specific (fields like `start_time`, `end_time`, `attendees`, `meeting_link`, `transcript_text`). This is the foundation layer.
-- **Source-aware prompts depend on model expansion:** Can't write source-specific extraction prompts until the data shape from each source is defined.
-- **Cross-source dedup depends on all sources flowing through normalization:** You need items from multiple sources to deduplicate them. This is the last integration step, not the first.
-- **Google Docs reuses existing auth:** No new OAuth setup needed. Google Drive API shares the same credentials already in use for calendar and Gmail. Only needs additional OAuth scopes (`documents.readonly`, `drive.readonly`).
-- **HubSpot and Notion require new auth flows:** Net-new API integrations with their own authentication. HubSpot: private app access token (simplest for personal tool). Notion: internal integration token (created at notion.so/my-integrations, must be shared with target pages/databases).
-- **Notion is the most complex integration:** No native change detection API, breaking API version changes, block-by-block content retrieval. Should be last source integrated.
+- **Typed Config Model first:** Every other feature touches config. Notion needs a new config section; parallelization may need concurrency settings; cache retention needs TTL. Building typed config first means new features use it from day one rather than the raw dict pattern.
+- **Notion before parallelization:** Build and test the Notion ingestor in the simpler synchronous world first, then wrap all ingestors in async. Parallelizing without Notion means retouching the code when Notion is added.
+- **Structured outputs are independent:** The extraction/synthesis migration touches different code paths (Claude API call sites) than ingestion. No ordering constraint with other features. Good candidate for early work.
+- **Algorithmic dedup after Notion:** Dedup logic should account for all source types. Building it before Notion exists means retrofitting later.
 
 ## MVP Definition
 
-### Launch With (v1.5.0)
+### Phase 1: Foundation (Config + Structured Outputs)
 
-Minimum to validate multi-source synthesis. Three sources (not four) to reduce launch risk.
+- [ ] **Typed config model with Pydantic validation** -- catches config errors on startup, provides typed access throughout pipeline, establishes pattern for new config sections
+- [ ] **Structured output migration for extraction + synthesis** -- eliminates brittle regex parsing in extractor.py (~130 lines) and synthesizer.py (~80 lines), highest reliability improvement per effort
 
-- [ ] **Normalized item model expansion** -- Extend or replace `NormalizedEvent` to handle heterogeneous source types (Slack message, HubSpot deal change, doc edit). This is the foundation.
-- [ ] **Slack channel ingestion (curated list)** -- Highest signal new source per PROJECT.md learnings. Fetch messages + thread replies from configured channels for target date. Bot filtering.
-- [ ] **HubSpot deal + activity ingestion** -- Deal stage changes, notes, and tasks for target date. Structured data that enriches meeting context.
-- [ ] **Google Docs change detection** -- List docs created/edited by user on target date. Title + brief summary. Reuses existing OAuth.
-- [ ] **Source-aware synthesis prompts** -- Different extraction approach for Slack threads vs HubSpot structured data vs meeting transcripts vs doc summaries.
-- [ ] **Source attribution in all output** -- Every synthesized item traces back to origin source with `(per [source]: [detail])` format.
-- [ ] **Per-source error isolation** -- Each source fails independently without blocking the pipeline.
-- [ ] **Config-driven source enablement** -- Each source can be enabled/disabled and configured in config.yaml.
+### Phase 2: Notion + Quick Wins
 
-### Add After Validation (v1.5.x)
+- [ ] **Notion page/database ingestion** -- completes the ingest surface with the last major daily-use tool
+- [ ] **Slack user batch resolution** -- quick API optimization, reduces Slack API calls by 10-20x
+- [ ] **Cache retention policy** -- maintenance hygiene, prevents unbounded disk growth
 
-Features to add once core multi-source synthesis is working and daily output quality is validated.
+### Phase 3: Performance + Intelligence
 
-- [ ] **Notion ingestion** -- Add after Slack + HubSpot + Docs are stable. Notion API has breaking changes (2025-09-03 multi-source databases) and no native diff support, making it the most complex integration. Trigger: user confirms the three primary sources are generating useful output.
-- [ ] **Cross-source deduplication** -- Start with time-proximity + participant-overlap heuristics. LLM-assisted topic matching as iteration. Trigger: user reports redundant items in daily synthesis.
-- [ ] **Slack signal scoring** -- Rank messages by importance before LLM processing. Trigger: Slack ingestion works but daily output is too noisy.
-- [ ] **Incremental state tracking** -- Store cursors/timestamps to avoid re-fetching. Trigger: pipeline runtime becomes noticeably slow with 4+ sources.
-- [ ] **Commitment deadline extraction from Slack/HubSpot** -- Structured who/what/by-when from non-meeting sources. Trigger: user validates meeting commitment extraction is accurate.
-- [ ] **HubSpot deal stage narrative** -- Transform raw property changes into "Deal X moved from Proposal to Negotiation." Trigger: HubSpot raw output is hard to read.
+- [ ] **Parallel ingest via asyncio** -- requires async refactor of pipeline runner, wraps all ingest modules
+- [ ] **Parallel per-meeting extraction** -- piggybacks on async infrastructure from ingest parallelization
+- [ ] **Algorithmic cross-source dedup** -- TF-IDF pre-filter supplements existing LLM dedup
 
-### Future Consideration (v2.0+)
+### Ordering Rationale
 
-- [ ] **Cross-source thread detection** -- Connecting the same topic across Slack, meetings, and HubSpot requires entity-layer awareness. Defer until v2.0 entity layer exists.
-- [ ] **Email body ingestion (beyond transcripts)** -- Too noisy for current architecture. Needs sophisticated filtering that likely requires entity layer.
-- [ ] **Slack workspace auto-discovery** -- ML-based channel importance scoring. Overkill for personal tool with 5-15 channels.
+1. **Config model first** because every subsequent feature adds config. Retroactive validation is harder.
+2. **Structured outputs early** because they are independent, high-ROI, and reduce the surface area for parsing bugs before Notion adds a new source type.
+3. **Notion before async** because building and debugging a new ingestor is easier in synchronous code. Test it works, then parallelize.
+4. **Async after all ingestors exist** because the async refactor wraps all ingest modules. Doing it earlier means touching the same code twice when Notion is added.
+5. **Algorithmic dedup last** because it operates on the output of all ingestors, so all should be stable first. Also the feature with most uncertainty (threshold tuning needed).
 
 ## Feature Prioritization Matrix
 
-| Feature | User Value | Implementation Cost | Priority | Depends On |
-|---------|------------|---------------------|----------|------------|
-| Normalized item model expansion | HIGH | MEDIUM | P0 | Nothing (foundation) |
-| Slack channel ingestion | HIGH | LOW | P1 | Model expansion |
-| HubSpot deal/activity ingestion | HIGH | MEDIUM | P1 | Model expansion, HubSpot auth |
-| Google Docs change detection | MEDIUM | LOW | P1 | Model expansion (reuses existing auth) |
-| Source-aware synthesis prompts | HIGH | MEDIUM | P1 | Model expansion |
-| Source attribution in output | HIGH | LOW | P1 | Model expansion |
-| Per-source error isolation | MEDIUM | LOW | P1 | Nothing (pattern already exists) |
-| Config-driven source enablement | MEDIUM | LOW | P1 | Nothing |
-| Notion ingestion | MEDIUM | HIGH | P2 | Model expansion, Notion auth, API version handling |
-| Cross-source deduplication | HIGH | HIGH | P2 | All sources ingesting |
-| Slack signal scoring | MEDIUM | MEDIUM | P2 | Slack ingestion |
-| Incremental state tracking | LOW | MEDIUM | P2 | All sources ingesting |
-| Commitment deadline extraction (multi-source) | MEDIUM | MEDIUM | P2 | Source-aware prompts |
-| HubSpot deal stage narrative | MEDIUM | LOW | P2 | HubSpot ingestion |
-| Cross-source thread detection | HIGH | HIGH | P3 | Deduplication, entity layer (v2.0) |
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| Typed config model (Pydantic) | MEDIUM | LOW | P1 |
+| Structured output migration | HIGH | MEDIUM | P1 |
+| Notion ingestion | HIGH | MEDIUM | P1 |
+| Slack user batch resolution | LOW | LOW | P2 |
+| Cache retention policy | LOW | LOW | P2 |
+| Parallel ingest (asyncio) | MEDIUM | MEDIUM | P2 |
+| Parallel extraction | MEDIUM | LOW | P2 |
+| Algorithmic dedup | MEDIUM | MEDIUM | P3 |
 
 **Priority key:**
-- P0: Must complete before anything else (foundation)
-- P1: Must have for v1.5.0 launch
-- P2: Should have, add in v1.5.x iterations
-- P3: Nice to have, future consideration
+- P1: Must have -- core milestone deliverables
+- P2: Should have -- meaningful improvements, add when core is stable
+- P3: Nice to have -- valuable but lowest risk of deferral
 
-## Ecosystem Context
+## Detailed Feature Specifications
 
-| Capability | Reclaim.ai / Clockwise | Notion AI | Slack AI | This System |
-|---------|------------------------|-----------|----------|--------------|
-| Meeting summarization | Calendar + transcript based | Notion meeting notes only | Slack huddle transcripts only | Multi-source: calendar + transcript + related Slack threads + HubSpot context |
-| Cross-source synthesis | Single-source only | Notion workspace only | Slack workspace only | True cross-source daily intelligence across 4+ sources |
-| Decision tracking | Not offered | Manual in Notion databases | Channel recaps mention decisions | Automated extraction from all sources with attribution |
-| Temporal roll-ups | Weekly time reports only | Not offered | Weekly channel digests | Daily -> weekly -> monthly narrative synthesis |
-| CRM integration | Not offered | Basic via Notion databases | Salesforce/HubSpot search (not synthesis) | HubSpot deal changes synthesized into daily intelligence |
+### Notion Ingestion
 
-The key differentiator: no existing tool synthesizes across Slack + CRM + Docs + meetings into a single coherent daily brief. Each platform's AI features only see their own silo.
+**What it does:** Query configured Notion databases and pages for content modified on the target date. Convert to SourceItem objects matching the existing pattern (Google Docs, Slack, HubSpot).
 
-## API-Specific Implementation Notes
+**Expected behavior:**
+- Config section: `notion.enabled`, `notion.databases` (list of database IDs), `notion.pages` (list of page IDs), `notion.content_max_chars`, `notion.max_pages_per_day`
+- Filter: `last_edited_time` timestamp filter on database queries (after start_of_day, before end_of_day)
+- For databases: query with filter, iterate results, extract page content via blocks API
+- For standalone pages: retrieve page, check `last_edited_time`, extract content if modified
+- Content extraction: recursively fetch page blocks, convert to plain text (paragraph, heading, bulleted_list_item, numbered_list_item, toggle, callout, quote, code, table blocks)
+- New SourceTypes: `NOTION_PAGE_EDIT`, `NOTION_DATABASE_ITEM`
+- Attribution: `(per Notion "Page Title")`
 
-### Slack
-- **Auth:** Bot token with `channels:history`, `groups:history`, `channels:read` scopes. Internal/custom app -- NOT affected by 2026 rate limit crackdown (those only hit non-Marketplace commercially distributed apps).
-- **Rate limits:** Tier 3 for internal apps: 50+ req/min, 1000 messages per request. Generous for batch end-of-day use.
-- **Key gotcha:** Thread replies require separate `conversations.replies` call per thread. Budget for this in API call volume.
-- **SDK:** `slack-sdk` Python package.
+**Key API details (verified):**
+- Database query filter: `{"filter": {"timestamp": "last_edited_time", "last_edited_time": {"on_or_after": "2026-04-04T00:00:00-04:00"}}}`
+- Pagination: max 100 items per request, use `start_cursor` for next page
+- Block children: `GET /v1/blocks/{block_id}/children` -- paginated, recursive for nested blocks
+- Rich text: each block has `rich_text` array, concatenate `plain_text` fields
+- SDK: `notion-sdk-py` (ramnes/notion-sdk-py) -- sync and async clients available
+- Auth: integration token via `NOTION_API_KEY` env var
 
-### HubSpot
-- **Auth:** Private app access token (simplest for personal tool). Scoped to specific HubSpot account.
-- **SDK:** `hubspot-api-python` (official, actively maintained). Note: method locations have changed in recent versions (`do_search` moved from `basic_api` to `identifiers_api`).
-- **Key gotcha:** No single "what changed today" API. Must query deals by `lastmodifieddate`, then check property history for stage changes. Engagements API for notes/tasks/meetings.
+**Follows existing pattern from:** `src/ingest/google_docs.py` -- curated list of sources, date-based filtering, content extraction with max_chars truncation, conversion to SourceItem
 
-### Google Docs
-- **Auth:** Reuses existing Google OAuth credentials. Add `https://www.googleapis.com/auth/documents.readonly` and `https://www.googleapis.com/auth/drive.readonly` scopes.
-- **Key gotcha:** Google Docs API returns structured JSON (paragraphs, tables, lists), not plain text. Consider using Drive API `files.export` with `text/plain` mimeType for simpler text extraction instead of parsing the document structure.
+**Confidence:** HIGH -- API endpoints verified via official Notion docs.
 
-### Notion
-- **Auth:** Internal integration token (created at notion.so/my-integrations). Must be explicitly shared with target pages/databases.
-- **API version:** Must target 2025-09-03 or later for multi-source database support. Breaking change: `data_source_id` required for database operations.
-- **SDK:** `notion-sdk-py` (community, sync + async support).
-- **Key gotcha:** No "what changed" API. Must query pages by `last_edited_time` filter, then diff against stored state to detect actual changes. Most complex integration of the four.
+### Structured Output Migration
+
+**What it does:** Replace markdown-response-then-regex-parse pattern with Claude structured outputs (json_schema). Define Pydantic response models, use `client.messages.parse()` or `output_config.format`.
+
+**Where it applies (3 call sites):**
+1. **`extractor.py` -- `extract_meeting()`**: Per-meeting extraction. Currently returns markdown parsed by `_parse_extraction_response()` with `_parse_section_items()` and `_parse_legacy_blocks()` (~130 lines of regex/string parsing). Handles two response formats plus a legacy fallback.
+2. **`synthesizer.py` -- `synthesize_daily()`**: Daily synthesis. Currently returns markdown parsed by `_parse_synthesis_response()` (~80 lines of section-splitting and bullet/table-row parsing).
+3. **`commitments.py` -- `extract_commitments()`**: Commitment extraction from synthesis text.
+
+**Migration pattern per call site:**
+1. Define Pydantic response model (e.g., `MeetingExtractionResponse` with `decisions: list[ExtractionItem]`, etc.)
+2. Use `client.messages.parse(output_format=MeetingExtractionResponse, ...)` -- SDK transforms Pydantic schema, validates response, returns `response.parsed_output` as typed model
+3. Remove all `_parse_*` functions and regex logic
+
+**Key technical details (verified from Anthropic docs):**
+- GA on Claude Sonnet 4.5, Opus 4.5, Sonnet 4.6, Opus 4.6, Haiku 4.5
+- API parameter: `output_config={"format": {"type": "json_schema", "schema": {...}}}`
+- SDK helper: `client.messages.parse()` auto-transforms Pydantic models
+- Response in `response.content[0].text` as valid JSON (or `response.parsed_output` with `.parse()`)
+- Pydantic field constraints (e.g., `minimum`) are converted to descriptions; SDK validates post-response
+- Already available in `anthropic>=0.45.0` (project dependency)
+
+**Confidence:** HIGH -- verified against official Anthropic structured outputs docs (GA, not beta).
+
+### Asyncio Pipeline Parallelization
+
+**What it does:** Run independent ingest modules concurrently using `asyncio.gather()`.
+
+**Current state:** `run_pipeline()` in pipeline.py calls `_ingest_slack()`, `_ingest_hubspot()`, `_ingest_docs()`, `_ingest_calendar()` sequentially at lines 207-210. Each makes network calls. Total ingest time = sum of all source times.
+
+**Target state:**
+```python
+async def run_pipeline_async(ctx):
+    # Independent sources run in parallel
+    results = await asyncio.gather(
+        _ingest_slack_async(ctx),
+        _ingest_hubspot_async(ctx),
+        _ingest_docs_async(ctx),
+        _ingest_notion_async(ctx),
+        _ingest_calendar_async(ctx),
+        return_exceptions=True,
+    )
+    # Unpack results, handle any exceptions
+```
+
+**Library async support:**
+- `httpx` (dependency): async via `httpx.AsyncClient` -- native
+- `slack-sdk`: `slack_sdk.web.async_client.AsyncWebClient` available
+- `google-api-python-client`: sync only. Wrap in `asyncio.to_thread()` -- pragmatic, avoids risky library swap
+- `anthropic`: `AsyncAnthropic` for parallel Claude calls -- native
+- `notion-sdk-py`: async client built in -- native
+- `hubspot-api-client`: sync only. Wrap in `asyncio.to_thread()`
+
+**Error isolation:** `return_exceptions=True` in `asyncio.gather()` so one source failure does not cancel others. Matches current pattern where each `_ingest_*` function catches its own errors.
+
+**Confidence:** HIGH -- asyncio.gather() is well-established, key libraries support async or can be thread-wrapped.
+
+### Algorithmic Cross-Source Dedup
+
+**What it does:** Pre-filter obvious duplicates before the synthesis LLM call, reducing token usage and improving dedup determinism.
+
+**Approach:**
+1. After all sources are ingested, collect all SourceItems
+2. Compute TF-IDF vectors on `title + " " + content` fields using sklearn `TfidfVectorizer`
+3. Compute pairwise cosine similarity within same-day items
+4. Flag pairs above threshold (0.80-0.85) as potential duplicates
+5. For flagged pairs: keep item from higher-priority source, annotate with cross-references
+6. Pass deduplicated items to synthesis, with annotations so LLM knows about merged sources
+
+**Why TF-IDF over embeddings:** At 50-100 items/day, TF-IDF is instantaneous (<100ms), requires no GPU/model download, and catches lexical duplicates well. LLM dedup (already in synthesis prompt) catches semantic duplicates. Two layers is the right architecture.
+
+**What it does NOT replace:** The synthesis prompt's cross-source dedup instructions. Algorithmic dedup is a pre-filter. The LLM still handles nuanced semantic merging ("Q3 timeline slipped" in meeting vs "we're pushing to Q3" in Slack).
+
+**New dependency:** `scikit-learn` (for `TfidfVectorizer` and `cosine_similarity`). Lightweight, well-maintained, no GPU requirement.
+
+**Confidence:** MEDIUM -- approach is sound, but threshold tuning requires experimentation with real data. May need adjustment after observing false positives/negatives.
+
+### Typed Config Model
+
+**What it does:** Replace `dict` config with validated Pydantic models. Fail on startup if config is invalid.
+
+**Current state:** `load_config()` in config.py returns raw `dict` (line 9-41). Every module does `config.get("slack", {}).get("enabled", False)` with scattered defaults. Typos are silent. Missing sections cause runtime KeyError deep in the pipeline.
+
+**Target state:**
+```python
+class SlackConfig(BaseModel):
+    enabled: bool = False
+    channels: list[str] = Field(default_factory=list)
+    dms: list[str] = Field(default_factory=list)
+    thread_min_replies: int = 3
+    thread_min_participants: int = 2
+    max_messages_per_channel: int = 100
+    bot_allowlist: list[str] = Field(default_factory=list)
+    # ... etc
+
+class PipelineConfig(BaseModel):
+    pipeline: PipelineSettings
+    calendars: CalendarSettings
+    transcripts: TranscriptSettings
+    synthesis: SynthesisSettings
+    slack: SlackConfig = SlackConfig()
+    google_docs: GoogleDocsConfig = GoogleDocsConfig()
+    hubspot: HubSpotConfig = HubSpotConfig()
+    notion: NotionConfig = NotionConfig()
+```
+
+**Migration path:** Define models matching current config.yaml structure. Update `load_config()` to return `PipelineConfig` via `PipelineConfig.model_validate(yaml_data)`. Update all call sites from `config.get("slack", {})` to `config.slack`. This touches many files but is mechanical -- each module gains typed access.
+
+**Environment variable overrides:** Keep existing pattern (lines 32-39 of config.py) by applying overrides to the dict before Pydantic validation, or use pydantic-settings for env var integration.
+
+**Confidence:** HIGH -- Pydantic v2 already a dependency, pattern is well-documented and widely used.
+
+### Slack User Batch Resolution
+
+**What it does:** Replace per-user `users.info` API calls with a single `users.list` call.
+
+**Current state:** `resolve_user_names()` in slack.py (lines 54-90) iterates user_ids, calling `client.users_info(user=uid)` for each. Module-level `_user_cache` prevents repeat calls within a run, but first run still makes N calls (10-20 for a typical day).
+
+**Target state:** At start of Slack ingestion, call `client.users_list()` once, build complete `user_id -> display_name` map, cache for session. For large workspaces, paginate (200 users per page).
+
+**Confidence:** HIGH -- standard Slack API pattern, trivial change.
+
+### Cache Retention Policy
+
+**What it does:** Auto-delete raw cached data (API responses, raw emails) older than a configurable TTL.
+
+**Current state:** `cache_raw_response()` and `cache_raw_emails()` write to `output/raw/` with date-stamped filenames. No cleanup.
+
+**Target config:** `pipeline.cache_retention_days: 30` (default). On pipeline start, scan `output/raw/`, delete directories/files older than TTL.
+
+**Confidence:** HIGH -- pure file system operation, no API or library concerns.
 
 ## Sources
 
-- [Slack conversations.history API](https://api.slack.com/methods/conversations.history)
-- [Slack rate limit changes for non-Marketplace apps](https://api.slack.com/changelog/2025-05-terms-rate-limit-update-and-faq)
-- [Slack rate limits documentation](https://docs.slack.dev/apis/web-api/rate-limits/)
-- [HubSpot CRM Deals API](https://developers.hubspot.com/docs/api-reference/crm-deals-v3/guide)
-- [HubSpot hubspot-api-python GitHub](https://github.com/HubSpot/hubspot-api-python)
-- [Google Docs API Python quickstart](https://developers.google.com/workspace/docs/api/quickstart/python)
-- [Google Drive changes API](https://developers.google.com/workspace/drive/api/guides/manage-changes)
-- [Google Drive files.list modifiedTime filter](https://googleapis.github.io/google-api-python-client/docs/dyn/drive_v3.files.html)
-- [Notion API database query filters](https://developers.notion.com/reference/post-database-query-filter)
-- [Notion API upgrade guide 2025-09-03](https://developers.notion.com/docs/upgrade-guide-2025-09-03)
-- [notion-sdk-py GitHub](https://github.com/ramnes/notion-sdk-py)
+- [Notion API Database Query Filter](https://developers.notion.com/reference/post-database-query-filter) -- HIGH confidence, official docs
+- [Notion API Timestamp Filter Changelog](https://developers.notion.com/changelog/filter-databases-by-timestamp-even-if-they-dont-have-a-timestamp-property) -- HIGH confidence, official changelog
+- [notion-sdk-py (GitHub)](https://github.com/ramnes/notion-sdk-py) -- HIGH confidence, primary Python SDK
+- [Anthropic Structured Outputs Docs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) -- HIGH confidence, official GA docs
+- [Pydantic Settings Management](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) -- HIGH confidence, official docs
+- [asyncio.gather() Best Practices](https://blog.poespas.me/posts/2024/05/24/python-asyncio-gather-examples/) -- MEDIUM confidence, community source verified against Python docs
+- [TF-IDF + Cosine Similarity for Text Matching](https://bergvca.github.io/2017/10/14/super-fast-string-matching.html) -- MEDIUM confidence, well-established technique
 
 ---
-*Feature research for: Work Intelligence System v1.5 -- Multi-Source Data Ingestion*
-*Researched: 2026-04-03*
+*Feature research for: Work Intelligence Pipeline v1.5.1 -- Notion + Performance + Reliability*
+*Researched: 2026-04-04*

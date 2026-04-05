@@ -1,230 +1,233 @@
-# Technology Stack: v1.5 Expanded Ingest
+# Stack Research: v1.5.1 New Capabilities
 
-**Project:** Work Intelligence System - Data Source Integrations
-**Researched:** 2026-04-03
-**Overall confidence:** HIGH
+**Domain:** Work intelligence pipeline -- Notion ingestion, asyncio parallelization, structured outputs, config validation, cache management, algorithmic dedup
+**Researched:** 2026-04-04
+**Confidence:** HIGH
 
-## Existing Stack (DO NOT CHANGE)
+## Existing Stack (validated, not changing)
 
-Already validated and in production. Listed for reference only.
+| Technology | Version (installed) | Purpose |
+|------------|-------------------|---------|
+| Python | 3.12+ | Runtime |
+| anthropic SDK | 0.88.0 | Claude API (Sonnet daily, Opus roll-ups) |
+| google-api-python-client | 2.193.0 | Calendar, Gmail, Drive, Docs |
+| slack_sdk | 3.41.0 | Slack API |
+| hubspot-api-client | 12.0.0 | HubSpot API |
+| pydantic | 2.12.5+ | Data models |
+| httpx | 0.28.1+ | HTTP client |
+| pyyaml | 6.0.3+ | Config loading |
+| jinja2 | 3.1.6+ | Output templates |
+| pytest | 9.0.2+ | Testing |
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| Python | 3.12 | Runtime |
-| anthropic | >=0.45.0 | Claude API for synthesis |
-| google-api-python-client | >=2.193.0 | Google Calendar, Drive, Docs APIs |
-| google-auth / google-auth-oauthlib | >=2.49.1 / >=1.3.1 | Google OAuth2 |
-| httpx | >=0.28.1 | HTTP client (Slack webhooks) |
-| pydantic | >=2.12.5 | Data models |
-| jinja2 | >=3.1.6 | Output templates |
-| pyyaml | >=6.0.3 | Config |
-| python-dotenv | >=1.0.0 | Env vars |
+## New Dependencies
 
-## New Dependencies for v1.5
+### Core: Notion Ingestion
 
-### Slack API: `slack-sdk`
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| notion-client | >=3.0.0,<4.0 | Official Notion API client | The canonical Python SDK for Notion API (ramnes/notion-sdk-py). Provides both sync `Client` and async `AsyncClient`. Uses httpx under the hood -- already in our dependency tree. v3.0.0 is current stable. Supports Notion API version 2026-03-11. |
 
-| | Detail |
-|---|--------|
-| **Package** | `slack-sdk>=3.41.0` |
-| **Why this** | Official Slack Python SDK maintained by Slack. Replaces deprecated `slackclient`. Provides `WebClient` with built-in retry handling, rate limit awareness, and cursor-based pagination. |
-| **Why not httpx** | `slack-sdk` handles token management, pagination cursors, rate limit backoff, and typed responses. Raw HTTP would mean reimplementing all of this. |
-| **Confidence** | HIGH - official SDK, actively maintained, v3.41.0 released March 2026 |
+**Integration notes:**
+- `notion-client` depends on `httpx`, which we already have. No transitive dependency conflicts.
+- Provides `AsyncClient` out of the box -- important for our asyncio parallelization work. Use `AsyncClient` in the parallel pipeline, `Client` for any standalone scripts.
+- Notion API has no "changes since date" endpoint. We must query databases/pages and filter client-side by `last_edited_time`. This is an API limitation, not a library issue.
+- The Notion API uses cursor-based pagination. The library handles this via `iterate` helpers, but you must implement date-range filtering yourself.
 
-**Authentication:** Bot Token (xoxb-) via Slack App with custom install to workspace.
+**Authentication:** Internal Integration Token. Store as `NOTION_TOKEN` in `.env`. Create at notion.so/my-integrations, then share target pages/databases with the integration manually.
 
-| Scope | Purpose | Required For |
-|-------|---------|-------------|
-| `channels:history` | Read messages from public channels | `conversations.history` |
-| `channels:read` | List public channels (discovery) | `conversations.list` |
-| `groups:history` | Read messages from private channels | `conversations.history` on private channels |
-| `groups:read` | List private channels (discovery) | `conversations.list` for private channels |
-| `users:read` | Resolve user IDs to display names | Rendering "who said what" |
+**Rate Limits (MOST RESTRICTIVE of all services):** 3 requests/second average. For daily batch reading ~5-20 pages, add 0.35s delay between calls.
 
-Setup: Create Slack App at api.slack.com -> Install to workspace -> Copy Bot User OAuth Token -> Store in `.env` as `SLACK_BOT_TOKEN`.
+### Core: Asyncio Parallelization
 
-**Rate Limits (CRITICAL):**
-This is an internal/personal app (not commercially distributed), which means Tier 3 limits apply:
-- `conversations.history`: ~50 requests/minute per workspace (Tier 3)
-- `conversations.list`: ~20 requests/minute (Tier 2)
-- `users.info`: ~50 requests/minute (Tier 3)
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| asyncio (stdlib) | -- | Concurrent ingest orchestration | Built into Python 3.12+. Use `asyncio.gather()` to run independent ingest modules concurrently. No external dependency needed. |
+| aiofiles | >=25.1.0,<26.0 | Async file I/O for cache reads/writes | Prevents blocking the event loop during file operations in async ingest paths. Lightweight, well-maintained. Only needed if ingest modules do significant file I/O within async context. |
 
-For a daily batch reading ~10-20 curated channels, this is more than sufficient. The SDK's built-in `RetryHandler` handles 429 responses automatically. No custom rate limiting needed for this use case.
+**Integration notes:**
+- The pipeline currently uses synchronous `anthropic.Anthropic`. For parallel Claude calls (per-meeting extraction), use `anthropic.AsyncAnthropic` which is already included in the `anthropic` SDK -- no additional dependency.
+- `slack_sdk` ships `AsyncWebClient` for async Slack calls. Already in our dependency (`slack_sdk>=3.33.0`). Requires `aiohttp` as an optional dependency -- must be installed explicitly.
+- Google API client (`google-api-python-client`) is synchronous-only. Wrap in `asyncio.to_thread()` to run without blocking. Do NOT try to find an async Google client -- the official library is sync and `to_thread()` is the correct pattern.
+- `httpx` (used by notion-client) is natively async. The `notion_client.AsyncClient` uses it directly.
+- Pattern: `asyncio.gather(_ingest_slack_async(), _ingest_hubspot_async(), _ingest_docs_async(), _ingest_notion_async(), _ingest_calendar_async())` with each module wrapping its sync calls in `asyncio.to_thread()` where needed.
 
-**Warning:** Non-Marketplace commercially distributed apps face 1 req/min limit as of May 2025. This does NOT apply to internal apps installed only in your own workspace.
+### Core: Structured Output Migration
 
-### HubSpot API: `hubspot-api-client`
+No new dependencies needed. The existing `anthropic>=0.45.0` SDK (we have 0.88.0 installed) supports structured outputs via the GA `output_config` parameter.
 
-| | Detail |
-|---|--------|
-| **Package** | `hubspot-api-client>=12.0.0` |
-| **Why this** | Official HubSpot Python SDK for V3 API. Provides typed client classes for each API domain (deals, contacts, engagements). Handles pagination and auth. |
-| **Why not httpx** | HubSpot's API surface is large; the SDK provides pre-built clients for each endpoint family (CRM, engagements, etc.) with pagination helpers. |
-| **Confidence** | HIGH - official SDK, v12.0.0 released May 2025 |
+**Migration details:**
+- Structured outputs are GA (not beta) on Claude API for Sonnet 4.5+, Opus 4.5+, Haiku 4.5+. The claude-sonnet-4-20250514 model currently used in `extractor.py` and `synthesizer.py` supports this.
+- Use `output_config={"format": {"type": "json_schema", "schema": {...}}}` in `client.messages.create()`.
+- The old beta header (`structured-outputs-2025-11-13`) and `output_format` parameter still work but are deprecated. Use `output_config.format` directly.
+- Response content is still in `response.content[0].text` -- parse with `json.loads()`. Alternatively, define Pydantic models and use `model_validate_json(response.content[0].text)` for automatic validation.
+- Define JSON schemas matching existing `MeetingExtraction`, `DailySynthesis` section structures, and `Commitment` models. Pydantic's `.model_json_schema()` generates compatible schemas.
+- The `additionalProperties: false` constraint is recommended for strict validation.
+- Replace all `_parse_section_items()` regex-based markdown parsing in `extractor.py` and `synthesizer.py` with schema-constrained responses.
+- For async parallel extraction: use `AsyncAnthropic` with same `output_config` parameter.
 
-**Authentication:** Private App Access Token.
+**Minimum SDK version for GA structured outputs:** Bump `anthropic>=0.82.0` in pyproject.toml to ensure `output_config` parameter support. Our installed 0.88.0 already supports it.
 
-Setup: HubSpot Settings -> Integrations -> Private Apps -> Create -> Select scopes -> Copy access token -> Store in `.env` as `HUBSPOT_ACCESS_TOKEN`. Token does not expire (manual rotation only).
+### Core: Algorithmic Deduplication
 
-| Scope | Purpose |
-|-------|---------|
-| `crm.objects.deals.read` | Read deal records and changes |
-| `crm.objects.contacts.read` | Read contact records |
-| `sales-email-read` | Read email engagement logs |
-| `crm.objects.owners.read` | Resolve owner IDs to names |
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| rapidfuzz | >=3.12.0,<4.0 | Fast fuzzy string matching for cross-source dedup | C-extension performance (~10-100x faster than difflib). Provides `fuzz.token_sort_ratio` and `fuzz.token_set_ratio` for comparing normalized event descriptions across sources. MIT licensed. No heavy dependencies. |
 
-**Rate Limits:**
-- Private apps: 100 requests/10 seconds (Free/Starter), 190 requests/10 seconds (Professional/Enterprise)
-- Daily limit: effectively unlimited for this use case (500K+/day)
-- For daily batch pulling deal activity and notes, this is far more than sufficient
+**Integration notes:**
+- Use `rapidfuzz.fuzz.token_set_ratio` for comparing source items -- it handles word reordering (same topic described differently in Slack vs. meeting transcript).
+- Set threshold at ~80 for "likely same topic" and ~90 for "definitely same topic". Tune based on testing.
+- Supplement (not replace) existing LLM-based dedup. Algorithmic dedup runs first as a cheap pre-filter, reducing items sent to LLM dedup.
+- Works on normalized `SourceItem.content` strings. Normalize before comparison: lowercase, strip punctuation, remove stop words.
+- `process.cdist()` can compute pairwise similarity matrix efficiently for batch dedup across all source items.
 
-**Key API endpoints for v1.5:**
-- `api_client.crm.deals.basic_api.get_page()` - List deals
-- `api_client.crm.deals.search_api.do_search()` - Search deals modified today
-- `api_client.crm.objects.notes.basic_api.get_page()` - Get notes/engagements
-- `api_client.crm.timeline.events_api` - Timeline events for activity feed
+### Supporting: Slack Batch User Resolution
 
-### Google Docs API: NO NEW DEPENDENCY
+No new dependencies. The existing `slack_sdk` (3.41.0) already provides `users_list()` on both `WebClient` and `AsyncWebClient`.
 
-| | Detail |
-|---|--------|
-| **Package** | Already have `google-api-python-client` |
-| **Why no addition** | `drive.py` already builds a Docs service via `build("docs", "v1", credentials=creds)`. The existing `drive.readonly` OAuth scope already grants read access to Google Docs content. |
-| **What's needed** | New ingest module that uses Drive API `files.list()` with `mimeType='application/vnd.google-apps.document'` and `modifiedTime > '{today}'` query to find docs edited that day, then `documents().get()` to fetch content. |
-| **Confidence** | HIGH - already working in production for Gemini notes |
+**Migration details:**
+- Current code in `slack.py:resolve_user_names()` (line 54-90) calls `users_info(user=uid)` per user (N API calls).
+- Replace with single `users_list()` call that returns all workspace users, then build lookup dict.
+- `users_list()` is paginated (default limit 200). For workspaces with <1000 users, 1-5 API calls vs. N individual calls.
+- Cache the full user list in memory for the pipeline run (users don't change mid-run).
+- For async pipeline: use `AsyncWebClient.users_list()`.
 
-**Additional scope needed:** None. `drive.readonly` covers both Drive file listing and Docs content reading.
+### Supporting: Typed Config Validation
 
-**Rate Limits:**
-- Google Docs API: 300 read requests/minute per user (default)
-- Google Drive API: 12,000 queries/day per project
-- Trivially sufficient for daily batch
+No new dependencies. Pydantic (already >=2.12.5) handles this.
 
-**Strategy for "docs edited today":**
-1. `drive.files().list(q="mimeType='application/vnd.google-apps.document' and modifiedTime > '2026-04-02T00:00:00'")` - Find modified docs
-2. `docs.documents().get(documentId=id)` - Fetch content for each
-3. Filter to docs the user actually edited (not just viewed) using `drive.revisions().list()` if needed
+**Implementation details:**
+- Define a `PipelineConfig` Pydantic model mirroring `config/config.yaml` structure.
+- Use `pydantic.BaseModel` with nested models for each section (`SlackConfig`, `HubSpotConfig`, `SynthesisConfig`, `NotionConfig`, etc.).
+- Replace `load_config() -> dict` in `src/config.py` with `load_config() -> PipelineConfig` that calls `PipelineConfig.model_validate(yaml_data)`.
+- Pydantic provides: type coercion, default values, validation errors with field paths, and IDE autocompletion on `ctx.config.slack.enabled` instead of `ctx.config.get("slack", {}).get("enabled", False)`.
+- Environment variable overrides: handle in the loading function before validation, or use `model_validator(mode='after')`.
+- `PipelineContext.config` type changes from `dict` to `PipelineConfig` -- update all consumers.
 
-### Notion API: `notion-client`
+### Supporting: Cache Retention Policy
 
-| | Detail |
-|---|--------|
-| **Package** | `notion-client>=3.0.0` |
-| **Why this** | Official Python port of the Notion reference SDK. Maintained by the community (`ramnes/notion-sdk-py`) but endorsed by Notion. Sync and async support. Simple, thin wrapper around the REST API. |
-| **Why not httpx** | Notion's API has specific pagination (cursor-based, block-level), content structures (rich text blocks), and auth patterns that the SDK handles cleanly. |
-| **Why not `ultimate-notion`** | Over-abstracted for our needs. We want raw API data to normalize into our own models, not another ORM layer. |
-| **Confidence** | HIGH - widely used, 3.0.0 is stable release |
+No new dependencies. Use `pathlib` (stdlib) and `os.stat()` for file age checks.
 
-**Authentication:** Internal Integration Token.
+**Implementation details:**
+- Add `cache_retention_days: int = 30` to the new config model.
+- On pipeline start, scan cache directories (`output/raw/`, `output/cache/`) for files older than TTL.
+- Use `Path.stat().st_mtime` for age calculation, `Path.unlink()` for deletion.
+- Log deletions at INFO level. Never delete current day's data.
 
-Setup: notion.so/my-integrations -> Create integration -> Select workspace -> Copy "Internal Integration Secret" -> Store in `.env` as `NOTION_TOKEN`. Then share target pages/databases with the integration manually.
+### Supporting: Async HTTP for Slack
 
-**Rate Limits (MOST RESTRICTIVE of all four):**
-- 3 requests/second average (some burst allowed)
-- No paid tier upgrade available
-- For daily batch reading ~5-20 pages, this requires:
-  - Sequential requests with simple delay (0.35s between calls)
-  - Or batch page queries using `search` endpoint to reduce call count
-
-**Key API methods for v1.5:**
-- `notion.search(filter={"property": "object", "value": "page"}, sort={"direction": "descending", "timestamp": "last_edited_time"})` - Find recently edited pages
-- `notion.pages.retrieve(page_id)` - Get page metadata
-- `notion.blocks.children.list(block_id)` - Get page content (blocks)
-- `notion.databases.query(database_id, filter=...)` - Query database for recent changes
-
-**Content extraction challenge:** Notion stores content as nested blocks (paragraphs, headings, lists, etc.). Each block type has different structure. Need a block-to-text flattener for synthesis input.
-
-## What NOT to Add
-
-| Library | Why Not |
-|---------|---------|
-| `requests` | Already have `httpx` which is strictly better (async support, HTTP/2). HubSpot SDK uses `requests` internally but that's its own dependency. |
-| `aiohttp` | Not needed. `httpx` already supports async if we need it later. |
-| `slack-bolt` | Framework for Slack apps with event handlers/listeners. We're doing batch reads, not building a bot that responds to events. |
-| `notion-py` | Unofficial, uses internal API, fragile. Use official `notion-client`. |
-| `hubspot3` | Legacy/community wrapper. Official `hubspot-api-client` is maintained by HubSpot. |
-| `google-auth-httplib2` | Already in deps but only needed for legacy patterns. Existing code already uses it; no change needed. |
-| Any database library | Storage remains flat files for v1.5. DB deferred to v2.0. |
-| Any web framework | No API/UI in v1.5. Deferred to v4.0. |
-| `tenacity` / retry libraries | Slack SDK has built-in retry. HubSpot SDK handles retries. For Notion, simple `time.sleep` between calls is sufficient given 3 req/s limit. |
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| aiohttp | >=3.11.0,<4.0 | Required by slack_sdk AsyncWebClient | slack_sdk's AsyncWebClient requires aiohttp as its HTTP transport. Not installed by default with slack_sdk -- must be added explicitly. Without it, async Slack calls raise `ImportError`. |
 
 ## Installation
 
 ```bash
-# New dependencies only (add to pyproject.toml)
-uv add slack-sdk hubspot-api-client notion-client
+# New dependencies for v1.5.1
+uv add "notion-client>=3.0.0,<4.0"
+uv add "rapidfuzz>=3.12.0,<4.0"
+uv add "aiohttp>=3.11.0,<4.0"
+uv add "aiofiles>=25.1.0,<26.0"
+
+# Update anthropic minimum to ensure output_config support
+# In pyproject.toml, change: "anthropic>=0.45.0,<1.0" -> "anthropic>=0.82.0,<1.0"
 ```
 
-Updated `pyproject.toml` dependencies section (additions only):
+## Updated pyproject.toml Dependencies
+
 ```toml
-"slack-sdk>=3.41.0",
-"hubspot-api-client>=12.0.0",
-"notion-client>=3.0.0",
+dependencies = [
+    "google-api-python-client>=2.193.0,<3.0",
+    "google-auth>=2.49.1,<3.0",
+    "google-auth-httplib2>=0.3.1,<1.0",
+    "google-auth-oauthlib>=1.3.1,<2.0",
+    "httpx>=0.28.1,<1.0",
+    "jinja2>=3.1.6,<4.0",
+    "pydantic>=2.12.5,<3.0",
+    "python-dateutil>=2.9.0.post0,<3.0",
+    "pyyaml>=6.0.3,<7.0",
+    "anthropic>=0.82.0,<1.0",         # bumped for GA structured outputs
+    "python-dotenv>=1.0.0,<2.0",
+    "slack-sdk>=3.33.0,<4.0",
+    "hubspot-api-client>=12.0.0,<13.0",
+    "notion-client>=3.0.0,<4.0",      # NEW: Notion API
+    "rapidfuzz>=3.12.0,<4.0",         # NEW: algorithmic dedup
+    "aiohttp>=3.11.0,<4.0",           # NEW: required by slack_sdk AsyncWebClient
+    "aiofiles>=25.1.0,<26.0",         # NEW: async file I/O
+]
 ```
+
+## Alternatives Considered
+
+| Recommended | Alternative | When to Use Alternative |
+|-------------|-------------|-------------------------|
+| notion-client (official) | ultimate-notion | Never for this project. Adds ORM-like abstraction we don't need. |
+| notion-client (official) | notion-sdk (getsyncr) | Never. Less maintained, smaller community. |
+| rapidfuzz | thefuzz (fuzzywuzzy) | Never. thefuzz is slower (pure Python fallback), less maintained. rapidfuzz is a strict superset. |
+| rapidfuzz | difflib (stdlib) | Only if you want zero deps and don't care about perf. difflib SequenceMatcher is ~50-100x slower. |
+| asyncio.to_thread() | aiogoogle | Never. aiogoogle is unmaintained. `to_thread()` is the stdlib solution for wrapping sync Google API calls. |
+| aiohttp (for slack_sdk) | httpx (for slack_sdk) | Not possible. slack_sdk AsyncWebClient specifically requires aiohttp. Not configurable. |
+| Pydantic config model | pydantic-settings | Not worth the extra dep. pydantic-settings adds env var binding but we only have 3 env overrides -- handle manually. |
+
+## What NOT to Add
+
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| instructor | Wraps anthropic SDK for structured outputs. Unnecessary -- anthropic SDK now has native GA structured outputs via `output_config`. Another abstraction layer and dependency. | Native `output_config` + `json.loads()` + Pydantic `model_validate()` |
+| celery / dramatiq | Overkill. We need concurrent I/O within a single pipeline run, not distributed task queues. | `asyncio.gather()` |
+| motor / asyncpg | No database in this project (flat file storage until v2.0). | pathlib + aiofiles |
+| notion-py (jamalex) | Uses unofficial/undocumented Notion API. Fragile, breaks with Notion updates. | notion-client (official API) |
+| langchain | Massive dependency tree for simple Claude API calls. Direct SDK calls are simpler and more maintainable. | Direct anthropic SDK |
+| tenacity | Slack SDK has built-in retry. For Notion, simple `time.sleep(0.35)` between calls suffices. For Claude, structured outputs eliminate retry-on-parse-failure. | Built-in retry + simple sleep |
+| requests | Already have httpx which is strictly better (async support, HTTP/2). Note: hubspot-api-client uses requests internally but that's its own transitive dep. | httpx |
+
+## Version Compatibility
+
+| Package | Compatible With | Notes |
+|---------|-----------------|-------|
+| notion-client 3.0.0 | httpx >=0.23.0 | Our httpx 0.28.1+ satisfies this. No conflict. |
+| notion-client 3.0.0 | Python >=3.9 | Our Python 3.12+ satisfies this. |
+| aiohttp >=3.11.0 | Python >=3.9 | Coexists with httpx -- different use cases (aiohttp for slack_sdk, httpx for notion-client/anthropic). |
+| rapidfuzz >=3.12.0 | Python >=3.9 | C extension wheels available for macOS arm64, Linux x86_64. |
+| anthropic >=0.82.0 | httpx >=0.20.0 | No conflict with our httpx pin. |
+| aiofiles 25.1.0 | Python >=3.9 | No dependency conflicts. |
+
+## Capability-to-Library Mapping
+
+Quick reference for plan authors -- which library addresses which v1.5.1 feature.
+
+| Feature | Library | Key API / Pattern |
+|---------|---------|-------------------|
+| Notion ingestion | notion-client | `Client.databases.query()`, `Client.blocks.children.list()`, `Client.search()` |
+| Parallel ingest | asyncio (stdlib) | `asyncio.gather()`, `asyncio.to_thread()` |
+| Parallel Claude calls | anthropic (existing) | `AsyncAnthropic.messages.create()` with `output_config` |
+| Structured outputs | anthropic (existing) | `messages.create(output_config={"format": {"type": "json_schema", "schema": ...}})` |
+| Slack batch users | slack_sdk (existing) | `WebClient.users_list()` or `AsyncWebClient.users_list()` |
+| Async Slack | slack_sdk + aiohttp | `AsyncWebClient` (requires aiohttp at runtime) |
+| Algorithmic dedup | rapidfuzz | `fuzz.token_set_ratio()`, `process.cdist()` |
+| Config validation | pydantic (existing) | `BaseModel`, `model_validate()`, `model_json_schema()` |
+| Cache retention | pathlib (stdlib) | `Path.stat()`, `Path.unlink()`, `Path.glob()` |
+| Async file I/O | aiofiles | `aiofiles.open()` |
 
 ## Environment Variables (New)
 
 ```bash
-# .env additions
-SLACK_BOT_TOKEN=xoxb-...          # Slack app bot token
-HUBSPOT_ACCESS_TOKEN=pat-...       # HubSpot private app token
+# .env addition for Notion
 NOTION_TOKEN=ntn_...               # Notion internal integration secret
 ```
 
-## Authentication Summary
-
-| Service | Auth Type | Token Lifetime | Refresh Needed | Setup Complexity |
-|---------|-----------|---------------|----------------|-----------------|
-| Slack | Bot OAuth Token | Until app uninstalled or token revoked | No (persistent) | Low - create app, install, copy token |
-| HubSpot | Private App Access Token | Indefinite (manual rotation) | No | Low - create private app, select scopes, copy token |
-| Google Docs | OAuth2 (existing) | Access token: 1hr, auto-refresh | Yes (already handled) | None - already set up |
-| Notion | Internal Integration Token | Until revoked | No | Low - create integration, share pages |
-
-Key insight: All three new services use simple bearer tokens stored in `.env`. No OAuth dance required (unlike the existing Google setup). This significantly simplifies the auth story.
-
-## Rate Limit Summary
-
-| Service | Limit | Daily Batch Impact | Mitigation Needed |
-|---------|-------|-------------------|-------------------|
-| Slack | 50 req/min (Tier 3, internal app) | None - 10-20 channels is trivial | SDK built-in retry |
-| HubSpot | 100-190 req/10s | None - small number of daily queries | None |
-| Google Docs | 300 read req/min | None - handful of docs per day | None |
-| Notion | 3 req/s average | Minimal - add 0.35s delay between calls | Simple sleep or SDK-level pacing |
-
-Notion is the only service where rate limiting is a design consideration, and even then it's manageable with a simple delay for the expected volume (~5-20 pages/day).
-
-## Integration Points with Existing Code
-
-Each new source should follow the existing ingest module pattern:
-
-```
-src/ingest/
-    calendar.py     # existing - Google Calendar
-    drive.py        # existing - Google Drive / Gemini notes
-    gmail.py        # existing - Gmail
-    transcripts.py  # existing - transcript processing
-    normalizer.py   # existing - normalize ingest data
-    slack.py        # NEW - Slack channel messages
-    hubspot.py      # NEW - HubSpot activity
-    google_docs.py  # NEW - Google Docs edited that day
-    notion.py       # NEW - Notion page/database changes
-```
-
-Each module should return normalized data matching existing Pydantic models in `src/models/`, feeding into `normalizer.py` for cross-source deduplication before synthesis.
+Note: `SLACK_BOT_TOKEN` and `HUBSPOT_ACCESS_TOKEN` already exist from v1.5.
 
 ## Sources
 
-- [Slack Python SDK (GitHub)](https://github.com/slackapi/python-slack-sdk) - Official SDK repo
-- [Slack conversations.history](https://docs.slack.dev/reference/methods/conversations.history/) - Method docs
-- [Slack rate limits](https://docs.slack.dev/apis/web-api/rate-limits/) - Tier system
-- [Slack rate limit changes for non-Marketplace apps](https://docs.slack.dev/changelog/2025/05/29/rate-limit-changes-for-non-marketplace-apps/) - May 2025 change
-- [HubSpot Python SDK (GitHub)](https://github.com/HubSpot/hubspot-api-python) - Official SDK repo
-- [hubspot-api-client (PyPI)](https://pypi.org/project/hubspot-api-client/) - Package info
-- [HubSpot API usage limits](https://developers.hubspot.com/docs/developer-tooling/platform/usage-guidelines) - Rate limits
-- [HubSpot private apps](https://developers.hubspot.com/docs/apps/legacy-apps/private-apps/overview) - Auth setup
-- [notion-sdk-py (GitHub)](https://github.com/ramnes/notion-sdk-py) - Official Python SDK
-- [notion-client (PyPI)](https://pypi.org/project/notion-client/) - Package info
-- [Notion API rate limits](https://developers.notion.com/reference/request-limits) - 3 req/s limit
-- [Notion authorization](https://developers.notion.com/docs/create-a-notion-integration) - Integration setup
-- [Google Docs API quickstart](https://developers.google.com/workspace/docs/api/quickstart/python) - Python setup
-- [Google Drive files.list](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list) - Query modified files
+- [Anthropic structured outputs docs (GA)](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) -- verified output_config API shape, GA status, supported models (HIGH confidence)
+- [notion-client PyPI](https://pypi.org/project/notion-client/) -- verified v3.0.0 latest via `pip index versions` (HIGH confidence)
+- [ramnes/notion-sdk-py GitHub](https://github.com/ramnes/notion-sdk-py) -- verified async support, httpx dependency (HIGH confidence)
+- [RapidFuzz GitHub](https://github.com/rapidfuzz/RapidFuzz) -- verified version 3.12+, C extension performance (HIGH confidence)
+- [slack_sdk AsyncWebClient docs](https://docs.slack.dev/tools/python-slack-sdk/reference/web/async_client.html) -- verified aiohttp requirement, users_list pagination (HIGH confidence)
+- [aiofiles PyPI](https://pypi.org/project/aiofiles/) -- verified v25.1.0 latest (MEDIUM confidence, version from web search)
+- Installed package versions verified directly from local .venv (HIGH confidence)
+- [Notion API versioning](https://developers.notion.com/reference/versioning) -- API version 2026-03-11 (MEDIUM confidence, from web search)
+
+---
+*Stack research for: Work Intelligence System v1.5.1*
+*Researched: 2026-04-04*
