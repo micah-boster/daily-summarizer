@@ -89,9 +89,36 @@
 
 - [x] **OPS-01**: Raw data cache retention policy (auto-delete after configurable TTL)
 
-## v2+ Requirements (Future)
+## v2.0 Requirements
 
-- Entity layer (partners, people, initiatives) with discovery and attribution
+### Entity Registry (ENTY)
+
+- [ ] **ENTY-01**: Entity registry persists partners and people in SQLite with schema migration support and soft-delete
+- [ ] **ENTY-02**: User can add, remove, and manage aliases for an entity via CLI (e.g., "CR" = "Colin Roberts")
+- [ ] **ENTY-03**: Entity mentions include confidence scoring (high for direct attribution, low for indirect/ambient)
+
+### Entity Discovery (DISC)
+
+- [ ] **DISC-01**: System discovers entities by scanning existing daily summary sidecars via backfill command
+- [ ] **DISC-02**: New pipeline runs automatically discover and register new entities as a post-synthesis step
+- [ ] **DISC-03**: System proposes entity merges when name similarity exceeds threshold, user confirms/rejects via CLI
+- [ ] **DISC-04**: User can split incorrectly merged entities (undo merge) with mention re-attribution
+- [ ] **DISC-05**: Discovered entities are cross-referenced with HubSpot contacts/deals by name match
+
+### Entity Attribution (ATTR)
+
+- [ ] **ATTR-01**: Synthesis items include entity references as structured output fields during Claude synthesis
+- [ ] **ATTR-02**: Entity references are stored in both JSON sidecar and SQLite for portability and querying
+
+### Entity Views (VIEW)
+
+- [ ] **VIEW-01**: User can query entity activity via CLI command (e.g., `entity show Affirm`) with scoped report output
+- [ ] **VIEW-02**: System generates per-entity markdown report files covering a configurable time range
+- [ ] **VIEW-03**: Temporal entity summaries show mention frequency, open commitments, and last-active date
+
+## v2.1+ Requirements (Future)
+
+- Initiative tracking as third entity type (cross-cutting themes spanning partners/people)
 - Commitment reminders and deadline alerts
 - Response drafting and send queue
 - Web interface
@@ -101,12 +128,15 @@
 
 | Feature | Reason |
 |---------|--------|
-| Entity layer | v2.0 — requires attributed data from v1.5 first |
-| Commitment reminders/alerts | v2.0 — v1.5 extracts and structures only |
+| Initiative tracking | v2.1 — requires stable people/partners layer first |
+| Commitment reminders/alerts | v2.1+ — v2.0 extracts and attributes only |
 | Response drafting | v3.0 scope |
 | Web interface | v4.0 scope |
 | Personnel evaluation | Never — system surfaces evidence only |
 | Real-time processing | End-of-day batch sufficient |
+| Knowledge graph / relationship mapping | Over-engineered for personal tool; relationships implicit via co-mentions |
+| Entity sentiment tracking | Violates evidence-only framing constraint |
+| Auto-merge without confirmation | False merges are catastrophic; semi-automated only |
 
 ## Traceability
 
@@ -139,7 +169,8 @@
 **Coverage:**
 - v1.5 requirements: 15 total, 15 mapped, 0 unmapped
 - v1.5.1 requirements: 8 total, 8 mapped, 0 unmapped
+- v2.0 requirements: 13 total, 0 mapped, 13 unmapped (pending roadmap)
 
 ---
 *Requirements defined: 2026-04-03*
-*Last updated: 2026-04-04 after v1.5.1 roadmap creation*
+*Last updated: 2026-04-05 after v2.0 requirements definition*
