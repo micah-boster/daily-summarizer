@@ -18,23 +18,12 @@ import anthropic
 
 from src.cache_cleanup import cleanup_raw_cache
 from src.config import PipelineConfig, load_config
-from src.ingest.calendar import build_calendar_service, cache_raw_response, fetch_events_for_date
-from src.ingest.gmail import build_gmail_service, cache_raw_emails
 from src.ingest.google_docs import fetch_google_docs_items
 from src.ingest.hubspot import fetch_hubspot_items
 from src.ingest.notion import fetch_notion_items
-from src.ingest.normalizer import build_normalized_output
 from src.ingest.slack import build_slack_client, fetch_slack_items, load_slack_state, save_slack_state
 from src.ingest.slack_discovery import check_new_channels
-from src.ingest.transcripts import fetch_all_transcripts
-from src.models.events import DailySynthesis, Section
-from src.models.sources import SourceItem, SourceType
-from src.notifications.slack import send_slack_summary
-from src.output.writer import write_daily_sidecar, write_daily_summary
-from src.quality import detect_edits, save_raw_output, update_quality_report
-from src.synthesis.commitments import extract_commitments
-from src.synthesis.extractor import extract_all_meetings
-from src.synthesis.synthesizer import synthesize_daily
+from src.models.sources import SourceItem
 
 logger = logging.getLogger(__name__)
 
@@ -146,62 +135,6 @@ def _ingest_notion(ctx: PipelineContext) -> list[SourceItem]:
     except Exception as e:
         logger.warning("Notion ingestion failed: %s. Continuing without Notion data.", e)
         return []
-
-
-def _ingest_calendar(
-    ctx: PipelineContext,
-) -> tuple[dict | None, list, list, list]:
-    """Fetch calendar events and transcripts, run per-meeting extraction.
-
-    Returns:
-        (categorized, transcripts, unmatched, extractions)
-        categorized is None if calendar_service is unavailable.
-    """
-    if ctx.calendar_service is None:
-        return None, [], [], []
-
-    try:
-        categorized, raw_events = fetch_events_for_date(
-            ctx.calendar_service, ctx.target_date, ctx.config, ctx.user_email
-        )
-        cache_raw_response(raw_events, ctx.target_date, ctx.output_dir)
-
-        # Fetch and link transcripts
-        transcripts: list[dict] = []
-        unmatched: list[dict] = []
-        try:
-            if ctx.gmail_service is not None:
-                transcripts = fetch_all_transcripts(
-                    ctx.gmail_service, ctx.target_date, ctx.config, creds=ctx.google_creds
-                )
-                if transcripts:
-                    raw_emails = [t["raw_email"] for t in transcripts]
-                    cache_raw_emails(raw_emails, "transcripts", ctx.target_date, ctx.output_dir)
-
-                categorized, unmatched = build_normalized_output(
-                    categorized, transcripts, ctx.config
-                )
-        except Exception as e:
-            logger.warning("Transcript ingestion failed: %s. Continuing with calendar only.", e)
-
-        # Per-meeting extraction
-        active_events = categorized["timed_events"] + categorized["all_day_events"]
-        extractions: list = []
-        try:
-            events_with_transcripts = [e for e in active_events if e.transcript_text]
-            if events_with_transcripts:
-                extractions = extract_all_meetings(
-                    events_with_transcripts, ctx.config, client=ctx.claude_client
-                )
-                logger.info("Extracted %d meetings", len(extractions))
-        except Exception as e:
-            logger.warning("Extraction failed: %s. Continuing without synthesis.", e)
-
-        return categorized, transcripts, unmatched, extractions
-
-    except Exception as e:
-        logger.warning("Calendar ingestion failed: %s", e)
-        return None, [], [], []
 
 
 # ---------------------------------------------------------------------------
