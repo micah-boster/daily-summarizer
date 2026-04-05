@@ -17,6 +17,7 @@ import anthropic
 
 from src.cache_cleanup import cleanup_raw_cache
 from src.config import PipelineConfig, load_config
+from src.dedup import dedup_source_items
 from src.ingest.calendar import build_calendar_service, cache_raw_response, fetch_events_for_date
 from src.ingest.gmail import build_gmail_service, cache_raw_emails
 from src.ingest.google_docs import fetch_google_docs_items
@@ -27,7 +28,7 @@ from src.ingest.slack import build_slack_client, fetch_slack_items, load_slack_s
 from src.ingest.slack_discovery import check_new_channels
 from src.ingest.transcripts import fetch_all_transcripts
 from src.models.events import DailySynthesis, Section
-from src.models.sources import SourceItem
+from src.models.sources import SourceItem, SourceType
 from src.notifications.slack import send_slack_summary
 from src.output.writer import write_daily_sidecar, write_daily_summary
 from src.quality import detect_edits, save_raw_output, update_quality_report
@@ -234,6 +235,26 @@ def run_pipeline(ctx: PipelineContext) -> None:
     docs_items = _ingest_docs(ctx)
     notion_items = _ingest_notion(ctx)
     categorized, transcripts, unmatched, extractions = _ingest_calendar(ctx)
+
+    # Cross-source dedup pre-filter
+    all_source_items = (slack_items or []) + (hubspot_items or []) + (docs_items or []) + (notion_items or [])
+    if len(all_source_items) > 1:
+        try:
+            deduped_items = dedup_source_items(all_source_items, ctx.config, current)
+            items_removed = len(all_source_items) - len(deduped_items)
+            if items_removed:
+                # Redistribute back to per-source lists for synthesis compatibility
+                slack_types = {SourceType.SLACK_MESSAGE, SourceType.SLACK_THREAD}
+                hubspot_types = {SourceType.HUBSPOT_DEAL, SourceType.HUBSPOT_CONTACT, SourceType.HUBSPOT_TICKET, SourceType.HUBSPOT_ACTIVITY}
+                docs_types = {SourceType.GOOGLE_DOC_EDIT, SourceType.GOOGLE_DOC_COMMENT}
+                notion_types = {SourceType.NOTION_PAGE, SourceType.NOTION_DB}
+                slack_items = [i for i in deduped_items if i.source_type in slack_types]
+                hubspot_items = [i for i in deduped_items if i.source_type in hubspot_types]
+                docs_items = [i for i in deduped_items if i.source_type in docs_types]
+                notion_items = [i for i in deduped_items if i.source_type in notion_types]
+                logger.info("Dedup pre-filter: consolidated %d items", items_removed)
+        except Exception as e:
+            logger.warning("Dedup pre-filter failed: %s. Continuing with unfiltered items.", e)
 
     # Phase 2: Synthesis
     synthesis_result: dict = {
