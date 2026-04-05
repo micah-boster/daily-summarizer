@@ -65,7 +65,7 @@
 
 ### Foundation (CONFIG)
 
-- [ ] **CONFIG-01**: Typed config model (Pydantic validation on config.yaml load) with backward-compatible defaults for all existing optional sections
+- [x] **CONFIG-01**: Typed config model (Pydantic validation on config.yaml load) with backward-compatible defaults for all existing optional sections
 
 ### Structured Outputs (STRUCT)
 
@@ -127,7 +127,7 @@
 | DOCS-02 | Phase 9 | Complete |
 | SYNTH-06 | Phase 10 | Complete |
 | SYNTH-08 | Phase 10 | Complete |
-| CONFIG-01 | Phase 13 | Pending |
+| CONFIG-01 | Phase 13 | Complete |
 | STRUCT-01 | Phase 14 | Pending |
 | NOTION-01 | Phase 15 | Pending |
 | PERF-03 | Phase 16 | Pending |
