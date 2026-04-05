@@ -8,19 +8,17 @@ A personal work intelligence system that ingests data from multiple work sources
 
 Every morning I open a structured daily summary of yesterday's work and find it accurate, useful, and worth 5 minutes of my time — without having produced it manually.
 
-## Current Milestone: v1.5.1 Notion + Performance + Reliability
+## Current Milestone: v2.0 Entity Layer
 
-**Goal:** Complete the ingest surface with Notion, parallelize the pipeline for speed, harden configuration and caching, and migrate Claude API calls to structured outputs.
+**Goal:** Make every synthesis item traceable to partners, people, and initiatives — so you can ask "what's happening with Affirm?" or "what does Colin owe me?" and get a sourced answer.
 
 **Target features:**
-- Notion page/database ingestion for daily summaries
-- Parallel ingest modules via asyncio (independent sources run concurrently)
-- Parallel per-meeting transcript extraction (concurrent Claude API calls)
-- Slack user batch resolution (users_list instead of N individual calls)
-- Algorithmic cross-source deduplication (supplement to LLM-based)
-- Typed config model with Pydantic validation on config.yaml load
-- Raw data cache retention policy (auto-delete after configurable TTL)
-- Migrate Claude API responses from markdown parsing to structured outputs (json_schema)
+- Entity registry in SQLite (partners, people, then initiatives)
+- Semi-automated entity discovery from existing daily summaries (backfill) + ongoing discovery on new runs
+- Entity attribution during synthesis (structured output fields tag items with entity references)
+- Entity merge proposals (Colin = Colin R. = colin@partner.com) with user confirm/reject/merge
+- Scoped views via CLI command + generated markdown reports
+- Initiative tracking (Q2 launch, MSA renegotiation) as a third entity type after people/partners stabilize
 
 ## Requirements
 
@@ -44,17 +42,24 @@ Every morning I open a structured daily summary of yesterday's work and find it 
 - ✓ Multi-source synthesis prompts (v1.5)
 - ✓ Commitment extraction with structured deadlines (v1.5)
 - ✓ Pipeline hardening and reliability (v1.5)
+- ✓ Typed config model with Pydantic validation (v1.5.1)
+- ✓ Claude API structured output migration (v1.5.1)
+- ✓ Notion page/database ingestion (v1.5.1)
+- ✓ Slack user batch resolution (v1.5.1)
+- ✓ Algorithmic cross-source deduplication (v1.5.1)
+- ✓ Raw data cache retention policy (v1.5.1)
+- ✓ Async pipeline parallelization (v1.5.1)
 
 ### Active
 
-- [ ] Notion page/database ingestion
-- [ ] Parallel ingest modules (asyncio)
-- [ ] Parallel per-meeting extraction (concurrent Claude calls)
-- [ ] Slack user batch resolution
-- [ ] Algorithmic cross-source deduplication
-- [ ] Typed config model (Pydantic validation)
-- [ ] Raw data cache retention policy
-- [ ] Claude API structured output migration (json_schema)
+- [ ] Entity registry (SQLite) for partners, people, initiatives
+- [ ] Semi-automated entity discovery from historical summaries
+- [ ] Ongoing entity discovery from new pipeline runs
+- [ ] Entity merge proposals with user confirmation
+- [ ] Entity attribution during synthesis (structured output fields)
+- [ ] Scoped entity views — CLI query command
+- [ ] Scoped entity views — generated markdown reports
+- [ ] Initiative tracking as third entity type
 
 ### Out of Scope
 
@@ -83,7 +88,13 @@ Every morning I open a structured daily summary of yesterday's work and find it 
 - Sequential pipeline acceptable at current scale but parallelization needed before adding more sources
 - Notion API complexity warranted deferral — no diff endpoint, breaking changes in Sept 2025
 
-**Platform vision:** v1.5 (expanded ingest) → v1.5.1 (Notion + perf + reliability) → v2.0 (entity layer) → v3.0 (action layer) → v4.0 (web UI). See docs/multi-version-platform-vision.md.
+**v1.5.1 learnings:**
+- httpx works well for Notion API — no need for official SDK
+- Pydantic structured outputs are clean; entity attribution can extend existing models
+- Async parallelization stable — entity discovery backfill can leverage async patterns
+- SQLite will be first non-flat-file storage in the project
+
+**Platform vision:** v2.0 (entity layer) → v3.0 (action layer) → v4.0 (web UI) → v5.0 (team distribution). See docs/multi-version-platform-vision.md.
 
 ## Constraints
 
@@ -108,4 +119,4 @@ Every morning I open a structured daily summary of yesterday's work and find it 
 | Cross-source dedup at normalization layer | One event = one item regardless of how many sources mention it | — Pending |
 
 ---
-*Last updated: 2026-04-04 after milestone v1.5.1 start*
+*Last updated: 2026-04-05 after milestone v2.0 start*
