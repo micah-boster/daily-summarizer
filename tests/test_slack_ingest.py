@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from src.config import make_test_config
 from src.ingest.slack import (
+    _load_user_cache,
+    _save_user_cache,
     build_slack_client,
     load_slack_state,
     message_to_source_item,
+    resolve_user_names,
     save_slack_state,
     should_expand_thread,
     thread_to_source_item,
@@ -479,3 +484,141 @@ class TestVolumeCap:
 
         items = fetch_slack_items(config)
         assert len(items) == 100
+
+
+class TestBatchUserResolution:
+    """Tests for batch Slack user resolution via users.list."""
+
+    def _make_member(self, uid, display_name="", real_name="", deleted=False, is_bot=False):
+        return {
+            "id": uid,
+            "deleted": deleted,
+            "is_bot": is_bot,
+            "real_name": real_name,
+            "profile": {"display_name": display_name},
+        }
+
+    def test_resolve_user_names_batch_uses_users_list(self, tmp_path):
+        """Batch resolution uses users.list, not individual users.info calls."""
+        import src.ingest.slack as slack_mod
+        slack_mod._user_cache.clear()
+
+        client = MagicMock()
+        # Page 1 with cursor, page 2 without
+        client.users_list.side_effect = [
+            {
+                "members": [self._make_member("U1", display_name="Alice")],
+                "response_metadata": {"next_cursor": "cursor1"},
+            },
+            {
+                "members": [self._make_member("U2", display_name="Bob")],
+                "response_metadata": {"next_cursor": ""},
+            },
+        ]
+
+        config = make_test_config(slack={"enabled": True, "channels": ["C123"]})
+        result = resolve_user_names(client, {"U1", "U2"}, config=config, cache_dir=tmp_path)
+
+        assert client.users_list.called
+        assert not client.users_info.called
+        assert result["U1"] == "Alice"
+        assert result["U2"] == "Bob"
+
+    def test_resolve_user_names_batch_filters_deleted_and_bots(self, tmp_path):
+        """Deleted users and bots are excluded from the batch map."""
+        import src.ingest.slack as slack_mod
+        slack_mod._user_cache.clear()
+
+        client = MagicMock()
+        client.users_list.return_value = {
+            "members": [
+                self._make_member("U1", display_name="Alice"),
+                self._make_member("U_DEL", display_name="Deleted", deleted=True),
+                self._make_member("U_BOT", display_name="Bot", is_bot=True),
+            ],
+            "response_metadata": {"next_cursor": ""},
+        }
+
+        config = make_test_config(slack={"enabled": True})
+        result = resolve_user_names(
+            client, {"U1", "U_DEL", "U_BOT"}, config=config, cache_dir=tmp_path
+        )
+
+        assert result["U1"] == "Alice"
+        # Deleted/bot users fall through to the uid itself
+        assert result["U_DEL"] == "U_DEL"
+        assert result["U_BOT"] == "U_BOT"
+
+    def test_resolve_user_names_batch_disk_cache_write_and_load(self, tmp_path):
+        """After batch fetch, cache is written. Second call uses disk cache."""
+        import src.ingest.slack as slack_mod
+        slack_mod._user_cache.clear()
+
+        client = MagicMock()
+        client.users_list.return_value = {
+            "members": [self._make_member("U1", display_name="Alice")],
+            "response_metadata": {"next_cursor": ""},
+        }
+
+        config = make_test_config(slack={"enabled": True})
+        resolve_user_names(client, {"U1"}, config=config, cache_dir=tmp_path)
+
+        cache_file = tmp_path / "slack_user_cache.json"
+        assert cache_file.exists()
+
+        # Clear in-memory cache and resolve again
+        slack_mod._user_cache.clear()
+        client.users_list.reset_mock()
+
+        result = resolve_user_names(client, {"U1"}, config=config, cache_dir=tmp_path)
+        assert result["U1"] == "Alice"
+        # Should NOT have called users_list again (used disk cache)
+        assert not client.users_list.called
+
+    def test_resolve_user_names_batch_stale_cache_refetches(self, tmp_path):
+        """Stale cache triggers a fresh users.list call."""
+        import src.ingest.slack as slack_mod
+        slack_mod._user_cache.clear()
+
+        # Write a cache file with old mtime
+        cache_file = tmp_path / "slack_user_cache.json"
+        cache_file.write_text(json.dumps({"U1": "OldName"}))
+        old_time = time.time() - (8 * 86400)  # 8 days ago
+        os.utime(cache_file, (old_time, old_time))
+
+        client = MagicMock()
+        client.users_list.return_value = {
+            "members": [self._make_member("U1", display_name="NewName")],
+            "response_metadata": {"next_cursor": ""},
+        }
+
+        config = make_test_config(slack={"enabled": True})
+        result = resolve_user_names(client, {"U1"}, config=config, cache_dir=tmp_path)
+
+        assert client.users_list.called
+        assert result["U1"] == "NewName"
+
+    def test_resolve_user_names_batch_fallback_on_failure(self, tmp_path):
+        """Falls back to individual users.info when users.list fails."""
+        import src.ingest.slack as slack_mod
+        slack_mod._user_cache.clear()
+
+        from slack_sdk.errors import SlackApiError
+
+        client = MagicMock()
+        client.users_list.side_effect = SlackApiError(
+            message="ratelimited", response=MagicMock(status_code=429)
+        )
+        client.users_info.return_value = {
+            "user": {
+                "real_name": "FallbackName",
+                "profile": {"display_name": "FallbackName"},
+            }
+        }
+
+        config = make_test_config(slack={"enabled": True})
+        result = resolve_user_names(client, {"U1"}, config=config, cache_dir=tmp_path)
+
+        assert client.users_list.called
+        assert client.users_info.called
+        assert result["U1"] == "FallbackName"

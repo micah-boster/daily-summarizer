@@ -166,6 +166,7 @@ class SlackConfig(BaseModel):
     max_messages_per_channel: int = Field(default=100, ge=1)
     bot_allowlist: list[str] = Field(default_factory=list)
     discovery_check_days: int = Field(default=7, ge=1)
+    user_cache_ttl_days: int = Field(default=7, ge=1)
     filter: SlackFilterConfig = Field(default_factory=SlackFilterConfig)
 
 
@@ -211,6 +212,25 @@ class NotionConfig(BaseModel):
     notion_version: str = "2022-06-28"
 
 
+class CacheConfig(BaseModel):
+    """Cache retention policy settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    raw_ttl_days: int = Field(default=14, ge=1)
+    dedup_log_ttl_days: int = Field(default=30, ge=1)
+
+
+class DedupConfig(BaseModel):
+    """Cross-source deduplication pre-filter settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    similarity_threshold: float = Field(default=0.85, ge=0.5, le=1.0)
+    log_dir: str = "output/dedup_logs"
+
+
 class PipelineConfig(BaseModel):
     """Root configuration model for the daily summarizer pipeline.
 
@@ -228,6 +248,8 @@ class PipelineConfig(BaseModel):
     google_docs: GoogleDocsConfig = Field(default_factory=GoogleDocsConfig)
     hubspot: HubSpotConfig = Field(default_factory=HubSpotConfig)
     notion: NotionConfig = Field(default_factory=NotionConfig)
+    cache: CacheConfig = Field(default_factory=CacheConfig)
+    dedup: DedupConfig = Field(default_factory=DedupConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -239,10 +261,12 @@ SECTION_EXAMPLES: dict[str, str] = {
     "calendars": 'calendars:\n  ids:\n    - "primary"\n  exclude_patterns: []',
     "transcripts": "transcripts:\n  gemini_drive:\n    enabled: true\n  matching:\n    time_window_minutes: 30",
     "synthesis": 'synthesis:\n  model: "claude-sonnet-4-20250514"\n  extraction_max_output_tokens: 4096',
-    "slack": "slack:\n  enabled: false\n  channels: []\n  thread_min_replies: 3",
+    "slack": "slack:\n  enabled: false\n  channels: []\n  thread_min_replies: 3\n  user_cache_ttl_days: 7",
     "google_docs": "google_docs:\n  enabled: false\n  content_max_chars: 2500",
     "hubspot": 'hubspot:\n  enabled: false\n  ownership_scope: "mine"\n  max_deals: 50',
     "notion": 'notion:\n  enabled: false\n  token: ""\n  watched_databases: []',
+    "cache": 'cache:\n  raw_ttl_days: 14\n  dedup_log_ttl_days: 30',
+    "dedup": 'dedup:\n  enabled: true\n  similarity_threshold: 0.85\n  log_dir: "output/dedup_logs"',
 }
 
 

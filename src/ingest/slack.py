@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -65,42 +66,155 @@ def build_slack_client(token: str | None = None) -> WebClient:
     return client
 
 
-def resolve_user_names(
-    client: WebClient, user_ids: set[str]
-) -> dict[str, str]:
-    """Batch resolve Slack user IDs to display names.
+def _load_user_cache(cache_path: Path, ttl_days: int) -> dict[str, str] | None:
+    """Load user cache from disk if fresh enough.
 
-    Uses a module-level cache to avoid repeated API calls across channels.
+    Args:
+        cache_path: Path to the JSON cache file.
+        ttl_days: Maximum age in days before cache is considered stale.
+
+    Returns:
+        Cached user map if fresh, None if stale or missing.
+    """
+    if not cache_path.exists():
+        return None
+    try:
+        age_seconds = time.time() - cache_path.stat().st_mtime
+        if age_seconds < ttl_days * 86400:
+            with open(cache_path, encoding="utf-8") as f:
+                return json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning("Failed to load user cache: %s", e)
+    return None
+
+
+def _save_user_cache(user_map: dict[str, str], cache_path: Path) -> None:
+    """Write user map to disk cache atomically.
+
+    Args:
+        user_map: Mapping of user_id -> display name.
+        cache_path: Path to write the JSON cache file.
+    """
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = cache_path.with_suffix(".tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(user_map, f, indent=2)
+    tmp_path.replace(cache_path)
+
+
+@retry_api_call
+def _fetch_all_users_batch(client: WebClient) -> dict[str, str]:
+    """Fetch all workspace users via users.list with pagination.
+
+    Filters out deactivated users and bots.
+
+    Args:
+        client: Authenticated Slack WebClient.
+
+    Returns:
+        Dict mapping user_id -> display name for all active human users.
+    """
+    user_map: dict[str, str] = {}
+    cursor = None
+    while True:
+        kwargs: dict = {"limit": 1000}
+        if cursor:
+            kwargs["cursor"] = cursor
+        resp = client.users_list(**kwargs)
+        for member in resp.get("members", []):
+            if member.get("deleted"):
+                continue
+            if member.get("is_bot"):
+                continue
+            uid = member["id"]
+            profile = member.get("profile", {})
+            name = (
+                profile.get("display_name")
+                or member.get("real_name")
+                or uid
+            )
+            if not name.strip():
+                name = uid
+            user_map[uid] = name
+        cursor = resp.get("response_metadata", {}).get("next_cursor")
+        if not cursor:
+            break
+    return user_map
+
+
+def resolve_user_names(
+    client: WebClient,
+    user_ids: set[str],
+    config: PipelineConfig | None = None,
+    cache_dir: Path | None = None,
+) -> dict[str, str]:
+    """Resolve Slack user IDs to display names using batch API with disk cache.
+
+    First attempts to load from disk cache. If cache is stale or missing,
+    fetches all workspace users via users.list. Falls back to individual
+    users.info calls if batch fetch fails.
 
     Args:
         client: Authenticated Slack WebClient.
         user_ids: Set of user IDs to resolve.
+        config: Pipeline config for TTL settings. Uses default 7 days if None.
+        cache_dir: Directory for cache file. Defaults to Path("config").
 
     Returns:
-        Dict mapping user_id -> display name.
+        Dict mapping user_id -> display name (only for requested IDs).
     """
+    global _user_cache
+
+    if cache_dir is None:
+        cache_dir = Path("config")
+    cache_path = cache_dir / "slack_user_cache.json"
+    ttl_days = config.slack.user_cache_ttl_days if config else 7
+
+    # Try loading from disk cache
+    if not _user_cache:
+        disk_cache = _load_user_cache(cache_path, ttl_days)
+        if disk_cache is not None:
+            _user_cache.update(disk_cache)
+            logger.info("Loaded %d users from disk cache", len(disk_cache))
+
+    # If we don't have all requested users, try batch fetch
+    missing = user_ids - set(_user_cache.keys())
+    if missing:
+        try:
+            batch_map = _fetch_all_users_batch(client)
+            _user_cache.update(batch_map)
+            _save_user_cache(batch_map, cache_path)
+            logger.info(
+                "Batch-resolved %d users via users.list", len(batch_map)
+            )
+        except Exception as e:
+            logger.warning(
+                "Batch users.list failed: %s. Falling back to individual calls.",
+                e,
+            )
+            # Fallback: resolve missing users individually
+            for uid in missing:
+                if uid in _user_cache:
+                    continue
+                try:
+                    resp = _slack_users_info_with_retry(client, uid)
+                    profile = resp["user"].get("profile", {})
+                    name = (
+                        profile.get("display_name")
+                        or resp["user"].get("real_name")
+                        or uid
+                    )
+                    if not name.strip():
+                        name = uid
+                    _user_cache[uid] = name
+                except SlackApiError as exc:
+                    logger.warning("Failed to resolve user %s: %s", uid, exc)
+                    _user_cache[uid] = uid
+
+    # Return only requested IDs
     result: dict[str, str] = {}
     for uid in user_ids:
-        if uid in _user_cache:
-            result[uid] = _user_cache[uid]
-            continue
-        try:
-            resp = _slack_users_info_with_retry(client, uid)
-            profile = resp["user"].get("profile", {})
-            name = (
-                profile.get("display_name")
-                or resp["user"].get("real_name")
-                or uid
-            )
-            # Strip empty strings
-            if not name.strip():
-                name = uid
-            _user_cache[uid] = name
-            result[uid] = name
-        except SlackApiError as e:
-            logger.warning("Failed to resolve user %s: %s", uid, e)
-            _user_cache[uid] = uid
-            result[uid] = uid
+        result[uid] = _user_cache.get(uid, uid)
     return result
 
 
@@ -378,7 +492,10 @@ def _resolve_channel_name(client: WebClient, channel_id: str) -> str:
 
 
 def _resolve_dm_partner(
-    client: WebClient, channel_id: str, user_map: dict[str, str]
+    client: WebClient,
+    channel_id: str,
+    user_map: dict[str, str],
+    config: PipelineConfig | None = None,
 ) -> str:
     """Resolve the partner name(s) for a DM or group DM."""
     try:
@@ -389,7 +506,7 @@ def _resolve_dm_partner(
         if channel_info.get("is_im"):
             partner_id = channel_info.get("user", "")
             if partner_id:
-                names = resolve_user_names(client, {partner_id})
+                names = resolve_user_names(client, {partner_id}, config=config)
                 return names.get(partner_id, partner_id)
             return "unknown"
 
@@ -397,7 +514,7 @@ def _resolve_dm_partner(
         if channel_info.get("is_mpim"):
             members_resp = client.conversations_members(channel=channel_id)
             member_ids = set(members_resp.get("members", []))
-            names = resolve_user_names(client, member_ids)
+            names = resolve_user_names(client, member_ids, config=config)
             name_list = sorted(names.values())
             if len(name_list) > 3:
                 return "group DM"
@@ -470,7 +587,7 @@ def fetch_slack_items(
 
             # Resolve user names
             user_ids = {m.get("user", "") for m in messages if m.get("user")}
-            user_map = resolve_user_names(client, user_ids)
+            user_map = resolve_user_names(client, user_ids, config=config)
 
             # Filter noise
             filtered = [m for m in messages if should_keep_message(m, bot_allowlist)]
@@ -544,8 +661,8 @@ def fetch_slack_items(
 
             # Resolve DM partner name
             user_ids = {m.get("user", "") for m in messages if m.get("user")}
-            user_map = resolve_user_names(client, user_ids)
-            dm_partner = _resolve_dm_partner(client, dm_id, user_map)
+            user_map = resolve_user_names(client, user_ids, config=config)
+            dm_partner = _resolve_dm_partner(client, dm_id, user_map, config=config)
 
             logger.info(
                 "Fetched %d messages from DM with %s", len(messages), dm_partner
