@@ -127,3 +127,23 @@ def test_run_discovery_no_token(mock_load_config, capsys):
 
     output = capsys.readouterr().out
     assert "No Notion token configured" in output
+
+
+@patch("src.ingest.notion_discovery.load_config")
+def test_run_notion_discovery_passes_path_to_load_config(mock_load_config):
+    """run_notion_discovery wraps config_path in Path before calling load_config.
+
+    Regression test for str->Path crash: load_config expects Path|None,
+    but run_notion_discovery previously passed the raw string from argparse.
+    """
+    mock_config = MagicMock()
+    mock_config.notion.token = ""  # Early return so we don't need full mock
+    mock_load_config.return_value = mock_config
+
+    run_notion_discovery("config/config.yaml")
+
+    # Verify load_config was called with a Path object, not a raw string
+    args, _ = mock_load_config.call_args
+    assert isinstance(args[0], Path), (
+        f"Expected load_config to receive a Path, got {type(args[0]).__name__}"
+    )

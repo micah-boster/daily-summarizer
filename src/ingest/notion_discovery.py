@@ -92,7 +92,7 @@ def run_notion_discovery(config_path: str) -> None:
     Args:
         config_path: Path to config.yaml file.
     """
-    config = load_config(config_path)
+    config = load_config(Path(config_path))
 
     if not config.notion.token:
         print(
