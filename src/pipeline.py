@@ -20,6 +20,7 @@ from src.ingest.calendar import build_calendar_service, cache_raw_response, fetc
 from src.ingest.gmail import build_gmail_service, cache_raw_emails
 from src.ingest.google_docs import fetch_google_docs_items
 from src.ingest.hubspot import fetch_hubspot_items
+from src.ingest.notion import fetch_notion_items
 from src.ingest.normalizer import build_normalized_output
 from src.ingest.slack import build_slack_client, fetch_slack_items, load_slack_state, save_slack_state
 from src.ingest.slack_discovery import check_new_channels
@@ -131,6 +132,20 @@ def _ingest_docs(ctx: PipelineContext) -> list[SourceItem]:
         return []
 
 
+def _ingest_notion(ctx: PipelineContext) -> list[SourceItem]:
+    """Fetch Notion page and database items for the target date."""
+    if not ctx.config.notion.enabled:
+        return []
+
+    try:
+        items = fetch_notion_items(ctx.config, ctx.target_date)
+        logger.info("Fetched %d Notion items", len(items))
+        return items
+    except Exception as e:
+        logger.warning("Notion ingestion failed: %s. Continuing without Notion data.", e)
+        return []
+
+
 def _ingest_calendar(
     ctx: PipelineContext,
 ) -> tuple[dict | None, list, list, list]:
@@ -204,6 +219,7 @@ def run_pipeline(ctx: PipelineContext) -> None:
     slack_items = _ingest_slack(ctx)
     hubspot_items = _ingest_hubspot(ctx)
     docs_items = _ingest_docs(ctx)
+    notion_items = _ingest_notion(ctx)
     categorized, transcripts, unmatched, extractions = _ingest_calendar(ctx)
 
     # Phase 2: Synthesis
@@ -224,11 +240,11 @@ def run_pipeline(ctx: PipelineContext) -> None:
         transcript_count = sum(1 for e in active_events if e.transcript_text is not None)
 
         try:
-            if extractions or slack_items or docs_items or hubspot_items:
+            if extractions or slack_items or docs_items or hubspot_items or notion_items:
                 synthesis_result = synthesize_daily(
                     extractions, current, ctx.config,
                     slack_items=slack_items, docs_items=docs_items,
-                    hubspot_items=hubspot_items,
+                    hubspot_items=hubspot_items, notion_items=notion_items,
                     client=ctx.claude_client,
                 )
                 logger.info("Daily synthesis complete")
@@ -268,12 +284,12 @@ def run_pipeline(ctx: PipelineContext) -> None:
         )
     else:
         # No Google credentials: synthesize Slack/HubSpot/Docs if available
-        if slack_items or docs_items or hubspot_items:
+        if slack_items or docs_items or hubspot_items or notion_items:
             try:
                 synthesis_result = synthesize_daily(
                     [], current, ctx.config,
                     slack_items=slack_items, docs_items=docs_items,
-                    hubspot_items=hubspot_items,
+                    hubspot_items=hubspot_items, notion_items=notion_items,
                     client=ctx.claude_client,
                 )
                 logger.info("Daily synthesis complete (no-creds path)")
@@ -342,7 +358,8 @@ def run_pipeline(ctx: PipelineContext) -> None:
     # Write daily summary
     path = write_daily_summary(
         synthesis, ctx.output_dir, ctx.template_dir,
-        slack_items=slack_items, docs_items=docs_items, hubspot_items=hubspot_items,
+        slack_items=slack_items, docs_items=docs_items,
+        hubspot_items=hubspot_items, notion_items=notion_items,
     )
     logger.info(
         "Wrote daily summary for %s -> %s (%d meetings, %.1fh)",

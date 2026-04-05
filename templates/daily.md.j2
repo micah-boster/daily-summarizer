@@ -2,7 +2,7 @@
 
 ## Overview
 
-{{ meeting_count }} meeting{{ "s" if meeting_count != 1 else "" }}, {{ "%.1f"|format(total_meeting_hours) }} hours of meetings, {{ transcript_count }} transcript{{ "s" if transcript_count != 1 else "" }} available.{% if hubspot_item_count %} {{ hubspot_item_count }} HubSpot item{{ "s" if hubspot_item_count != 1 else "" }}.{% endif %}
+{{ meeting_count }} meeting{{ "s" if meeting_count != 1 else "" }}, {{ "%.1f"|format(total_meeting_hours) }} hours of meetings, {{ transcript_count }} transcript{{ "s" if transcript_count != 1 else "" }} available.{% if hubspot_item_count %} {{ hubspot_item_count }} HubSpot item{{ "s" if hubspot_item_count != 1 else "" }}.{% endif %}{% if notion_item_count %} {{ notion_item_count }} Notion item{{ "s" if notion_item_count != 1 else "" }}.{% endif %}
 
 {% if executive_summary %}
 ## Executive Summary
@@ -107,6 +107,36 @@
 - **{{ item.title }}** — {{ item.content[:200] }}{% if item.content|length > 200 %}...{% endif %} {{ item.attribution_text() }}
 {% endfor %}
 
+{% endif %}
+{% endif %}
+{% if notion_items %}
+## Notion Activity
+
+{% set page_items = notion_items | selectattr("source_type.value", "equalto", "notion_page") | list %}
+{% set db_items = notion_items | selectattr("source_type.value", "equalto", "notion_db") | list %}
+{% if page_items %}
+### Pages Edited ({{ page_items | length }})
+
+{% for item in page_items %}
+- **{{ item.title }}** — {{ item.content[:200] }}{% if item.content|length > 200 %}...{% endif %} {{ item.attribution_text() }}
+{% endfor %}
+
+{% endif %}
+{% if db_items %}
+{% set ns = namespace(seen=[]) %}
+{% for item in db_items %}
+{% if item.display_context not in ns.seen %}
+{% set ns.seen = ns.seen + [item.display_context] %}
+### {{ item.display_context }} ({{ db_items | selectattr("display_context", "equalto", item.display_context) | list | length }})
+
+{% for inner_item in db_items %}
+{% if inner_item.display_context == item.display_context %}
+- **{{ inner_item.title }}** — {{ inner_item.content[:200] }}{% if inner_item.content|length > 200 %}...{% endif %} {{ inner_item.attribution_text() }}
+{% endif %}
+{% endfor %}
+
+{% endif %}
+{% endfor %}
 {% endif %}
 {% endif %}
 {% if extractions %}

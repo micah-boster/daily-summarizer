@@ -89,6 +89,12 @@ def _is_retryable(exc: BaseException) -> bool:
     if HttpxRetryableErrors and isinstance(exc, HttpxRetryableErrors):
         return True
 
+    # httpx HTTP status errors (429, 5xx)
+    if _httpx is not None and isinstance(exc, _httpx.HTTPStatusError):
+        status = exc.response.status_code
+        if status == 429 or status >= 500:
+            return True
+
     # Anthropic API errors
     if AnthropicRetryableErrors and isinstance(exc, AnthropicRetryableErrors):
         return True

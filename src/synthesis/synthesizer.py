@@ -77,6 +77,7 @@ Number of meetings with transcripts: {transcript_count}
 Number of Slack sources: {slack_source_count}
 Number of Google Docs sources: {docs_source_count}
 Number of HubSpot sources: {hubspot_source_count}
+Number of Notion sources: {notion_source_count}
 
 {extractions_text}
 
@@ -85,6 +86,8 @@ Number of HubSpot sources: {hubspot_source_count}
 {docs_items_text}
 
 {hubspot_items_text}
+
+{notion_items_text}
 
 {priority_context}
 
@@ -121,6 +124,7 @@ CRITICAL RULES:
 - Slack items use their attribution format exactly as provided.
 - Google Docs items use their attribution format exactly as provided.
 - HubSpot items use their attribution format exactly as provided.
+- Notion items use their attribution format exactly as provided.
 - Neutral tone. Facts only.
 - If a category has no items, leave the list empty.
 """
@@ -131,25 +135,28 @@ def _estimate_and_truncate(
     slack_items_text: str,
     docs_items_text: str,
     hubspot_items_text: str,
+    notion_items_text: str = "",
     base_prompt_chars: int = 3000,
-) -> tuple[str, str, str, str, list[str]]:
+) -> tuple[str, str, str, str, str, list[str]]:
     """Estimate token usage and truncate low-priority sources if over budget.
 
     Sources are truncated in priority order (lowest first):
-    1. Google Docs (lowest priority)
-    2. HubSpot
-    3. Slack
-    4. Meeting transcripts (NEVER truncated — highest priority)
+    1. Notion (lowest priority — newest source)
+    2. Google Docs
+    3. HubSpot
+    4. Slack
+    5. Meeting transcripts (NEVER truncated — highest priority)
 
     Args:
         extractions_text: Formatted meeting extractions text.
         slack_items_text: Formatted Slack items text.
         docs_items_text: Formatted Google Docs items text.
         hubspot_items_text: Formatted HubSpot items text.
+        notion_items_text: Formatted Notion items text.
         base_prompt_chars: Estimated character count for the base prompt template.
 
     Returns:
-        Tuple of (extractions_text, slack_text, docs_text, hubspot_text, truncated_sources).
+        Tuple of (extractions_text, slack_text, docs_text, hubspot_text, notion_text, truncated_sources).
         truncated_sources is a list of source names that were removed.
     """
     total = (
@@ -157,15 +164,22 @@ def _estimate_and_truncate(
         + len(slack_items_text)
         + len(docs_items_text)
         + len(hubspot_items_text)
+        + len(notion_items_text)
         + base_prompt_chars
     )
 
     if total <= EFFECTIVE_CHAR_BUDGET:
-        return extractions_text, slack_items_text, docs_items_text, hubspot_items_text, []
+        return extractions_text, slack_items_text, docs_items_text, hubspot_items_text, notion_items_text, []
 
     truncated: list[str] = []
 
-    # Truncate in priority order: Docs -> HubSpot -> Slack -> (never transcripts)
+    # Truncate in priority order: Notion -> Docs -> HubSpot -> Slack -> (never transcripts)
+    if total > EFFECTIVE_CHAR_BUDGET and notion_items_text:
+        total -= len(notion_items_text)
+        notion_items_text = ""
+        truncated.append("Notion")
+        logger.warning("Token budget: truncated Notion items")
+
     if total > EFFECTIVE_CHAR_BUDGET and docs_items_text:
         total -= len(docs_items_text)
         docs_items_text = ""
@@ -188,11 +202,11 @@ def _estimate_and_truncate(
         logger.warning(
             "Token budget enforcement: truncated %s (estimated %d chars / %d budget)",
             ", ".join(truncated),
-            total + sum(len(s) for s in [docs_items_text, hubspot_items_text, slack_items_text]),
+            total + sum(len(s) for s in [docs_items_text, hubspot_items_text, slack_items_text, notion_items_text]),
             EFFECTIVE_CHAR_BUDGET,
         )
 
-    return extractions_text, slack_items_text, docs_items_text, hubspot_items_text, truncated
+    return extractions_text, slack_items_text, docs_items_text, hubspot_items_text, notion_items_text, truncated
 
 
 def _format_extractions_for_prompt(extractions: list[MeetingExtraction]) -> str:
@@ -462,6 +476,48 @@ def _convert_synthesis_to_dict(output: DailySynthesisOutput) -> dict:
     }
 
 
+def _format_notion_items_for_prompt(notion_items: list[SourceItem]) -> str:
+    """Format Notion SourceItems into readable text for the synthesis prompt.
+
+    Groups page edits and database items separately. Database items are
+    grouped by display_context (database name).
+
+    Args:
+        notion_items: List of SourceItem objects from Notion ingestion.
+
+    Returns:
+        Formatted text block for inclusion in the synthesis prompt.
+    """
+    if not notion_items:
+        return ""
+
+    blocks: list[str] = ["## Notion Activity"]
+
+    page_items = [i for i in notion_items if i.source_type == SourceType.NOTION_PAGE]
+    db_items = [i for i in notion_items if i.source_type == SourceType.NOTION_DB]
+
+    if page_items:
+        blocks.append(f"### Pages Edited ({len(page_items)})")
+        for item in page_items:
+            blocks.append(f"- **{item.title}**: {item.content[:200]} {item.attribution_text()}")
+        blocks.append("")
+
+    if db_items:
+        # Group by database name (display_context)
+        db_groups: dict[str, list[SourceItem]] = {}
+        for item in db_items:
+            group = item.display_context or "Database"
+            db_groups.setdefault(group, []).append(item)
+
+        for group_name, items in db_groups.items():
+            blocks.append(f"### {group_name} ({len(items)} items)")
+            for item in items:
+                blocks.append(f"- **{item.title}**: {item.content[:200]} {item.attribution_text()}")
+            blocks.append("")
+
+    return "\n".join(blocks)
+
+
 def synthesize_daily(
     extractions: list[MeetingExtraction],
     target_date: date,
@@ -469,12 +525,13 @@ def synthesize_daily(
     slack_items: list[SourceItem] | None = None,
     docs_items: list[SourceItem] | None = None,
     hubspot_items: list[SourceItem] | None = None,
+    notion_items: list[SourceItem] | None = None,
     client: anthropic.Anthropic | None = None,
 ) -> dict:
-    """Produce daily synthesis from meeting extractions, Slack, Docs, and HubSpot items.
+    """Produce daily synthesis from meeting extractions, Slack, Docs, HubSpot, and Notion items.
 
     Stage 2 of the two-stage pipeline. Takes all per-meeting extractions
-    and optional Slack/Docs/HubSpot SourceItems, builds the synthesis prompt,
+    and optional Slack/Docs/HubSpot/Notion SourceItems, builds the synthesis prompt,
     calls Claude, parses the response, and validates for evidence-only language.
 
     Args:
@@ -484,6 +541,7 @@ def synthesize_daily(
         slack_items: Optional list of SourceItem from Slack ingestion.
         docs_items: Optional list of SourceItem from Google Docs ingestion.
         hubspot_items: Optional list of SourceItem from HubSpot ingestion.
+        notion_items: Optional list of SourceItem from Notion ingestion.
 
     Returns:
         Dict with keys: substance (list[str]), decisions (list[str]),
@@ -501,8 +559,9 @@ def synthesize_daily(
     has_slack = bool(slack_items)
     has_docs = bool(docs_items)
     has_hubspot = bool(hubspot_items)
+    has_notion = bool(notion_items)
 
-    if not substantive and not has_slack and not has_docs and not has_hubspot:
+    if not substantive and not has_slack and not has_docs and not has_hubspot and not has_notion:
         logger.info("No substantive extractions, Slack, Docs, or HubSpot items for %s, returning empty synthesis", target_date)
         return empty_result
 
@@ -514,16 +573,18 @@ def synthesize_daily(
     slack_items_text = _format_slack_items_for_prompt(slack_items or [])
     docs_items_text = _format_docs_items_for_prompt(docs_items or [])
     hubspot_items_text = _format_hubspot_items_for_prompt(deduped_hubspot)
+    notion_items_text = _format_notion_items_for_prompt(notion_items or [])
 
     # Token budget enforcement: truncate if over budget
-    extractions_text, slack_items_text, docs_items_text, hubspot_items_text, truncated_sources = (
-        _estimate_and_truncate(extractions_text, slack_items_text, docs_items_text, hubspot_items_text)
+    extractions_text, slack_items_text, docs_items_text, hubspot_items_text, notion_items_text, truncated_sources = (
+        _estimate_and_truncate(extractions_text, slack_items_text, docs_items_text, hubspot_items_text, notion_items_text)
     )
 
     transcript_count = len(substantive)
     slack_source_count = len(slack_items) if slack_items else 0
     docs_source_count = len(docs_items) if docs_items else 0
     hubspot_source_count = len(deduped_hubspot)
+    notion_source_count = len(notion_items) if notion_items else 0
 
     # Conditional executive summary for busy days (5+ meetings with transcripts)
     exec_instruction = ""
@@ -548,10 +609,12 @@ def synthesize_daily(
         slack_source_count=slack_source_count,
         docs_source_count=docs_source_count,
         hubspot_source_count=hubspot_source_count,
+        notion_source_count=notion_source_count,
         extractions_text=extractions_text,
         slack_items_text=slack_items_text,
         docs_items_text=docs_items_text,
         hubspot_items_text=hubspot_items_text,
+        notion_items_text=notion_items_text,
         executive_summary_instruction=exec_instruction,
         priority_context=priority_context,
     )
