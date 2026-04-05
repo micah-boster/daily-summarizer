@@ -307,7 +307,12 @@ Plans:
   2. Raw data cache files older than the configured TTL are automatically deleted on each pipeline run, while processed output (daily summaries, quality files) is never touched
   3. Algorithmically duplicate items across sources (same content, overlapping time window) are consolidated before reaching LLM synthesis, reducing token usage
   4. Near-match dedup decisions are logged so false positives can be identified and the threshold tuned
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 16-01-PLAN.md -- Batch Slack user resolution via users.list with disk cache and fallback (TDD)
+- [ ] 16-02-PLAN.md -- Cache retention policy with configurable TTL for raw data cleanup (TDD)
+- [ ] 16-03-PLAN.md -- Cross-source algorithmic dedup pre-filter with decision logging (TDD)
 
 ### Phase 17: Asyncio Parallelization
 **Goal**: Independent ingest sources run concurrently and per-meeting Claude calls run in parallel, cutting pipeline wall-clock time roughly in half
