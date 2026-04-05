@@ -63,13 +63,14 @@ Every morning I open a structured daily summary of yesterday's work and find it 
 
 ### Out of Scope
 
-- Entity layer (partners, people, initiatives) — v2.0
 - Response drafting and send queue — v3.0
 - Web interface — v4.0
 - Personnel evaluation or judgment — system surfaces evidence only
 - Team-facing dashboards or shared views — personal tool
 - Real-time / intraday processing — end-of-day batch sufficient
-- Query interface / ad-hoc retrieval — v2.0+
+- Knowledge graph / relationship mapping — over-engineered; relationships implicit via co-mentions
+- Entity sentiment tracking — violates evidence-only constraint
+- Auto-merge without confirmation — false merges are catastrophic
 
 ## Context
 
@@ -114,9 +115,14 @@ Every morning I open a structured daily summary of yesterday's work and find it 
 | Evidence only, never evaluations | Legal exposure, fairness, context collapse risks | ✓ Good |
 | Two-stage synthesis (per-meeting → daily) | Architecturally required for source attribution | ✓ Good |
 | Flat files for storage | Avoids premature architecture; revisit at v2.0 | ✓ Good |
-| Slack channel discovery + curation | Auto-find active channels, user confirms/adds; avoids noise from 50+ channels | — Pending |
-| HubSpot: activity-only scope | Deal changes and notes, not full CRM; keeps ingestion focused | — Pending |
-| Cross-source dedup at normalization layer | One event = one item regardless of how many sources mention it | — Pending |
+| Slack channel discovery + curation | Auto-find active channels, user confirms/adds; avoids noise from 50+ channels | ✓ Good |
+| HubSpot: activity-only scope | Deal changes and notes, not full CRM; keeps ingestion focused | ✓ Good |
+| Cross-source dedup at normalization layer | One event = one item regardless of how many sources mention it | ✓ Good |
+| httpx for Notion API (no SDK) | Pinned to Notion-Version 2022-06-28; avoids breaking changes | ✓ Good |
+| Pydantic for config + Claude outputs | Reuse same model layer for validation and structured outputs | ✓ Good |
+| Conservative dedup threshold (0.85) | Logs near-matches for threshold tuning; avoids false merges | ✓ Good |
+| Async pipeline with sync entry point | `run_pipeline()` stays sync; `asyncio.run()` wraps internal async | ✓ Good |
+| Decimal phase numbering for gap closure | Phase 18.1 inserted without renumbering — clear audit trail | ✓ Good |
 
 ---
-*Last updated: 2026-04-05 after milestone v2.0 start*
+*Last updated: 2026-04-05 after v1.5.1 milestone completion*
