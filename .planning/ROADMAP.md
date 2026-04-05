@@ -355,4 +355,4 @@ Each phase builds on the stability of the prior phase. Phase 17 (async) goes las
 | 14. Structured Output Migration | 2/2 | Complete    | 2026-04-05 | - |
 | 15. Notion Ingestion | 3/3 | Complete    | 2026-04-05 | - |
 | 16. Reliability Quick Wins | v1.5.1 | 0/3 | Not started | - |
-| 17. Asyncio Parallelization | 2/2 | Complete   | 2026-04-05 | - |
+| 17. Asyncio Parallelization | 2/2 | Complete    | 2026-04-05 | - |
