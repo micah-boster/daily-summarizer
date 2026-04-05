@@ -248,7 +248,7 @@ Plans:
 - [x] **Phase 13: Typed Config Foundation** - Pydantic config model replacing raw dict access with validated, typed configuration (completed 2026-04-05)
 - [x] **Phase 14: Structured Output Migration** - Claude API calls migrated from markdown parsing to json_schema structured outputs (completed 2026-04-05)
 - [x] **Phase 15: Notion Ingestion** - Notion page and database ingestion completing the work source surface (completed 2026-04-05)
-- [ ] **Phase 16: Reliability Quick Wins** - Slack batch resolution, cache retention policy, and algorithmic dedup pre-filter
+- [x] **Phase 16: Reliability Quick Wins** - Slack batch resolution, cache retention policy, and algorithmic dedup pre-filter (completed 2026-04-05)
 - [ ] **Phase 17: Asyncio Parallelization** - Concurrent ingest modules and parallel per-meeting extraction via asyncio
 
 ## Phase Details
@@ -350,5 +350,5 @@ Each phase builds on the stability of the prior phase. Phase 17 (async) goes las
 | 13. Typed Config Foundation | 2/2 | Complete    | 2026-04-05 | - |
 | 14. Structured Output Migration | 2/2 | Complete    | 2026-04-05 | - |
 | 15. Notion Ingestion | 3/3 | Complete    | 2026-04-05 | - |
-| 16. Reliability Quick Wins | v1.5.1 | 0/0 | Not started | - |
+| 16. Reliability Quick Wins | 3/3 | Complete    | 2026-04-05 | - |
 | 17. Asyncio Parallelization | v1.5.1 | 0/0 | Not started | - |

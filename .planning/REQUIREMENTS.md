@@ -79,15 +79,15 @@
 
 - [ ] **PERF-01**: Parallel ingest modules via asyncio (independent sources run concurrently, sequential dependencies preserved)
 - [ ] **PERF-02**: Parallel per-meeting transcript extraction (concurrent Claude API calls with rate-limit-aware semaphore)
-- [ ] **PERF-03**: Slack user batch resolution (users_list instead of N individual users_info calls)
+- [x] **PERF-03**: Slack user batch resolution (users_list instead of N individual users_info calls)
 
 ### Intelligence (DEDUP)
 
-- [ ] **DEDUP-01**: Algorithmic cross-source deduplication as conservative pre-filter to supplement LLM-based dedup
+- [x] **DEDUP-01**: Algorithmic cross-source deduplication as conservative pre-filter to supplement LLM-based dedup
 
 ### Operations (OPS)
 
-- [ ] **OPS-01**: Raw data cache retention policy (auto-delete after configurable TTL)
+- [x] **OPS-01**: Raw data cache retention policy (auto-delete after configurable TTL)
 
 ## v2+ Requirements (Future)
 
@@ -130,9 +130,9 @@
 | CONFIG-01 | Phase 13 | Complete |
 | STRUCT-01 | Phase 14 | Pending |
 | NOTION-01 | Phase 15 | Complete |
-| PERF-03 | Phase 16 | Pending |
-| OPS-01 | Phase 16 | Pending |
-| DEDUP-01 | Phase 16 | Pending |
+| PERF-03 | Phase 16 | Complete |
+| OPS-01 | Phase 16 | Complete |
+| DEDUP-01 | Phase 16 | Complete |
 | PERF-01 | Phase 17 | Pending |
 | PERF-02 | Phase 17 | Pending |
 
