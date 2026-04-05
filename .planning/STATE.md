@@ -32,7 +32,7 @@ Progress: [░░░░░░░░░░] 0%
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 36 (v1.0: 14, v1.5: 7, v1.5.1: 12, v2.0 gap: 3)
+- Total plans completed: 37 (v1.0: 14, v1.5: 7, v1.5.1: 12, v2.0 gap: 4)
 - Average duration: ~15 min
 - Total execution time: ~8.8 hours
 
@@ -43,7 +43,7 @@ Progress: [░░░░░░░░░░] 0%
 | Prior milestones | 35 | ~8.8h | ~15 min |
 
 **Recent Trend:**
-- Last 5 plans: Phase 17-01, 17-02, 18-01, 18-02, 18.1-02 (all fast)
+- Last 5 plans: Phase 17-02, 18-01, 18-02, 18.1-01, 18.1-02 (all fast)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -60,6 +60,7 @@ Recent decisions affecting current work:
 - [v2.0 roadmap]: Split ships WITH merge (Phase 22) -- never merge without undo capability
 - [v2.0 roadmap]: Backfill + ongoing discovery in same phase (20) -- both populate the registry
 - [v2.0 roadmap]: HubSpot cross-reference in Phase 20 alongside discovery (enrichment during registration)
+- [18.1-01]: Followed Phase 17 VERIFICATION.md format for consistency across phases
 - [18.1-02]: Removed entire src.ingest.calendar import line from pipeline.py (all 3 names unused; pipeline_async imports directly)
 - [18.1-02]: Kept SourceItem but removed SourceType from pipeline.py imports (only SourceItem used by _ingest_* returns)
 
@@ -77,5 +78,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-04-05
-Stopped at: Completed 18.1-02-PLAN.md (dead pipeline code removal)
+Stopped at: Completed 18.1-01-PLAN.md (Phase 16 verification + notion discovery fix)
 Resume file: None

@@ -253,7 +253,7 @@ Plans:
 - [x] **Phase 16: Reliability Quick Wins** - Slack batch resolution, cache retention policy, and algorithmic dedup pre-filter (completed 2026-04-05)
 - [x] **Phase 17: Asyncio Parallelization** - Concurrent ingest modules and parallel per-meeting extraction via asyncio (completed 2026-04-05)
 - [x] **Phase 18: Structured Output Completion** - Gap closure: weekly/monthly structured outputs, deprecated beta header removal (completed 2026-04-05)
-- [ ] **Phase 18.1: Milestone Audit Gap Closure** - Verify Phase 16, fix notion_discovery.py bug, remove dead sync pipeline code
+- [x] **Phase 18.1: Milestone Audit Gap Closure** - Verify Phase 16, fix notion_discovery.py bug, remove dead sync pipeline code (completed 2026-04-05)
 
 ### Phase 13: Typed Config Foundation
 **Goal**: Pipeline configuration is validated at startup with typed access, catching misconfigurations immediately instead of failing deep in a run
@@ -485,7 +485,7 @@ Phases 19-23 execute sequentially: 19 -> 20 -> 21 -> 22 -> 23.
 | 16. Reliability Quick Wins | v1.5.1 | 3/3 | Complete | 2026-04-05 |
 | 17. Asyncio Parallelization | v1.5.1 | 2/2 | Complete | 2026-04-05 |
 | 18. Structured Output Completion | v1.5.1 | 2/2 | Complete | 2026-04-05 |
-| 18.1. Milestone Audit Gap Closure | 1/2 | In Progress|  | - |
+| 18.1. Milestone Audit Gap Closure | 2/2 | Complete   | 2026-04-05 | - |
 | 19. Entity Registry Foundation | v2.0 | 0/2 | Not started | - |
 | 20. Entity Discovery + Backfill | v2.0 | 0/3 | Not started | - |
 | 21. Entity Attribution | v2.0 | 0/2 | Not started | - |
