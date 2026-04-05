@@ -8,7 +8,7 @@ progress:
   total_phases: 18
   completed_phases: 16
   total_plans: 40
-  completed_plans: 36
+  completed_plans: 37
 ---
 
 # Project State
@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** Every morning I open a structured daily summary of yesterday's work and find it accurate, useful, and worth 5 minutes of my time -- without having produced it manually.
-**Current focus:** Phase 15 Notion Ingestion complete, ready for Phase 16
+**Current focus:** Phase 17 Asyncio Parallelization in progress
 
 ## Current Position
 
-Phase: 15 - Notion Ingestion (complete)
-Plan: 3/3 complete
-Status: Phase execution complete, awaiting verification
-Last activity: 2026-04-05 -- Phase 15 executed (3 plans, 2 waves)
+Phase: 17 - Asyncio Parallelization (in progress)
+Plan: 1/2 complete
+Status: Plan 17-01 complete, ready for 17-02
+Last activity: 2026-04-05 -- Phase 17 Plan 01 executed (async extraction functions)
 
 ## Performance Metrics
 
@@ -46,6 +46,7 @@ Last activity: 2026-04-05 -- Phase 15 executed (3 plans, 2 waves)
 | Phase 15 P01 | 5 min | 3 tasks | 4 files |
 | Phase 15 P02 | 3 min | 3 tasks | 3 files |
 | Phase 15 P03 | 4 min | 2 tasks | 5 files |
+| Phase 17 P01 | 2 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,8 @@ Recent decisions affecting current work:
 - [Phase 15]: Used httpx directly for Notion API (no notion-client SDK) -- fewer deps, rate limit control
 - [Phase 15]: Pinned Notion-Version to 2022-06-28 (stable) rather than 2025-09-03
 - [Phase 15]: Property transitions deferred -- current values shown (snapshot layer needed for diffs)
+- [Phase 17]: pytest-asyncio added as dev dependency for async test support
+- [Phase 17]: tenacity retry decorator works on async functions without modification
 
 ### Pending Todos
 
@@ -82,5 +85,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-04-05
-Stopped at: Phase 15 execution complete, awaiting verification
+Stopped at: Completed 17-01-PLAN.md
 Resume file: None

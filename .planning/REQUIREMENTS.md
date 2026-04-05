@@ -78,7 +78,7 @@
 ### Performance (PERF)
 
 - [ ] **PERF-01**: Parallel ingest modules via asyncio (independent sources run concurrently, sequential dependencies preserved)
-- [ ] **PERF-02**: Parallel per-meeting transcript extraction (concurrent Claude API calls with rate-limit-aware semaphore)
+- [x] **PERF-02**: Parallel per-meeting transcript extraction (concurrent Claude API calls with rate-limit-aware semaphore)
 - [x] **PERF-03**: Slack user batch resolution (users_list instead of N individual users_info calls)
 
 ### Intelligence (DEDUP)
@@ -134,7 +134,7 @@
 | OPS-01 | Phase 16 | Complete |
 | DEDUP-01 | Phase 16 | Complete |
 | PERF-01 | Phase 17 | Pending |
-| PERF-02 | Phase 17 | Pending |
+| PERF-02 | Phase 17 | Complete |
 
 **Coverage:**
 - v1.5 requirements: 15 total, 15 mapped, 0 unmapped
