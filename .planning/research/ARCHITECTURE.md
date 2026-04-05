@@ -1,564 +1,644 @@
-# Architecture Research
+# Architecture: Entity Layer Integration
 
-**Domain:** Pipeline enhancement -- integrating Notion ingestion, asyncio parallelization, Claude structured outputs, algorithmic dedup, typed config, and cache management into existing daily intelligence pipeline
-**Researched:** 2026-04-04
-**Confidence:** HIGH (based on direct codebase analysis + official documentation)
+**Domain:** Entity registry + discovery + attribution + scoped views for work intelligence pipeline
+**Researched:** 2026-04-05
+**Overall confidence:** HIGH (based on direct codebase analysis + established patterns)
 
-## Current Architecture (Baseline)
+## Recommended Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Entry Point (main.py)                        │
-│   CLI parsing, date range loop, Google auth, PipelineContext setup  │
-├─────────────────────────────────────────────────────────────────────┤
-│                     Pipeline Runner (pipeline.py)                    │
-│         run_pipeline(ctx) -- sequential orchestration                │
-├───────────┬───────────┬───────────┬──────────────┬──────────────────┤
-│ _ingest_  │ _ingest_  │ _ingest_  │ _ingest_     │                  │
-│ calendar  │ slack     │ hubspot   │ docs         │  (sequential)    │
-│ +transcr  │           │           │              │                  │
-├───────────┴───────────┴───────────┴──────────────┴──────────────────┤
-│                    Synthesis Layer (two-stage)                       │
-│  Stage 1: extract_all_meetings (sequential per-meeting Claude calls)│
-│  Stage 2: synthesize_daily (single cross-source Claude call)        │
-│  Stage 3: extract_commitments (single Claude call, structured out)  │
-├─────────────────────────────────────────────────────────────────────┤
-│                        Output Layer                                  │
-│  write_daily_summary (markdown) + write_daily_sidecar (JSON)        │
-│  quality tracking, Slack notification                                │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Key Architectural Facts from Codebase
-
-| Aspect | Current State | Implication for v1.5.1 |
-|--------|--------------|------------------------|
-| Orchestration | `run_pipeline()` is synchronous, calls ingest functions sequentially | Must wrap in `asyncio.run()` or convert to async |
-| Claude client | `anthropic.Anthropic` (sync), one instance in `PipelineContext` | Need `AsyncAnthropic` for parallel Claude calls |
-| Ingest modules | Each returns `list[SourceItem]` or tuple, catches own errors | Clean fit for `asyncio.gather()` with `return_exceptions=True` |
-| Calendar ingest | Coupled: calendar -> transcripts -> normalizer -> extraction | Cannot fully decouple; extraction depends on transcript fetch |
-| Config | `load_config()` returns untyped `dict`, no validation | Clean replacement point; all consumers use `ctx.config` param |
-| Module caches | `_user_cache`, `_channel_name_cache` (Slack), `_user_email_cache` (Docs) as mutable module globals | Not async-safe; must convert to instance-level or pass-through |
-| Claude API calls | New `Anthropic()` fallback in each function if client not passed | Single client reuse via `PipelineContext.claude_client` already works |
-| Synthesis parsing | `_parse_synthesis_response()` and `_parse_extraction_response()` use regex/string splitting of markdown | Primary targets for structured output migration |
-| Commitment extraction | `commitments.py` already uses `output_config` with `json_schema` | Proven pattern to extend to extractor and synthesizer |
-
-## Target Architecture (v1.5.1)
+The entity layer adds four new components that integrate with the existing async pipeline at specific, well-defined points. The core principle is **additive integration** -- the existing pipeline flow (ingest -> normalize -> dedup -> synthesize -> write) remains intact. Entity operations hook in as post-processing steps or extensions to existing models, never replacing current behavior.
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                     Entry Point (main.py)                            │
-│   CLI parsing, config load + Pydantic validate, asyncio.run()       │
-├─────────────────────────────────────────────────────────────────────┤
-│                  Pipeline Runner (pipeline.py)                       │
-│       async run_pipeline(ctx) -- parallel orchestration              │
-├────────────────────────────┬────────────────────────────────────────┤
-│   Parallel Ingest Phase    │   Calendar Ingest (sequential chain)   │
-│   (asyncio.gather)         │                                        │
-│ ┌─────────┐ ┌──────────┐  │  calendar -> transcripts -> normalizer │
-│ │  Slack   │ │ HubSpot  │  │       -> parallel extraction           │
-│ └─────────┘ └──────────┘  │         (asyncio.gather)                │
-│ ┌─────────┐ ┌──────────┐  │                                        │
-│ │  Docs   │ │  Notion  │  │                                        │
-│ └─────────┘ └──────────┘  │                                        │
-├────────────────────────────┴────────────────────────────────────────┤
-│                  Algorithmic Dedup Layer (NEW)                       │
-│   Fingerprint-based cross-source dedup before LLM synthesis         │
-├─────────────────────────────────────────────────────────────────────┤
-│                    Synthesis Layer (two-stage)                       │
-│  Stage 1: extract_all_meetings (parallel Claude, structured output) │
-│  Stage 2: synthesize_daily (structured output -> Pydantic model)    │
-│  Stage 3: extract_commitments (unchanged, already structured)       │
-├─────────────────────────────────────────────────────────────────────┤
-│                        Output Layer (unchanged)                      │
-└─────────────────────────────────────────────────────────────────────┘
+EXISTING PIPELINE (unchanged)                 NEW ENTITY LAYER
+================                              ================
+
+ingest (parallel) ----+
+                      |
+normalize/dedup ------+
+                      |
+synthesize -----------+----> entity_discover() ----> SQLite registry
+                      |           ^                      |
+commit extraction ----+           |                      |
+                      |     (names, orgs from            |
+output (md + json) ---+      synthesis output)           |
+                      |                                  |
+                      +----> entity_attribute() ---------+
+                      |     (tag sidecar items           |
+                      |      with entity IDs)            |
+                      |                                  v
+                      +----> scoped_views() -------> entity reports
+                             (CLI query +            (md per entity)
+                              report gen)
 ```
 
-## Component Responsibilities
+### Integration Points (Specific Modules)
 
-| Component | Responsibility | v1.5.1 Change |
-|-----------|---------------|---------------|
-| `config.py` | Load and validate config | **REWRITE**: Returns Pydantic model instead of raw dict |
-| `models/config.py` | Typed config model | **NEW**: Pydantic BaseModel for config.yaml structure |
-| `pipeline.py` | Orchestrate daily pipeline | **MODIFY**: async, parallel ingest, parallel extraction |
-| `PipelineContext` | Shared state for pipeline run | **MODIFY**: Add `async_claude_client`, `notion_client`, typed config |
-| `ingest/notion.py` | Fetch Notion pages/databases | **NEW**: Follows established SourceItem pattern |
-| `ingest/slack.py` | Fetch Slack messages | **MODIFY**: Batch `users.list()` resolution, no module globals |
-| `ingest/google_docs.py` | Fetch Docs edits/comments | **MODIFY**: Remove `_user_email_cache` module global |
-| `synthesis/extractor.py` | Per-meeting extraction | **MODIFY**: async + structured output (replace markdown parsing) |
-| `synthesis/synthesizer.py` | Cross-source daily synthesis | **MODIFY**: structured output (replace `_parse_synthesis_response`) |
-| `synthesis/commitments.py` | Commitment extraction | **UNCHANGED**: Already uses structured outputs |
-| `models/sources.py` | SourceItem, SourceType | **MODIFY**: Add NOTION_PAGE, NOTION_DATABASE types |
-| `models/outputs.py` | Structured output schemas | **NEW**: Pydantic schemas for Claude structured responses |
-| `dedup/fingerprint.py` | Algorithmic cross-source dedup | **NEW**: Pre-LLM dedup using content fingerprints |
-| `cache/manager.py` | Cache retention policy | **NEW**: TTL-based cleanup of raw data files |
+| Hook Point | Existing Module | What Happens | New Module |
+|------------|----------------|--------------|------------|
+| After synthesis | `pipeline_async.py` line ~265 (after `synthesize_daily()` returns) | Extract entity mentions from synthesis output | `src/entities/discoverer.py` |
+| After commitment extraction | `pipeline_async.py` line ~353 (after `extract_commitments()`) | Tag commitments with entity IDs | `src/entities/attributor.py` |
+| After sidecar write | `pipeline_async.py` line ~413 (after `write_daily_sidecar()`) | Write entity-attributed sidecar | `src/entities/attributor.py` |
+| New CLI command | `src/main.py` (new `entity` subcommand) | Query and report on entities | `src/entities/views.py` |
+| Pipeline startup | `pipeline_async.py` line ~188 (start of `async_pipeline()`) | Open SQLite connection, pass to context | `src/entities/registry.py` |
 
-## Recommended Project Structure Changes
+### Component Boundaries
 
-```
-src/
-├── config.py              # REWRITE: load_config returns PipelineConfig
-├── pipeline.py            # MODIFY: async run_pipeline, parallel orchestration
-├── main.py                # MODIFY: asyncio.run(), PipelineConfig usage
-├── models/
-│   ├── config.py          # NEW: PipelineConfig, SlackConfig, NotionConfig, etc.
-│   ├── sources.py         # MODIFY: Add NOTION_PAGE, NOTION_DATABASE types
-│   ├── outputs.py         # NEW: structured output schemas for Claude responses
-│   ├── events.py          # Unchanged
-│   └── rollups.py         # Unchanged
-├── ingest/
-│   ├── notion.py          # NEW: Notion page/database ingestion
-│   ├── slack.py           # MODIFY: batch user resolution, instance caches
-│   ├── google_docs.py     # MODIFY: instance cache
-│   ├── calendar.py        # Unchanged
-│   ├── transcripts.py     # Unchanged
-│   ├── hubspot.py         # Unchanged
-│   ├── normalizer.py      # Unchanged
-│   └── ...
-├── dedup/
-│   ├── __init__.py
-│   └── fingerprint.py     # NEW: algorithmic cross-source dedup
-├── cache/
-│   ├── __init__.py
-│   └── manager.py         # NEW: TTL-based cache file cleanup
-├── synthesis/
-│   ├── extractor.py       # MODIFY: async + structured output
-│   ├── synthesizer.py     # MODIFY: structured output
-│   ├── commitments.py     # Unchanged
-│   ├── models.py          # MODIFY: Add structured output schemas (or use models/outputs.py)
-│   ├── weekly.py          # Optional: structured output migration
-│   └── monthly.py         # Out of scope for v1.5.1
-├── output/                # Unchanged
-├── notifications/         # Unchanged
-└── validation/            # Unchanged
-```
+| Component | Responsibility | Communicates With | New Files |
+|-----------|---------------|-------------------|-----------|
+| **Entity Registry** | SQLite CRUD for partners, people, initiatives; alias management; merge operations | All entity components | `src/entities/registry.py`, `src/entities/models.py`, `src/entities/db.py` |
+| **Entity Discoverer** | Extract entity mentions from synthesis text; propose new entities; match against registry | Registry, Synthesis output | `src/entities/discoverer.py` |
+| **Entity Attributor** | Tag synthesis items (substance, decisions, commitments) with entity IDs; write attributed sidecar | Registry, Discoverer, Sidecar | `src/entities/attributor.py` |
+| **Scoped Views** | CLI query interface; per-entity markdown report generation | Registry, Attributor output | `src/entities/views.py`, `src/entities/cli.py` |
 
-## Architectural Patterns
+## Data Model: SQLite Schema
 
-### Pattern 1: Async Facade over Sync Modules
+Use raw `sqlite3`/`aiosqlite` with Pydantic models for validation -- no ORM. The project already uses Pydantic everywhere and the schema is simple enough that an ORM adds complexity without value.
 
-**What:** Convert `run_pipeline()` to async while keeping existing ingest modules synchronous. Wrap them with `asyncio.to_thread()` for parallel execution. Only Claude API calls and Notion (native async SDK) use true async.
+### Tables
 
-**When to use:** When most I/O is HTTP-based but you have sync-only SDKs (Google API client, Slack SDK `WebClient`).
+```sql
+-- Core entity tables
+CREATE TABLE entities (
+    id TEXT PRIMARY KEY,              -- UUID
+    entity_type TEXT NOT NULL,        -- 'partner', 'person', 'initiative'
+    canonical_name TEXT NOT NULL,     -- Display name
+    created_at TEXT NOT NULL,         -- ISO datetime
+    updated_at TEXT NOT NULL,         -- ISO datetime
+    metadata TEXT DEFAULT '{}',       -- JSON blob for type-specific fields
+    status TEXT DEFAULT 'active'      -- 'active', 'archived', 'merged'
+);
 
-**Trade-offs:** Simpler migration path (don't rewrite every module). `asyncio.to_thread()` uses a thread pool, so parallelism is real but not as lightweight as pure async. For 4-5 concurrent ingest sources, this is perfectly fine.
+CREATE TABLE entity_aliases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_id TEXT NOT NULL REFERENCES entities(id),
+    alias TEXT NOT NULL,              -- Lowercase normalized alias
+    alias_type TEXT DEFAULT 'name',   -- 'name', 'email', 'slack_handle', 'channel'
+    created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX idx_alias_unique ON entity_aliases(alias, alias_type);
+CREATE INDEX idx_alias_entity ON entity_aliases(entity_id);
 
-**Example:**
-```python
-async def run_pipeline(ctx: PipelineContext) -> None:
-    # Independent ingest sources run in parallel via thread pool
-    slack_task = asyncio.to_thread(_ingest_slack, ctx)
-    hubspot_task = asyncio.to_thread(_ingest_hubspot, ctx)
-    docs_task = asyncio.to_thread(_ingest_docs, ctx)
-    notion_task = asyncio.to_thread(_ingest_notion, ctx)
-    calendar_task = asyncio.to_thread(_ingest_calendar, ctx)
+-- Attribution: links synthesis items to entities
+CREATE TABLE entity_mentions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_id TEXT NOT NULL REFERENCES entities(id),
+    date TEXT NOT NULL,               -- ISO date of the daily summary
+    section TEXT NOT NULL,            -- 'substance', 'decision', 'commitment'
+    item_index INTEGER NOT NULL,      -- Position within section
+    item_content TEXT NOT NULL,       -- The synthesis item text
+    source_attribution TEXT,          -- e.g., "Team Sync", "Slack #proj-alpha"
+    confidence REAL DEFAULT 1.0,      -- Match confidence (1.0 = exact, <1.0 = fuzzy)
+    created_at TEXT NOT NULL
+);
+CREATE INDEX idx_mention_entity ON entity_mentions(entity_id);
+CREATE INDEX idx_mention_date ON entity_mentions(date);
+CREATE INDEX idx_mention_entity_date ON entity_mentions(entity_id, date);
 
-    results = await asyncio.gather(
-        slack_task, hubspot_task, docs_task, notion_task, calendar_task,
-        return_exceptions=True,
-    )
+-- Merge tracking
+CREATE TABLE merge_proposals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_entity_id TEXT NOT NULL REFERENCES entities(id),
+    target_entity_id TEXT NOT NULL REFERENCES entities(id),
+    reason TEXT NOT NULL,             -- Why merge was proposed
+    status TEXT DEFAULT 'pending',    -- 'pending', 'accepted', 'rejected'
+    created_at TEXT NOT NULL,
+    resolved_at TEXT
+);
 
-    # Unpack results, treat exceptions as empty returns
-    slack_items = results[0] if not isinstance(results[0], Exception) else []
-    hubspot_items = results[1] if not isinstance(results[1], Exception) else []
-    # ... etc
+-- Relationship: person <-> partner, person <-> initiative
+CREATE TABLE entity_relationships (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_id_a TEXT NOT NULL REFERENCES entities(id),
+    entity_id_b TEXT NOT NULL REFERENCES entities(id),
+    relationship_type TEXT NOT NULL,  -- 'works_at', 'involved_in', 'owns'
+    created_at TEXT NOT NULL
+);
+CREATE INDEX idx_rel_a ON entity_relationships(entity_id_a);
+CREATE INDEX idx_rel_b ON entity_relationships(entity_id_b);
 ```
 
-**Why this over pure async rewrite:** Google API Python client and `slack_sdk.web.WebClient` are synchronous. Rewriting them to use httpx async would be massive scope expansion for marginal benefit. `asyncio.to_thread()` gives real concurrency with minimal code change.
+### Why This Schema
 
-**Confidence:** HIGH -- `asyncio.to_thread()` is standard library, well-understood behavior.
+**Alias table separate from entities:** The central problem is name resolution -- "Colin", "Colin R.", "colin@partner.com" must all resolve to one entity. A separate alias table with a unique index makes lookup fast and merge operations clean (merge = reassign aliases from source to target entity).
 
-### Pattern 2: Parallel Per-Meeting Extraction with AsyncAnthropic
+**Mentions table stores item_content:** Denormalized by design. The alternative is joining against daily sidecar JSON files, which requires scanning hundreds of files for scoped views. Storing content in SQLite makes "show me all Affirm activity" a single indexed query.
 
-**What:** Use `anthropic.AsyncAnthropic` for concurrent Claude API calls during per-meeting extraction. This is the single biggest performance win.
+**JSON metadata blob:** Partner-specific fields (domain, HubSpot ID) and person-specific fields (email, Slack handle) differ. A JSON blob avoids wide-table sparse columns. Schema is simple enough that the flexibility is worth the trade-off.
 
-**When to use:** When you have N independent Claude API calls (per-meeting extraction currently processes 5-10 meetings sequentially).
-
-**Trade-offs:** True async (no thread pool), but requires converting `extract_meeting` and `extract_all_meetings` to async functions. The Anthropic Python SDK natively supports `AsyncAnthropic` with identical API surface.
-
-**Example:**
-```python
-from anthropic import AsyncAnthropic
-
-async def extract_meeting_async(
-    event: NormalizedEvent,
-    config: dict,
-    client: AsyncAnthropic,
-) -> MeetingExtraction | None:
-    if not event.transcript_text:
-        return None
-
-    response = await client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}],
-        output_config={
-            "format": {
-                "type": "json_schema",
-                "schema": MeetingExtractionOutput.model_json_schema(),
-            }
-        },
-    )
-    data = json.loads(response.content[0].text)
-    return MeetingExtractionOutput.model_validate(data)
-
-async def extract_all_meetings_async(
-    events: list[NormalizedEvent],
-    config: dict,
-    client: AsyncAnthropic,
-) -> list[MeetingExtraction]:
-    tasks = [
-        extract_meeting_async(e, config, client)
-        for e in events if e.transcript_text
-    ]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    return [r for r in results if isinstance(r, MeetingExtraction)]
-```
-
-**Performance impact:** 8 meetings at 3-5s each: sequential = 24-40s, parallel = 3-5s. This is the dominant bottleneck.
-
-**Confidence:** HIGH -- `AsyncAnthropic` is documented first-class in the Anthropic Python SDK.
-
-### Pattern 3: Structured Output Migration (Replace Markdown Parsing)
-
-**What:** Replace `_parse_extraction_response()` and `_parse_synthesis_response()` with Claude structured outputs (`output_config` with `json_schema`), getting guaranteed-valid Pydantic models instead of regex-parsing markdown.
-
-**Migration targets:**
-
-| Call Site | Current Parsing | New Schema | Priority |
-|-----------|----------------|------------|----------|
-| `extractor.py` `extract_meeting()` | `_parse_extraction_response()` -- regex `## ` header splitting, pipe-delimited items | `MeetingExtractionOutput` | HIGH (most fragile parser) |
-| `synthesizer.py` `synthesize_daily()` | `_parse_synthesis_response()` -- regex `## ` header splitting, bullet/table extraction | `DailySynthesisOutput` | HIGH (most complex parser) |
-| `commitments.py` `extract_commitments()` | Already uses `output_config` + `CommitmentsOutput` | No change | DONE |
-| `weekly.py` weekly rollup | Markdown parsing of thread detection | `WeeklySynthesisOutput` | MEDIUM (lower frequency) |
-| `monthly.py` monthly narrative | Markdown parsing | Out of v1.5.1 scope | LOW |
-
-**New Pydantic schemas needed:**
+### Pydantic Models (src/entities/models.py)
 
 ```python
-# models/outputs.py
+class EntityType(StrEnum):
+    PARTNER = "partner"
+    PERSON = "person"
+    INITIATIVE = "initiative"
 
-class MeetingExtractionOutput(BaseModel):
-    """Structured output for per-meeting extraction (replaces markdown parsing)."""
+class Entity(BaseModel):
+    id: str                           # UUID
+    entity_type: EntityType
+    canonical_name: str
+    aliases: list[str] = []
+    metadata: dict = {}               # Type-specific: partner has "domain", person has "email"
+    status: str = "active"
+    created_at: datetime
+    updated_at: datetime
+
+class EntityMention(BaseModel):
+    entity_id: str
+    date: date
+    section: str                      # 'substance', 'decision', 'commitment'
+    item_index: int
+    item_content: str
+    source_attribution: str | None
+    confidence: float = 1.0
+
+class MergeProposal(BaseModel):
+    source_entity_id: str
+    target_entity_id: str
+    reason: str
+    status: str = "pending"
+```
+
+## Data Flow: How Entity Operations Integrate
+
+### Flow 1: Ongoing Entity Discovery (per pipeline run)
+
+```
+synthesize_daily() returns synthesis_result dict
+    |
+    v
+entity_discover(synthesis_result, registry)
+    |
+    +-- For each substance/decision/commitment item:
+    |     1. Extract entity_names from structured output (Claude already parsed them)
+    |     2. Match against entity_aliases table (case-insensitive)
+    |     3. If match: record EntityMention
+    |     4. If no match + high confidence name: create pending Entity
+    |     5. If fuzzy match (e.g., "Colin" vs "Colin R."): create MergeProposal
+    |
+    v
+Returns: list[EntityMention], list[Entity] (new), list[MergeProposal]
+```
+
+### Flow 2: Entity Attribution (extends sidecar)
+
+```
+extract_commitments() returns extracted_commitments
+    |
+    v
+entity_attribute(synthesis_result, extracted_commitments, mentions)
+    |
+    +-- Enrich each CommitmentRow with entity_ids: list[str]
+    +-- Enrich each SynthesisItem with entity_ids: list[str]
+    +-- Build EntityAttributedSidecar (extends DailySidecar)
+    |
+    v
+write_daily_sidecar() receives enriched data
+    (sidecar JSON now includes entity_ids per item)
+```
+
+### Flow 3: Backfill Discovery (one-time historical scan)
+
+```
+CLI: python -m src.main entity backfill --from 2025-01-01 --to 2026-04-04
+    |
+    v
+For each existing daily sidecar JSON:
+    1. Load sidecar (tasks, decisions, commitments)
+    2. Run entity_discover() against each item
+    3. Store EntityMentions in SQLite
+    4. Propose new Entities for unmatched names
+    |
+    v
+CLI: python -m src.main entity review
+    (Review pending entities and merge proposals)
+```
+
+### Flow 4: Scoped Views (query and report)
+
+```
+CLI: python -m src.main entity show affirm
+    |
+    v
+1. Resolve "affirm" -> Entity via alias lookup
+2. Query entity_mentions WHERE entity_id = X ORDER BY date DESC
+3. Group by section (substance, decisions, commitments)
+4. Render to stdout or markdown file
+    |
+    v
+Output:
+  # Affirm
+  ## Recent Activity
+  - [2026-04-03] Q2 pipeline review discussed integration timeline (per Team Sync)
+  - [2026-04-02] API sandbox access granted to dev team (per Slack #affirm-integration)
+  ## Open Commitments
+  - Colin: Send technical spec by 2026-04-10 (per Team Sync, 2026-04-03)
+```
+
+## Modifications to Existing Components
+
+### Modified: PipelineContext (src/pipeline.py)
+
+Add SQLite connection to shared pipeline state:
+
+```python
+@dataclass
+class PipelineContext:
+    config: PipelineConfig
+    target_date: date
+    output_dir: Path
+    template_dir: Path
+    claude_client: anthropic.Anthropic
+    google_creds: object | None = None
+    calendar_service: object | None = None
+    gmail_service: object | None = None
+    user_email: str | None = None
+    entity_registry: EntityRegistry | None = None  # NEW
+```
+
+### Modified: PipelineConfig (src/config.py)
+
+Add entity configuration section:
+
+```python
+class EntityConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    decisions: list[ExtractionItem] = Field(default_factory=list)
-    commitments: list[ExtractionItem] = Field(default_factory=list)
-    substance: list[ExtractionItem] = Field(default_factory=list)
-    open_questions: list[ExtractionItem] = Field(default_factory=list)
-    tensions: list[ExtractionItem] = Field(default_factory=list)
-
-class DailySynthesisOutput(BaseModel):
-    """Structured output for daily synthesis (replaces markdown parsing)."""
-    model_config = ConfigDict(extra="forbid")
-
-    executive_summary: str | None = None
-    substance: list[str] = Field(default_factory=list)
-    decisions: list[str] = Field(default_factory=list)
-    commitments: list[str] = Field(default_factory=list)
-```
-
-**API call pattern (GA, proven in commitments.py):**
-```python
-response = client.messages.create(
-    model=model,
-    max_tokens=max_tokens,
-    messages=[{"role": "user", "content": prompt}],
-    output_config={
-        "format": {
-            "type": "json_schema",
-            "schema": MeetingExtractionOutput.model_json_schema(),
-        }
-    },
-)
-data = json.loads(response.content[0].text)
-result = MeetingExtractionOutput.model_validate(data)
-```
-
-**What this eliminates:** All of `_parse_extraction_response()` (67 lines), `_parse_section_items()` (40 lines), `_parse_legacy_blocks()` (43 lines), and `_parse_synthesis_response()` (84 lines). That is ~234 lines of fragile parsing code replaced by schema definitions.
-
-**Confidence:** HIGH -- `commitments.py` already proves the `output_config` pattern works in this codebase with fallback to beta header.
-
-### Pattern 4: Pydantic Config Model (Replace Untyped Dict)
-
-**What:** Replace `load_config() -> dict` with a typed Pydantic model. All downstream code accesses typed fields instead of `.get()` chains with default fallbacks.
-
-**Example:**
-```python
-# models/config.py
-from pydantic import BaseModel, Field
-
-class SlackConfig(BaseModel):
     enabled: bool = False
-    channels: list[dict] = Field(default_factory=list)
-    dms: list[dict] = Field(default_factory=list)
-    thread_min_replies: int = 3
-    thread_min_participants: int = 2
-    max_messages_per_channel: int = 100
-    bot_allowlist: list[str] = Field(default_factory=list)
-    discovery_check_days: int = 7
-
-class NotionConfig(BaseModel):
-    enabled: bool = False
-    databases: list[dict] = Field(default_factory=list)
-    pages: list[str] = Field(default_factory=list)
-
-class CacheConfig(BaseModel):
-    retention_days: int = 30
+    db_path: str = "data/entities.db"
+    auto_discover: bool = True         # Discover entities on each run
+    discovery_confidence: float = 0.8  # Minimum confidence for auto-create
+    merge_threshold: float = 0.85      # Fuzzy match threshold for merge proposals
 
 class PipelineConfig(BaseModel):
-    pipeline: PipelineSettings
-    calendars: CalendarSettings
-    transcripts: TranscriptSettings
-    synthesis: SynthesisSettings
-    slack: SlackConfig = SlackConfig()
-    google_docs: GoogleDocsConfig = GoogleDocsConfig()
-    hubspot: HubSpotConfig = HubSpotConfig()
-    notion: NotionConfig = NotionConfig()
-    cache: CacheConfig = CacheConfig()
+    # ... existing sections ...
+    entities: EntityConfig = Field(default_factory=EntityConfig)  # NEW
 ```
 
-**Migration strategy:** Change `PipelineContext.config` type from `dict` to `PipelineConfig`. Update all `config.get("x", {}).get("y", default)` to `config.x.y`. This is mechanical but touches many files -- do it as the first step before adding new features.
+### Modified: DailySynthesisOutput (src/synthesis/models.py)
 
-**Why Pydantic BaseModel over pydantic-settings BaseSettings:** The existing config loading is file-based YAML with a few env var overrides. BaseSettings is designed for env-var-first configuration. Use plain BaseModel with manual YAML loading and env var override logic (which already exists in `load_config()`).
+Extend structured output to include entity references. This is the cleanest integration point -- Claude already sees entity names in the synthesis text. Adding `entity_names` to the structured output schema means Claude extracts them during synthesis at zero additional API cost.
 
-**Confidence:** HIGH -- Pydantic is already used for all models in the codebase.
-
-### Pattern 5: Content Fingerprint Dedup
-
-**What:** Pre-LLM algorithmic deduplication using content fingerprinting. Catches obvious duplicates before they reach the synthesis prompt, supplementing (not replacing) the LLM-based dedup.
-
-**How it works:** Combine normalized title + timestamp bucket + sorted participants into a fingerprint. Items with matching fingerprints are duplicates. This generalizes the existing `_dedup_hubspot_items()` logic in `synthesizer.py` (which already does time-bucket matching for HubSpot meetings vs calendar events).
-
-**Example:**
 ```python
-import hashlib
+class SynthesisItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    content: str
+    entity_names: list[str] = Field(default_factory=list)  # NEW: mentioned entities
 
-def fingerprint_item(item: SourceItem) -> str:
-    normalized_title = item.title.lower().strip()
-    time_bucket = int(item.timestamp.timestamp()) // 300  # 5-min buckets
-    participants = ",".join(sorted(p.lower() for p in item.participants))
-    raw = f"{normalized_title}|{time_bucket}|{participants}"
-    return hashlib.md5(raw.encode()).hexdigest()
-
-def dedup_source_items(items: list[SourceItem]) -> list[SourceItem]:
-    seen: dict[str, SourceItem] = {}
-    for item in items:
-        fp = fingerprint_item(item)
-        if fp not in seen:
-            seen[fp] = item
-        else:
-            # Keep the one with more content
-            if len(item.content) > len(seen[fp].content):
-                seen[fp] = item
-    return list(seen.values())
+class CommitmentRow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    who: str
+    what: str
+    by_when: str
+    source: str
+    related_entities: list[str] = Field(default_factory=list)  # NEW
 ```
 
-**Placement in pipeline:** After all ingest modules return, before synthesis. Replaces the current `_dedup_hubspot_items()` with a generalized version.
+### Modified: Synthesis Prompt (src/synthesis/synthesizer.py)
 
-## Data Flow
+Add entity extraction guidance to the existing SYNTHESIS_PROMPT. This is a prompt extension, not a new Claude call:
 
-### Current Flow
 ```
-config.yaml (unvalidated dict)
-    |
-PipelineContext(config=dict, claude_client=Anthropic)
-    |
-_ingest_slack(ctx)     -> list[SourceItem]     --+
-_ingest_hubspot(ctx)   -> list[SourceItem]       |  (sequential)
-_ingest_docs(ctx)      -> list[SourceItem]       |
-_ingest_calendar(ctx)  -> (categorized, ...)   --+
-    |
-_dedup_hubspot_items() -> filtered list
-    |
-extract_all_meetings() -> list[MeetingExtraction]  (sequential Claude calls)
-    |
-synthesize_daily()     -> dict (parsed from markdown)
-    |
-extract_commitments()  -> list[ExtractedCommitment] (structured output)
-    |
-write_daily_summary() + write_daily_sidecar()
+entity_names: List ALL partner names, person names, and initiative names mentioned
+in this item. Use the exact name as it appears. Include company names (e.g., "Affirm"),
+person first names (e.g., "Colin"), and initiative names (e.g., "HubSpot Migration").
+If no entities are mentioned, leave empty.
 ```
 
-### Target Flow (v1.5.1)
-```
-config.yaml -> PipelineConfig (Pydantic validated at load time)
-    |
-PipelineContext(config=PipelineConfig, claude_client=Anthropic,
-                async_claude=AsyncAnthropic)
-    |
-asyncio.gather(                                    --+
-    to_thread(_ingest_slack),    -> list[SourceItem]  |
-    to_thread(_ingest_hubspot),  -> list[SourceItem]  |  PARALLEL
-    to_thread(_ingest_docs),     -> list[SourceItem]  |
-    _ingest_notion(async native),-> list[SourceItem]  |  (NEW)
-    to_thread(_ingest_calendar), -> (categorized,...) |
-)                                                  --+
-    |
-dedup_source_items(all_items)   -> deduplicated list  (NEW: algorithmic)
-    |
-extract_all_meetings_async()    -> list[MeetingExtraction]  (PARALLEL Claude)
-    |                                                        (structured output)
-synthesize_daily()              -> DailySynthesisOutput      (structured output)
-    |
-extract_commitments()           -> list[ExtractedCommitment] (unchanged)
-    |
-write_daily_summary() + write_daily_sidecar()
-cache_manager.cleanup()         (NEW: TTL-based cache purge)
+### Modified: DailySidecar (src/sidecar.py)
+
+```python
+class DailySidecar(BaseModel):
+    date: str
+    generated_at: str
+    meeting_count: int
+    transcript_count: int
+    tasks: list[SidecarTask] = Field(default_factory=list)
+    decisions: list[SidecarDecision] = Field(default_factory=list)
+    commitments: list[SidecarCommitment] = Field(default_factory=list)
+    source_meetings: list[SidecarMeeting] = Field(default_factory=list)
+    entity_mentions: list[dict] = Field(default_factory=list)  # NEW
 ```
 
-## Integration Points
+### Modified: async_pipeline() (src/pipeline_async.py)
 
-### New External Services
+New steps inserted after existing synthesis and before output:
 
-| Service | SDK | Auth | Notes |
-|---------|-----|------|-------|
-| Notion API | `notion-client` (ramnes/notion-sdk-py) | Bearer token via `NOTION_TOKEN` env var | `AsyncClient` for native async; query databases by ID list from config |
-| Anthropic (async) | `anthropic` (same package, `AsyncAnthropic` class) | Same `ANTHROPIC_API_KEY` | Alongside existing sync `Anthropic` for backward compat |
+```python
+async def async_pipeline(ctx: PipelineContext) -> None:
+    # ... existing Phase 1 (ingest) and Phase 2 (synthesis) ...
 
-### Internal Boundary Changes
+    # Phase 2.5: Entity Discovery + Attribution (NEW)
+    entity_mentions = []
+    if ctx.entity_registry and ctx.config.entities.enabled:
+        try:
+            entity_mentions = await asyncio.to_thread(
+                discover_and_attribute,
+                synthesis_result,
+                extracted_commitments,
+                ctx.entity_registry,
+                ctx.config,
+                current,
+            )
+            logger.info("Entity discovery: %d mentions attributed", len(entity_mentions))
+        except Exception as e:
+            logger.warning("Entity discovery failed: %s. Continuing without.", e)
 
-| Boundary | Current | v1.5.1 | Notes |
-|----------|---------|--------|-------|
-| pipeline -> ingest | Sync function calls in sequence | `asyncio.to_thread()` wrappers; native async for Notion | Ingest functions stay sync except Notion |
-| pipeline -> synthesis | Sync `extract_all_meetings()` | Async `extract_all_meetings_async()` with `AsyncAnthropic` | Biggest performance improvement |
-| config -> everything | `config.get()` chains with defaults | Typed attribute access on Pydantic model | Mechanical refactor, many files |
-| ingest -> cache (module globals) | `_user_cache`, `_channel_name_cache`, `_user_email_cache` as mutable module-level dicts | Instance-level or passed through context | Required for async safety |
-
-### Notion Integration Specifics
-
-**What Notion provides for daily summaries:**
-- Pages the user edited today (via database query with `last_edited_time` filter)
-- Database items modified today (same filter)
-- Page content extraction (block children API, recursive)
-
-**Notion API constraints (from official docs):**
-- No "diff" endpoint -- full current page only, not what changed
-- Rate limit: 3 requests/second per integration
-- Block children are paginated (100 per page), nested blocks require recursive fetch
-- Rich text is block-based -- requires traversal to extract plain text
-- Integration must be explicitly shared with each page/database in Notion UI
-
-**Recommended approach:**
-1. Config lists database IDs to monitor
-2. Query each database with `last_edited_time` filter for target date
-3. For returned pages: fetch title + top-level block children only (one API call per page)
-4. Convert to `SourceItem` with `source_type=NOTION_PAGE` or `NOTION_DATABASE`
-5. Do NOT recursively fetch nested blocks -- title + first-level content is sufficient for synthesis context
-
-### Cache Retention
-
-**Current cache locations:**
-- `output/{date}/raw_events.json` -- raw calendar API response
-- `output/{date}/raw_emails_transcripts.json` -- raw email data
-- In-memory module globals (Slack users, channel names, Docs user email)
-
-**Recommended cache manager:**
-- Walk `output/` directory for date-stamped subdirectories
-- Delete `raw_*.json` files older than configurable TTL (default 30 days)
-- Run at pipeline end (post-output, non-blocking)
-- Config: `cache.retention_days: 30`
-
-## Recommended Build Order
-
-Dependency graph:
-```
-Typed Config (foundation) ------> every other feature reads config
-    |
-    +-- Structured Outputs ------> independent of async, schema-only change
-    |       |
-    |       +-- Extractor migration (drop _parse_extraction_response)
-    |       +-- Synthesizer migration (drop _parse_synthesis_response)
-    |
-    +-- Notion Ingest -----------> needs config for database IDs
-    |
-    +-- Algorithmic Dedup -------> needs all SourceItems from all sources
-    |
-    +-- Slack Batch Resolution --> prerequisite for async safety (no module globals)
-    |
-    +-- Asyncio Parallelization -> capstone, benefits from all prior changes
-    |
-    +-- Cache Retention ---------> independent, lowest risk
+    # ... existing Phase 3 (output) with entity_mentions passed to sidecar ...
 ```
 
-**Recommended order:**
+### Modified: _convert_synthesis_to_dict() (src/synthesis/synthesizer.py)
 
-1. **Typed Config** (`models/config.py` + rewrite `config.py`) -- Foundation. All other features reference config. Pure refactor, no new behavior, easy to validate. Touch this first because later features add new config sections.
+Currently this function strips the Pydantic structure and returns plain strings. It must be extended to carry entity_names through:
 
-2. **Structured Output Migration** (`models/outputs.py` + modify `extractor.py` + modify `synthesizer.py`) -- Independent of async work. Migrate to `output_config` + Pydantic schemas. Delete ~234 lines of markdown parsing code. Test with existing sequential pipeline to isolate correctness from concurrency.
+```python
+def _convert_synthesis_to_dict(output: DailySynthesisOutput) -> dict:
+    return {
+        "executive_summary": output.executive_summary,
+        "substance": [item.content for item in output.substance],
+        "decisions": [item.content for item in output.decisions],
+        "commitments": [
+            f"| {c.who} | {c.what} | {c.by_when} | {c.source} |"
+            for c in output.commitments
+        ],
+        # NEW: entity names per item for downstream attribution
+        "substance_entities": [item.entity_names for item in output.substance],
+        "decision_entities": [item.entity_names for item in output.decisions],
+        "commitment_entities": [c.related_entities for c in output.commitments],
+    }
+```
 
-3. **Notion Ingest** (`ingest/notion.py` + modify `models/sources.py` + modify `pipeline.py`) -- New module following established `SourceItem` pattern. Wire into `pipeline.py` sequentially first. Test independently before parallelization.
+### NOT Modified
 
-4. **Algorithmic Dedup** (`dedup/fingerprint.py` + modify `pipeline.py`) -- Insert between ingest and synthesis. Replaces `_dedup_hubspot_items()` with generalized fingerprint-based dedup. Test with existing sources to verify no false positives before adding Notion data.
+These components require zero changes:
 
-5. **Slack Batch Resolution + Cache Cleanup** (modify `ingest/slack.py` + modify `ingest/google_docs.py`) -- Use `users.list()` instead of per-user `users.info()` calls. Move caches from module globals to function-local dicts. Required prerequisite for async safety.
+- **All ingest modules** (`src/ingest/*`) -- entity discovery operates on synthesis output, not raw ingest data
+- **Dedup** (`src/dedup.py`) -- operates pre-synthesis, before entities are relevant
+- **Quality tracking** (`src/quality.py`) -- tracks edit detection, orthogonal to entities
+- **Notifications** (`src/notifications/slack.py`) -- entity-scoped notifications are a future feature
+- **Templates** (`templates/*.j2`) -- entity data lives in sidecar JSON, not markdown (initially)
+- **Roll-ups** (`src/synthesis/weekly.py`, `monthly.py`) -- entity-aware roll-ups deferred to after core entity layer stabilizes
+- **Extractor** (`src/synthesis/extractor.py`) -- per-meeting extraction already captures participants; entity attribution happens at the daily synthesis level
 
-6. **Asyncio Parallelization** (modify `pipeline.py` + modify `main.py` + modify `extractor.py`) -- The capstone. Convert `run_pipeline()` to async, wrap sync ingest with `asyncio.to_thread()`, convert `extract_all_meetings()` to async with `AsyncAnthropic`. Benefits from all prior changes being stable.
+## New File Structure
 
-7. **Cache Retention** (`cache/manager.py`) -- Lowest risk, lowest dependency. Can be done at any point. TTL-based cleanup of raw data files.
+```
+src/entities/
+    __init__.py
+    models.py           # Pydantic models: Entity, EntityMention, MergeProposal, EntityType
+    db.py               # SQLite connection management, schema creation, migrations
+    registry.py         # CRUD operations: create/read/update/merge entities + alias resolution
+    discoverer.py       # Match entity_names from synthesis output against registry
+    attributor.py       # Tag synthesis items with entity IDs, enrich sidecar
+    views.py            # Scoped query logic: entity timeline, commitments, activity feed
+    cli.py              # CLI subcommands: show, list, review, backfill, merge
 
-**Rationale for this order:** Each step can be tested independently. Typed config is pure refactor (no behavior change). Structured outputs are testable with the existing sequential pipeline. Notion adds a new module without changing existing ones. Dedup is an insert, not a rewrite. Async is the riskiest change and goes last so all other features are stable.
+data/
+    entities.db         # SQLite database file (gitignored)
+
+config/
+    entities.yaml       # Optional: pre-seeded entity definitions for bootstrap
+```
+
+## Patterns to Follow
+
+### Pattern 1: Non-Blocking Entity Operations
+
+Entity operations must follow the existing pipeline pattern of graceful degradation. An entity discovery failure must never block daily summary output. This matches every other optional feature in the pipeline (Slack, HubSpot, Notion all use this pattern).
+
+```python
+# Correct: wrap in try/except, log warning, continue
+try:
+    mentions = discover_entities(synthesis_result, registry)
+except Exception as e:
+    logger.warning("Entity discovery failed: %s. Continuing without.", e)
+    mentions = []
+```
+
+### Pattern 2: SQLite Connection Lifecycle
+
+Open connection at pipeline start, close at pipeline end. Use `aiosqlite` for the async pipeline path, `sqlite3` for sync CLI commands (backfill, query, review).
+
+```python
+# In pipeline startup
+from src.entities.db import open_entity_db
+
+async def async_pipeline(ctx: PipelineContext) -> None:
+    if ctx.config.entities.enabled:
+        ctx.entity_registry = await open_entity_db(ctx.config.entities.db_path)
+    try:
+        # ... pipeline ...
+    finally:
+        if ctx.entity_registry:
+            await ctx.entity_registry.close()
+```
+
+For CLI commands that run outside the async pipeline:
+```python
+# Sync connection for CLI
+import sqlite3
+conn = sqlite3.connect(config.entities.db_path)
+registry = EntityRegistry(conn)
+```
+
+### Pattern 3: Entity Discovery via Structured Output Extension
+
+Rather than a separate LLM call for entity extraction, extend the existing `DailySynthesisOutput` schema with `entity_names` fields. Claude already processes all source material during synthesis -- extracting entity names is a near-zero-cost addition to the existing prompt.
+
+This eliminates an entire Claude API call per pipeline run. The synthesis prompt already sees every person name, company name, and initiative name. Asking Claude to list them in a structured field adds negligible latency to the existing call.
+
+### Pattern 4: Alias-Based Matching
+
+All entity lookups go through the alias table, never direct name comparison. This handles the "Colin" = "Colin R." = "colin@partner.com" problem at the data layer.
+
+```python
+class EntityRegistry:
+    def resolve(self, name: str) -> Entity | None:
+        """Resolve a name/alias to an entity. Case-insensitive."""
+        normalized = name.strip().lower()
+        row = self.conn.execute(
+            "SELECT entity_id FROM entity_aliases WHERE alias = ?",
+            (normalized,)
+        ).fetchone()
+        if row:
+            return self.get_entity(row[0])
+        return None
+```
+
+### Pattern 5: Schema Versioning Without an ORM
+
+Simple version tracking for schema migrations:
+
+```python
+# In db.py
+SCHEMA_VERSION = 1
+
+def _ensure_schema(conn):
+    conn.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER)")
+    row = conn.execute("SELECT version FROM schema_version").fetchone()
+    current = row[0] if row else 0
+
+    if current < 1:
+        _apply_v1_schema(conn)
+        conn.execute("INSERT OR REPLACE INTO schema_version VALUES (1)")
+
+    conn.commit()
+```
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Converting All Ingest Modules to Native Async
+### Anti-Pattern 1: Separate LLM Call for Entity Extraction
 
-**What people do:** Rewrite every ingest module (calendar, slack, hubspot, docs) to use async HTTP clients.
-**Why it's wrong:** Google API Python client and `slack_sdk.web.WebClient` are synchronous. Replacing them with raw httpx/aiohttp means losing SDK pagination, error handling, and OAuth token refresh logic.
-**Do this instead:** Use `asyncio.to_thread()` for sync ingest modules. True async only for Notion (native `AsyncClient`) and Claude API calls (`AsyncAnthropic`).
+Do NOT add a third Claude API call just for entity extraction. The synthesis call already has all the context. Extend the structured output schema instead.
 
-### Anti-Pattern 2: Module-Level Mutable State with Async
+**Why bad:** Adds 3-5s latency, ~$0.01 API cost per run, and a new failure point. The synthesis prompt already contains every name, organization, and initiative mention.
 
-**What people do:** Keep `_user_cache` and `_channel_name_cache` as module globals while running ingest functions in parallel threads.
-**Why it's wrong:** Concurrent writes to unsynchronized dicts corrupt data. Even with CPython's GIL, dict operations are not atomic at the application level.
-**Do this instead:** For Slack, the batch `users.list()` call eliminates per-user caching entirely. For remaining caches, pass through function parameters or store on `PipelineContext`.
+**Instead:** Add `entity_names: list[str]` to `SynthesisItem` and `CommitmentRow` in the structured output schema.
 
-### Anti-Pattern 3: Combining Structured Output and Async Migration
+### Anti-Pattern 2: ORM for Simple Schema
 
-**What people do:** Convert to structured outputs AND async at the same time.
-**Why it's wrong:** Two variables changing simultaneously makes debugging impossible. Is the failure in the new schema, the prompt adjustment, or the async behavior?
-**Do this instead:** Migrate to structured outputs first with the sequential pipeline. Verify correctness. Then convert to async as a separate step.
+Do NOT use SQLAlchemy, SQLModel, or any ORM. The schema is 5 tables with straightforward queries. An ORM adds dependency weight, migration complexity, and obscures the simple SQL.
 
-### Anti-Pattern 4: Deep Recursive Notion Block Fetching
+**Why bad:** The project has zero ORM dependencies. Adding SQLAlchemy pulls in a large dependency tree and Alembic for migrations. The entity schema needs ~10 distinct queries total. Raw SQL with Pydantic validation is simpler.
 
-**What people do:** Recursively fetch all nested blocks for every Notion page to get full document content.
-**Why it's wrong:** Notion blocks can be deeply nested, each level requiring a separate API call. A page with 10 nested sections means 10+ calls at 3 req/sec rate limit = 3+ seconds per page. For a daily summary, you need context, not the full document.
-**Do this instead:** Fetch title + top-level blocks only (one API call per page). Properties from database items are already structured -- use them directly.
+**Instead:** Use `sqlite3`/`aiosqlite` directly. Write SQL strings in `db.py`. Use a version table for migrations.
 
-### Anti-Pattern 5: TaskGroup Instead of gather for Ingest
+### Anti-Pattern 3: Entity Discovery on Raw Ingest Data
 
-**What people do:** Use `asyncio.TaskGroup` (Python 3.11+) instead of `asyncio.gather()` for ingest parallelization.
-**Why it's wrong for this use case:** TaskGroup cancels remaining tasks when one fails. The entire design of the pipeline is that one source failing should NOT block others.
-**Do this instead:** Use `asyncio.gather(return_exceptions=True)` which lets all tasks complete and returns exceptions as values you can check individually.
+Do NOT try to discover entities from raw `SourceItem` content. Raw Slack messages, HubSpot activities, and transcript text are noisy.
 
-## Scaling Considerations
+**Why bad:** Raw content has a much higher noise-to-signal ratio than synthesized output. "Hey Colin, can you pass the link?" is a raw Slack message -- tracking it as a Colin mention adds noise. Synthesis already filters for what matters.
 
-| Concern | Current (5 sources) | With Notion (6 sources) | Future (10+ sources) |
-|---------|---------------------|------------------------|---------------------|
-| Wall-clock ingest time | ~30-45s (sequential) | ~35-50s (sequential) | Would grow linearly |
-| Wall-clock with async | ~10-15s (parallel) | ~10-15s (parallel) | ~10-15s (parallel, bottleneck = slowest source) |
-| Per-meeting extraction | ~25-40s (8 meetings sequential) | Same | Same |
-| Per-meeting with async | ~3-5s (8 meetings parallel) | Same | Add semaphore if >20 meetings |
+**Instead:** Discover entities from synthesis output only. The synthesis stage has already distilled source material to substance, decisions, and commitments.
 
-### First Bottleneck: Sequential Per-Meeting Claude Calls
-8 meetings x 3-5s each = 24-40s. Parallelizing drops this to ~5s total. This is the single largest improvement.
+### Anti-Pattern 4: Storing Entity Data in Flat Files
 
-### Second Bottleneck: Sequential Ingest
-Slack + HubSpot + Docs + Calendar each take 3-10s. Parallelizing overlaps them, saving ~15-25s.
+Do NOT follow the existing flat-file pattern for entities. Entity data requires joins (entity -> mentions, entity -> aliases, entity -> relationships) that flat files cannot support.
 
-### Future Concern: Notion Rate Limit
-At 3 req/sec, monitoring 10 databases with 5 changed pages each = 60 API calls = 20 seconds minimum. Add `asyncio.Semaphore(3)` to cap concurrent Notion requests.
+**Why bad:** Scoped views like "show me all Affirm commitments" require aggregating across hundreds of daily files. SQLite handles this in milliseconds; flat file scanning takes seconds and grows linearly.
+
+**Instead:** SQLite is the right tool. This is the project's first database -- accept that architectural transition.
+
+### Anti-Pattern 5: Modifying DailySynthesis (events.py) for Entities
+
+Do NOT add entity fields to `DailySynthesis` (the Pydantic model in `src/models/events.py` that feeds Jinja2 templates). Entity data should flow through the sidecar JSON, not the markdown rendering pipeline.
+
+**Why bad:** `DailySynthesis` feeds Jinja2 templates. Adding entity fields means modifying templates, which adds coupling between entity layer and output rendering. Entity data is structured metadata, not prose for daily markdown.
+
+**Instead:** Enrich `DailySidecar` (JSON output) with entity references. Scoped views read from SQLite directly, not from daily markdown.
+
+## Build Order (Dependency-Driven)
+
+The build order follows strict dependency chains. Each phase produces something testable before the next begins.
+
+### Phase 1: Entity Registry (SQLite Foundation)
+
+**What:** SQLite schema, connection management, Pydantic models, CRUD operations, config section.
+
+**New files:** `src/entities/__init__.py`, `src/entities/models.py`, `src/entities/db.py`, `src/entities/registry.py`
+
+**Modified files:** `src/config.py` (add `EntityConfig` section)
+
+**Why first:** Everything else depends on being able to store and retrieve entities. No discovery, attribution, or views work without the registry.
+
+**Dependencies:** None (new module, no integration with existing pipeline yet).
+
+**Test surface:** Unit tests for CRUD operations, alias resolution, schema creation, fuzzy matching for merge proposals.
+
+### Phase 2: Entity Discovery
+
+**What:** Extract entity mentions from synthesis output. Extend `DailySynthesisOutput` with `entity_names` field. Match against registry. Auto-create high-confidence entities. Generate merge proposals for fuzzy matches.
+
+**New files:** `src/entities/discoverer.py`
+
+**Modified files:** `src/synthesis/models.py` (add `entity_names` to `SynthesisItem`, `related_entities` to `CommitmentRow`), `src/synthesis/synthesizer.py` (extend prompt, modify `_convert_synthesis_to_dict()`)
+
+**Why second:** Discovery is the data source for attribution and views. Without discovery, the registry stays empty.
+
+**Dependencies:** Phase 1 (registry must exist to store discoveries).
+
+**Test surface:** Unit tests for name extraction, alias matching, merge proposal generation. Integration test: run discovery on real synthesis output and verify entity creation.
+
+### Phase 3: Entity Attribution (Pipeline Integration)
+
+**What:** Wire discovery into `async_pipeline()`. Enrich sidecar with entity references. Add `entity_registry` to `PipelineContext`. Run discovery after synthesis, store mentions in SQLite.
+
+**New files:** `src/entities/attributor.py`
+
+**Modified files:** `src/pipeline.py` (add `entity_registry` to `PipelineContext`), `src/pipeline_async.py` (add Phase 2.5 entity step), `src/sidecar.py` (add `entity_mentions` field), `src/output/writer.py` (pass entity data to sidecar)
+
+**Why third:** This is where the entity layer joins the live pipeline. Requires both registry (Phase 1) and discovery logic (Phase 2).
+
+**Dependencies:** Phase 1 + Phase 2.
+
+**Test surface:** Integration test: run full pipeline with entities enabled, verify sidecar contains entity references. Verify pipeline completes normally with `entities.enabled: false` (default).
+
+### Phase 4: Backfill + Merge Review
+
+**What:** CLI command to scan historical sidecar JSONs and run entity discovery retroactively. CLI command to review/accept/reject merge proposals and pending entities.
+
+**New files:** `src/entities/cli.py`
+
+**Modified files:** `src/main.py` (add `entity` subcommand with `backfill`, `review`, `merge` actions)
+
+**Why fourth:** Backfill uses the same discovery logic from Phase 2 applied to historical data. Merge review requires entities to exist (from backfill or live runs). This phase populates the registry with historical data, making scoped views useful.
+
+**Dependencies:** Phase 1 + Phase 2 (discovery logic reused). Phase 3 optional but helpful for testing.
+
+**Test surface:** Integration test: backfill 5 days of sidecar data, verify entities and mentions created. Test merge accept/reject workflow.
+
+### Phase 5: Scoped Views
+
+**What:** CLI query commands (`entity show X`, `entity commitments --owner Y`). Per-entity markdown report generation.
+
+**New files:** `src/entities/views.py`
+
+**Modified files:** `src/entities/cli.py` (add `show`, `list`, `commitments` subcommands)
+
+**Why last:** Views consume everything built in Phases 1-4. They read from the entity_mentions table populated by discovery/attribution/backfill. Without populated data, views return nothing.
+
+**Dependencies:** Phase 1 + Phase 3 or Phase 4 (needs populated data to query against).
+
+**Test surface:** Integration test: query entity with known mentions, verify output format. Test empty entity and missing entity gracefully.
+
+### Phase Dependency Graph
+
+```
+Phase 1: Registry ──────────────────────────────────────────┐
+    |                                                        |
+Phase 2: Discovery (extends synthesis models + prompt) ──────┤
+    |                                                        |
+Phase 3: Attribution (wires into pipeline_async.py) ─────────┤
+    |                                                        |
+Phase 4: Backfill + Merge Review (CLI commands) ─────────────┤
+    |                                                        |
+Phase 5: Scoped Views (CLI queries + reports) ───────────────┘
+```
+
+Phases 4 and 5 could be built in parallel since they share Phase 1-2 dependencies but don't depend on each other. However, backfill (Phase 4) populates the data that makes views (Phase 5) useful, so sequential order is recommended.
+
+## Scalability Considerations
+
+| Concern | Current Scale (~200 days) | At 1 Year (~365 days) | At 3 Years (~1000 days) |
+|---------|---------------------------|----------------------|------------------------|
+| SQLite DB size | <1 MB | <5 MB | <20 MB |
+| Entity count | ~50-100 (partners + people) | ~200 | ~500 |
+| Mention count | ~2,000 | ~5,000 | ~15,000 |
+| Query latency (entity show) | <10ms | <20ms | <50ms |
+| Backfill time (full) | ~30s | ~60s | ~3 min |
+| Pipeline overhead (entity step) | <100ms | <200ms | <500ms |
+
+SQLite handles this scale trivially. No sharding, connection pooling, or read replicas needed. The entire database will fit in memory for the foreseeable future. WAL mode should be enabled for concurrent read/write during pipeline runs.
 
 ## Sources
 
-- Anthropic Claude API Structured Outputs documentation: https://platform.claude.com/docs/en/build-with-claude/structured-outputs
-- Anthropic Python SDK (AsyncAnthropic): https://github.com/anthropics/anthropic-sdk-python
-- notion-sdk-py (sync + async client): https://github.com/ramnes/notion-sdk-py
-- Notion API Reference (database query, pagination): https://developers.notion.com/reference/post-database-query
-- Python asyncio documentation (gather, to_thread): https://docs.python.org/3/library/asyncio-task.html
-- Pydantic documentation (BaseModel, Settings): https://docs.pydantic.dev/latest/concepts/pydantic_settings/
-- Direct codebase analysis: `src/pipeline.py`, `src/synthesis/extractor.py`, `src/synthesis/synthesizer.py`, `src/synthesis/commitments.py`, `src/ingest/slack.py`, `src/ingest/google_docs.py`, `src/config.py`, `src/models/sources.py`, `src/models/events.py`
+- Direct codebase analysis of `src/pipeline_async.py`, `src/synthesis/synthesizer.py`, `src/synthesis/models.py`, `src/models/sources.py`, `src/sidecar.py`, `src/config.py`, `src/pipeline.py`, `src/output/writer.py` (HIGH confidence)
+- [aiosqlite documentation](https://aiosqlite.omnilib.dev/en/latest/) -- async SQLite bridge for Python asyncio (HIGH confidence)
+- [aiosqlite GitHub](https://github.com/omnilib/aiosqlite) -- latest release Dec 2025, actively maintained (HIGH confidence)
+- [SQLite documentation](https://sqlite.org/docs.html) -- schema design patterns, WAL mode (HIGH confidence)
+- `.planning/V2_VISION.md` -- entity layer data model and phasing (HIGH confidence, project-internal)
+- `.planning/codebase/ARCHITECTURE.md` -- current pipeline architecture (HIGH confidence, project-internal)
 
 ---
-*Architecture research for: Work Intelligence System v1.5.1 pipeline enhancement*
-*Researched: 2026-04-04*
+*Architecture research for: Work Intelligence System v2.0 Entity Layer*
+*Researched: 2026-04-05*

@@ -1,233 +1,254 @@
-# Stack Research: v1.5.1 New Capabilities
+# Stack Research: Entity Layer Additions (v2.0)
 
-**Domain:** Work intelligence pipeline -- Notion ingestion, asyncio parallelization, structured outputs, config validation, cache management, algorithmic dedup
-**Researched:** 2026-04-04
+**Domain:** Entity registry, discovery, merge/resolution, scoped views for work intelligence pipeline
+**Researched:** 2026-04-05
 **Confidence:** HIGH
 
-## Existing Stack (validated, not changing)
+## Existing Stack (Validated, Not Changing)
 
-| Technology | Version (installed) | Purpose |
-|------------|-------------------|---------|
-| Python | 3.12+ | Runtime |
-| anthropic SDK | 0.88.0 | Claude API (Sonnet daily, Opus roll-ups) |
-| google-api-python-client | 2.193.0 | Calendar, Gmail, Drive, Docs |
-| slack_sdk | 3.41.0 | Slack API |
-| hubspot-api-client | 12.0.0 | HubSpot API |
-| pydantic | 2.12.5+ | Data models |
-| httpx | 0.28.1+ | HTTP client |
-| pyyaml | 6.0.3+ | Config loading |
-| jinja2 | 3.1.6+ | Output templates |
-| pytest | 9.0.2+ | Testing |
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| Python | >=3.12 | Runtime |
+| anthropic | >=0.45.0 (0.88.0 installed) | Claude API (Sonnet/Opus) with structured outputs |
+| pydantic | >=2.12.5 | Config models, structured output schemas |
+| httpx | >=0.28.1 | Async HTTP client |
+| tenacity | >=9.1.4 | Retry logic |
+| jinja2 | >=3.1.6 | Output template rendering |
+| argparse | stdlib | CLI subcommands |
+| asyncio | stdlib | Concurrent pipeline execution |
+| rapidfuzz | >=3.12.0 (already added in v1.5.1) | Fuzzy string matching |
 
-## New Dependencies
+## New Dependencies: Only ONE Package
 
-### Core: Notion Ingestion
-
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| notion-client | >=3.0.0,<4.0 | Official Notion API client | The canonical Python SDK for Notion API (ramnes/notion-sdk-py). Provides both sync `Client` and async `AsyncClient`. Uses httpx under the hood -- already in our dependency tree. v3.0.0 is current stable. Supports Notion API version 2026-03-11. |
-
-**Integration notes:**
-- `notion-client` depends on `httpx`, which we already have. No transitive dependency conflicts.
-- Provides `AsyncClient` out of the box -- important for our asyncio parallelization work. Use `AsyncClient` in the parallel pipeline, `Client` for any standalone scripts.
-- Notion API has no "changes since date" endpoint. We must query databases/pages and filter client-side by `last_edited_time`. This is an API limitation, not a library issue.
-- The Notion API uses cursor-based pagination. The library handles this via `iterate` helpers, but you must implement date-range filtering yourself.
-
-**Authentication:** Internal Integration Token. Store as `NOTION_TOKEN` in `.env`. Create at notion.so/my-integrations, then share target pages/databases with the integration manually.
-
-**Rate Limits (MOST RESTRICTIVE of all services):** 3 requests/second average. For daily batch reading ~5-20 pages, add 0.35s delay between calls.
-
-### Core: Asyncio Parallelization
+### Core: SQLite Entity Registry
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| asyncio (stdlib) | -- | Concurrent ingest orchestration | Built into Python 3.12+. Use `asyncio.gather()` to run independent ingest modules concurrently. No external dependency needed. |
-| aiofiles | >=25.1.0,<26.0 | Async file I/O for cache reads/writes | Prevents blocking the event loop during file operations in async ingest paths. Lightweight, well-maintained. Only needed if ingest modules do significant file I/O within async context. |
+| sqlite3 | stdlib (SQLite 3.51.0 on system) | Entity registry storage | Zero new dependencies. Python 3.12 bundles it. JSON1 extension built-in for flexible metadata columns. WAL mode for concurrent reads during pipeline runs. This is a single-user personal tool -- SQLite is the correct database. |
+| aiosqlite | >=0.22.0,<1.0 | Async SQLite access from pipeline | The pipeline is already async (pipeline_async.py). Entity backfill and discovery run alongside ingestion. aiosqlite wraps stdlib sqlite3 with async context managers -- same API surface, non-blocking. Thin wrapper, no ORM overhead. |
 
-**Integration notes:**
-- The pipeline currently uses synchronous `anthropic.Anthropic`. For parallel Claude calls (per-meeting extraction), use `anthropic.AsyncAnthropic` which is already included in the `anthropic` SDK -- no additional dependency.
-- `slack_sdk` ships `AsyncWebClient` for async Slack calls. Already in our dependency (`slack_sdk>=3.33.0`). Requires `aiohttp` as an optional dependency -- must be installed explicitly.
-- Google API client (`google-api-python-client`) is synchronous-only. Wrap in `asyncio.to_thread()` to run without blocking. Do NOT try to find an async Google client -- the official library is sync and `to_thread()` is the correct pattern.
-- `httpx` (used by notion-client) is natively async. The `notion_client.AsyncClient` uses it directly.
-- Pattern: `asyncio.gather(_ingest_slack_async(), _ingest_hubspot_async(), _ingest_docs_async(), _ingest_notion_async(), _ingest_calendar_async())` with each module wrapping its sync calls in `asyncio.to_thread()` where needed.
+**Why aiosqlite and not just sqlite3 with asyncio.to_thread():**
+- `to_thread()` works but requires manual connection management per call
+- aiosqlite provides async context managers (`async with aiosqlite.connect() as db:`) matching the project's existing async patterns
+- Connection pooling through a single shared thread per connection -- safe for SQLite's single-writer model
+- The project already uses async patterns extensively in pipeline_async.py; aiosqlite fits naturally
 
-### Core: Structured Output Migration
+**Schema approach:** Hand-written SQL with a `schema_version` table. Migration functions in `src/entity/migrations.py` run on startup, check current version, apply incremental changes. Pydantic models for Python-side representations (consistent with existing config.py and synthesis/models.py patterns). No ORM.
 
-No new dependencies needed. The existing `anthropic>=0.45.0` SDK (we have 0.88.0 installed) supports structured outputs via the GA `output_config` parameter.
-
-**Migration details:**
-- Structured outputs are GA (not beta) on Claude API for Sonnet 4.5+, Opus 4.5+, Haiku 4.5+. The claude-sonnet-4-20250514 model currently used in `extractor.py` and `synthesizer.py` supports this.
-- Use `output_config={"format": {"type": "json_schema", "schema": {...}}}` in `client.messages.create()`.
-- The old beta header (`structured-outputs-2025-11-13`) and `output_format` parameter still work but are deprecated. Use `output_config.format` directly.
-- Response content is still in `response.content[0].text` -- parse with `json.loads()`. Alternatively, define Pydantic models and use `model_validate_json(response.content[0].text)` for automatic validation.
-- Define JSON schemas matching existing `MeetingExtraction`, `DailySynthesis` section structures, and `Commitment` models. Pydantic's `.model_json_schema()` generates compatible schemas.
-- The `additionalProperties: false` constraint is recommended for strict validation.
-- Replace all `_parse_section_items()` regex-based markdown parsing in `extractor.py` and `synthesizer.py` with schema-constrained responses.
-- For async parallel extraction: use `AsyncAnthropic` with same `output_config` parameter.
-
-**Minimum SDK version for GA structured outputs:** Bump `anthropic>=0.82.0` in pyproject.toml to ensure `output_config` parameter support. Our installed 0.88.0 already supports it.
-
-### Core: Algorithmic Deduplication
+### Entity Discovery: Claude Structured Outputs (Already in Stack)
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| rapidfuzz | >=3.12.0,<4.0 | Fast fuzzy string matching for cross-source dedup | C-extension performance (~10-100x faster than difflib). Provides `fuzz.token_sort_ratio` and `fuzz.token_set_ratio` for comparing normalized event descriptions across sources. MIT licensed. No heavy dependencies. |
+| anthropic (existing) | >=0.45.0 | NER / entity extraction from text | The project already uses Claude structured outputs for meeting extraction (ExtractionItemOutput) and synthesis (DailySynthesisOutput). Entity discovery is the same pattern: send text, get structured JSON with entity mentions. Zero new dependencies. |
 
-**Integration notes:**
-- Use `rapidfuzz.fuzz.token_set_ratio` for comparing source items -- it handles word reordering (same topic described differently in Slack vs. meeting transcript).
-- Set threshold at ~80 for "likely same topic" and ~90 for "definitely same topic". Tune based on testing.
-- Supplement (not replace) existing LLM-based dedup. Algorithmic dedup runs first as a cheap pre-filter, reducing items sent to LLM dedup.
-- Works on normalized `SourceItem.content` strings. Normalize before comparison: lowercase, strip punctuation, remove stop words.
-- `process.cdist()` can compute pairwise similarity matrix efficiently for batch dedup across all source items.
+**Why NOT spaCy / GLiNER / dedicated NER libraries:**
+- The project already sends all source text through Claude for extraction. Entity discovery is a prompt change plus a schema extension, not a new library.
+- spaCy adds approximately 500MB of model downloads for marginal accuracy gain over Claude Sonnet on business-domain text (partner names, people, initiatives are not standard NER categories).
+- Claude already sees participant lists, meeting titles, Slack usernames, HubSpot deal/company names -- it has rich context for entity recognition that a standalone NER model would lack.
+- Adding a separate NER pipeline creates a second extraction pass over the same text. Instead, extend the existing structured output schemas with entity reference fields. One pass, zero new dependencies.
 
-### Supporting: Slack Batch User Resolution
+**Implementation approach:** Add `entity_mentions: list[EntityMention]` fields to existing ExtractionItemOutput and DailySynthesisOutput Pydantic models. EntityMention is a new Pydantic model with `name`, `type` (partner/person/initiative), and `confidence` fields. Claude extracts entities during its existing synthesis pass. For backfill over historical summaries, a dedicated discovery prompt reads stored markdown and outputs entity mentions.
 
-No new dependencies. The existing `slack_sdk` (3.41.0) already provides `users_list()` on both `WebClient` and `AsyncWebClient`.
-
-**Migration details:**
-- Current code in `slack.py:resolve_user_names()` (line 54-90) calls `users_info(user=uid)` per user (N API calls).
-- Replace with single `users_list()` call that returns all workspace users, then build lookup dict.
-- `users_list()` is paginated (default limit 200). For workspaces with <1000 users, 1-5 API calls vs. N individual calls.
-- Cache the full user list in memory for the pipeline run (users don't change mid-run).
-- For async pipeline: use `AsyncWebClient.users_list()`.
-
-### Supporting: Typed Config Validation
-
-No new dependencies. Pydantic (already >=2.12.5) handles this.
-
-**Implementation details:**
-- Define a `PipelineConfig` Pydantic model mirroring `config/config.yaml` structure.
-- Use `pydantic.BaseModel` with nested models for each section (`SlackConfig`, `HubSpotConfig`, `SynthesisConfig`, `NotionConfig`, etc.).
-- Replace `load_config() -> dict` in `src/config.py` with `load_config() -> PipelineConfig` that calls `PipelineConfig.model_validate(yaml_data)`.
-- Pydantic provides: type coercion, default values, validation errors with field paths, and IDE autocompletion on `ctx.config.slack.enabled` instead of `ctx.config.get("slack", {}).get("enabled", False)`.
-- Environment variable overrides: handle in the loading function before validation, or use `model_validator(mode='after')`.
-- `PipelineContext.config` type changes from `dict` to `PipelineConfig` -- update all consumers.
-
-### Supporting: Cache Retention Policy
-
-No new dependencies. Use `pathlib` (stdlib) and `os.stat()` for file age checks.
-
-**Implementation details:**
-- Add `cache_retention_days: int = 30` to the new config model.
-- On pipeline start, scan cache directories (`output/raw/`, `output/cache/`) for files older than TTL.
-- Use `Path.stat().st_mtime` for age calculation, `Path.unlink()` for deletion.
-- Log deletions at INFO level. Never delete current day's data.
-
-### Supporting: Async HTTP for Slack
+### Entity Merge/Resolution: RapidFuzz (Already in Stack)
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| aiohttp | >=3.11.0,<4.0 | Required by slack_sdk AsyncWebClient | slack_sdk's AsyncWebClient requires aiohttp as its HTTP transport. Not installed by default with slack_sdk -- must be added explicitly. Without it, async Slack calls raise `ImportError`. |
+| rapidfuzz (existing) | >=3.12.0 | Fuzzy string matching for entity merge proposals | Already added in v1.5.1 for cross-source dedup. Reuse for matching "Colin" = "Colin R." = "Colin Richardson". Token sort ratio and partial ratio algorithms handle name variations. No new dependency. |
+
+**Merge strategy (algorithmic + LLM hybrid):**
+1. Normalize names: lowercase, strip suffixes (Inc, LLC), collapse whitespace
+2. Compute rapidfuzz.fuzz.token_sort_ratio for all entity name pairs within same type
+3. Above 95: auto-merge (high confidence)
+4. Between 85-95: propose merge, optionally confirm with Claude (reuse existing client)
+5. Below 85: separate entities
+6. Store aliases in entity registry so merged entities retain all known name variants
+
+**Why NOT a full entity resolution framework (dedupe, entity-resolution, zingg):**
+- Those frameworks handle millions of records across messy datasets with active learning
+- This system has hundreds to low thousands of entity mentions
+- The existing SequenceMatcher pattern in src/dedup.py proves lightweight fuzzy matching works for this project's scale
+- rapidfuzz is already a dependency -- zero incremental cost
+
+### Scoped Views: No New Dependencies
+
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| argparse (existing) | stdlib | New `entity` subcommand for CLI queries | Already used in main.py with subparsers. Add `entity` subcommand with filters. Consistent with existing CLI patterns. |
+| jinja2 (existing) | >=3.1.6 | Scoped markdown report generation | Already in dependencies for daily/weekly output. Entity-scoped reports are the same pattern: query data, render template, write markdown file. |
 
 ## Installation
 
 ```bash
-# New dependencies for v1.5.1
-uv add "notion-client>=3.0.0,<4.0"
-uv add "rapidfuzz>=3.12.0,<4.0"
-uv add "aiohttp>=3.11.0,<4.0"
-uv add "aiofiles>=25.1.0,<26.0"
-
-# Update anthropic minimum to ensure output_config support
-# In pyproject.toml, change: "anthropic>=0.45.0,<1.0" -> "anthropic>=0.82.0,<1.0"
+# Single new dependency
+pip install "aiosqlite>=0.22.0,<1.0"
 ```
 
-## Updated pyproject.toml Dependencies
-
+**pyproject.toml change:**
 ```toml
 dependencies = [
-    "google-api-python-client>=2.193.0,<3.0",
-    "google-auth>=2.49.1,<3.0",
-    "google-auth-httplib2>=0.3.1,<1.0",
-    "google-auth-oauthlib>=1.3.1,<2.0",
-    "httpx>=0.28.1,<1.0",
-    "jinja2>=3.1.6,<4.0",
-    "pydantic>=2.12.5,<3.0",
-    "python-dateutil>=2.9.0.post0,<3.0",
-    "pyyaml>=6.0.3,<7.0",
-    "anthropic>=0.82.0,<1.0",         # bumped for GA structured outputs
-    "python-dotenv>=1.0.0,<2.0",
-    "slack-sdk>=3.33.0,<4.0",
-    "hubspot-api-client>=12.0.0,<13.0",
-    "notion-client>=3.0.0,<4.0",      # NEW: Notion API
-    "rapidfuzz>=3.12.0,<4.0",         # NEW: algorithmic dedup
-    "aiohttp>=3.11.0,<4.0",           # NEW: required by slack_sdk AsyncWebClient
-    "aiofiles>=25.1.0,<26.0",         # NEW: async file I/O
+    # ... all existing dependencies unchanged ...
+    "aiosqlite>=0.22.0,<1.0",           # NEW: async SQLite for entity registry
 ]
 ```
+
+That is it. One new package. Everything else leverages the existing stack.
+
+## Integration Points with Existing Code
+
+### Pydantic Models (src/synthesis/models.py)
+
+Extend existing structured output models with entity fields:
+
+```python
+class EntityMention(BaseModel):
+    """Entity reference extracted during synthesis."""
+    model_config = ConfigDict(extra="forbid")
+
+    name: str           # As mentioned in text ("Affirm", "Colin", "Q2 launch")
+    entity_type: str    # "partner" | "person" | "initiative"
+
+class ExtractionItemOutput(BaseModel):
+    """Extended: each extraction item now carries entity mentions."""
+    model_config = ConfigDict(extra="forbid")
+
+    content: str
+    participants: list[str] = Field(default_factory=list)
+    rationale: str | None = None
+    entity_mentions: list[EntityMention] = Field(default_factory=list)  # NEW
+```
+
+This is backward-compatible: the `entity_mentions` field defaults to an empty list, so existing extraction results remain valid.
+
+### Async Pipeline (src/pipeline_async.py)
+
+Entity processing slots into the existing async pipeline:
+
+```
+Ingest (existing)
+  -> Extract with entity mentions (extended schema)
+  -> Dedup (existing)
+  -> Synthesize with entity attribution (extended schema)
+  -> Persist entities to SQLite registry
+  -> Write Output (existing + entity-tagged)
+```
+
+Entity persistence is a new step after synthesis. It runs sequentially after synthesis completes (needs the synthesis results) but uses aiosqlite for non-blocking DB writes.
+
+### Config (src/config.py)
+
+Add entity config section to existing Pydantic config model:
+
+```python
+class EntityConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    db_path: str = "data/entities.db"
+    merge_threshold: float = 0.85
+    auto_merge_threshold: float = 0.95
+    discovery_model: str = "claude-sonnet-4-20250514"
+```
+
+### CLI (src/main.py)
+
+New argparse subcommands alongside existing daily/weekly/monthly/discover-slack/discover-notion:
+
+```
+python -m src.main entity list [--type partner|person|initiative]
+python -m src.main entity show <name> [--from DATE] [--to DATE]
+python -m src.main entity merge <id1> <id2>
+python -m src.main entity merge-proposals [--auto-apply]
+python -m src.main entity report <name> [--format md|terminal]
+```
+
+### Existing Dedup (src/dedup.py)
+
+The dedup module already uses difflib.SequenceMatcher for title similarity. Entity merge uses the same conceptual pattern but operates on entity names via rapidfuzz (already in deps). No changes to existing dedup code needed.
 
 ## Alternatives Considered
 
 | Recommended | Alternative | When to Use Alternative |
 |-------------|-------------|-------------------------|
-| notion-client (official) | ultimate-notion | Never for this project. Adds ORM-like abstraction we don't need. |
-| notion-client (official) | notion-sdk (getsyncr) | Never. Less maintained, smaller community. |
-| rapidfuzz | thefuzz (fuzzywuzzy) | Never. thefuzz is slower (pure Python fallback), less maintained. rapidfuzz is a strict superset. |
-| rapidfuzz | difflib (stdlib) | Only if you want zero deps and don't care about perf. difflib SequenceMatcher is ~50-100x slower. |
-| asyncio.to_thread() | aiogoogle | Never. aiogoogle is unmaintained. `to_thread()` is the stdlib solution for wrapping sync Google API calls. |
-| aiohttp (for slack_sdk) | httpx (for slack_sdk) | Not possible. slack_sdk AsyncWebClient specifically requires aiohttp. Not configurable. |
-| Pydantic config model | pydantic-settings | Not worth the extra dep. pydantic-settings adds env var binding but we only have 3 env overrides -- handle manually. |
+| sqlite3 + aiosqlite | SQLAlchemy + Alembic | If the schema grew to 15+ tables with complex relationships and multiple developers. Not this project. |
+| sqlite3 + aiosqlite | PostgreSQL | If multi-user, concurrent writes, or full-text search at scale were needed. Not a personal tool. |
+| Claude structured outputs for NER | spaCy + en_core_web_lg | If you needed offline NER without API costs. But we already pay for Claude calls during extraction -- entity fields are free marginal cost. |
+| Claude structured outputs for NER | GLiNER (zero-shot NER) | If you needed NER without any API and wanted custom entity types. Good library, but redundant when Claude is already in the loop. |
+| rapidfuzz for merge | dedupe library | If you had 100K+ entities with training data. Overkill for hundreds of entities. |
+| Hand-written SQL migrations | Alembic | If using SQLAlchemy. Alembic requires SQLAlchemy -- circular dependency on a decision we already rejected. |
+| argparse | click / typer | If building a standalone CLI tool. But main.py already uses argparse -- switching frameworks for one subcommand creates inconsistency. |
 
 ## What NOT to Add
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| instructor | Wraps anthropic SDK for structured outputs. Unnecessary -- anthropic SDK now has native GA structured outputs via `output_config`. Another abstraction layer and dependency. | Native `output_config` + `json.loads()` + Pydantic `model_validate()` |
-| celery / dramatiq | Overkill. We need concurrent I/O within a single pipeline run, not distributed task queues. | `asyncio.gather()` |
-| motor / asyncpg | No database in this project (flat file storage until v2.0). | pathlib + aiofiles |
-| notion-py (jamalex) | Uses unofficial/undocumented Notion API. Fragile, breaks with Notion updates. | notion-client (official API) |
-| langchain | Massive dependency tree for simple Claude API calls. Direct SDK calls are simpler and more maintainable. | Direct anthropic SDK |
-| tenacity | Slack SDK has built-in retry. For Notion, simple `time.sleep(0.35)` between calls suffices. For Claude, structured outputs eliminate retry-on-parse-failure. | Built-in retry + simple sleep |
-| requests | Already have httpx which is strictly better (async support, HTTP/2). Note: hubspot-api-client uses requests internally but that's its own transitive dep. | httpx |
+| SQLAlchemy | 3-4 simple tables. ORM adds session management, migration tooling, and abstraction for no benefit at this scale. Raw SQL is more readable for simple entity CRUD. | sqlite3/aiosqlite + Pydantic models |
+| Alembic | Requires SQLAlchemy. A `schema_version` table with Python migration functions is simpler and sufficient for a personal tool with one developer. | Hand-written migrations |
+| spaCy | 500MB+ model downloads. Separate extraction pass duplicates work Claude already does. Business entity types (partners, initiatives) are not standard NER categories -- would need custom training. | Claude structured output extension |
+| Neo4j / graph DB | Entity relationships are simple (person belongs to partner, initiative involves people). These are foreign keys, not graph traversals. | SQLite junction tables |
+| FTS5 (SQLite full-text search) | Premature optimization. Entity queries filter by entity ID + date range, which indexed columns handle. | Standard SQL with indexes on entity_id and date |
+| instructor | Wraps anthropic SDK for structured outputs. Unnecessary -- the project already uses native structured outputs via output_config. | Direct anthropic SDK |
+| langchain | Massive dependency tree. The project makes direct Claude API calls which are simpler and more maintainable. | Direct anthropic SDK |
+
+## Stack Patterns by Feature
+
+**Entity discovery (new pipeline runs):**
+- Extend existing Claude structured output schema with EntityMention fields
+- No new libraries, no new API calls -- piggyback on existing extraction
+
+**Entity discovery (historical backfill):**
+- Read stored markdown summaries from output/ directory
+- Send through dedicated Claude prompt with EntityMention output schema
+- Use AsyncAnthropic for concurrent processing of multiple days
+- Persist discovered entities to SQLite via aiosqlite
+
+**Entity merge proposals:**
+- Query all entities from SQLite grouped by type
+- Compute pairwise rapidfuzz.fuzz.token_sort_ratio within each type
+- Above auto_merge_threshold (0.95): merge automatically, log action
+- Between merge_threshold (0.85) and auto_merge_threshold: present to user via CLI
+- Store merge decisions (alias table) so rejected merges are not re-proposed
+
+**Scoped views:**
+- SQL query: join entity mentions to synthesis items by date range
+- Render with existing Jinja2 templates
+- Output as markdown (consistent with daily/weekly reports) or terminal display
 
 ## Version Compatibility
 
 | Package | Compatible With | Notes |
 |---------|-----------------|-------|
-| notion-client 3.0.0 | httpx >=0.23.0 | Our httpx 0.28.1+ satisfies this. No conflict. |
-| notion-client 3.0.0 | Python >=3.9 | Our Python 3.12+ satisfies this. |
-| aiohttp >=3.11.0 | Python >=3.9 | Coexists with httpx -- different use cases (aiohttp for slack_sdk, httpx for notion-client/anthropic). |
-| rapidfuzz >=3.12.0 | Python >=3.9 | C extension wheels available for macOS arm64, Linux x86_64. |
-| anthropic >=0.82.0 | httpx >=0.20.0 | No conflict with our httpx pin. |
-| aiofiles 25.1.0 | Python >=3.9 | No dependency conflicts. |
+| aiosqlite 0.22.x | Python >=3.9 | Well within our >=3.12 requirement |
+| aiosqlite 0.22.x | sqlite3 stdlib | Uses stdlib sqlite3 under the hood, no version conflicts |
+| rapidfuzz 3.14.x (existing) | aiosqlite 0.22.x | No interaction -- different domains |
 
 ## Capability-to-Library Mapping
 
-Quick reference for plan authors -- which library addresses which v1.5.1 feature.
+Quick reference for plan authors -- which library addresses which v2.0 feature.
 
 | Feature | Library | Key API / Pattern |
 |---------|---------|-------------------|
-| Notion ingestion | notion-client | `Client.databases.query()`, `Client.blocks.children.list()`, `Client.search()` |
-| Parallel ingest | asyncio (stdlib) | `asyncio.gather()`, `asyncio.to_thread()` |
-| Parallel Claude calls | anthropic (existing) | `AsyncAnthropic.messages.create()` with `output_config` |
-| Structured outputs | anthropic (existing) | `messages.create(output_config={"format": {"type": "json_schema", "schema": ...}})` |
-| Slack batch users | slack_sdk (existing) | `WebClient.users_list()` or `AsyncWebClient.users_list()` |
-| Async Slack | slack_sdk + aiohttp | `AsyncWebClient` (requires aiohttp at runtime) |
-| Algorithmic dedup | rapidfuzz | `fuzz.token_set_ratio()`, `process.cdist()` |
-| Config validation | pydantic (existing) | `BaseModel`, `model_validate()`, `model_json_schema()` |
-| Cache retention | pathlib (stdlib) | `Path.stat()`, `Path.unlink()`, `Path.glob()` |
-| Async file I/O | aiofiles | `aiofiles.open()` |
-
-## Environment Variables (New)
-
-```bash
-# .env addition for Notion
-NOTION_TOKEN=ntn_...               # Notion internal integration secret
-```
-
-Note: `SLACK_BOT_TOKEN` and `HUBSPOT_ACCESS_TOKEN` already exist from v1.5.
+| Entity registry storage | sqlite3 + aiosqlite | `aiosqlite.connect()`, hand-written SQL, Pydantic hydration |
+| Entity discovery (new runs) | anthropic (existing) | Extended structured output schema with EntityMention |
+| Entity discovery (backfill) | anthropic (existing) | Dedicated prompt + AsyncAnthropic for concurrent processing |
+| Entity merge proposals | rapidfuzz (existing) | `fuzz.token_sort_ratio()`, threshold-based merge/propose |
+| Entity merge confirmation | anthropic (existing) | Optional LLM confirmation for ambiguous pairs |
+| Entity merge CLI | argparse (existing) | New `entity merge-proposals` subcommand |
+| Scoped view queries | sqlite3 + aiosqlite | SQL joins: entity -> mentions -> synthesis items |
+| Scoped view rendering | jinja2 (existing) | Markdown templates for entity reports |
+| Scoped view CLI | argparse (existing) | New `entity show` and `entity report` subcommands |
+| Entity config | pydantic (existing) | New EntityConfig model in config.py |
 
 ## Sources
 
-- [Anthropic structured outputs docs (GA)](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) -- verified output_config API shape, GA status, supported models (HIGH confidence)
-- [notion-client PyPI](https://pypi.org/project/notion-client/) -- verified v3.0.0 latest via `pip index versions` (HIGH confidence)
-- [ramnes/notion-sdk-py GitHub](https://github.com/ramnes/notion-sdk-py) -- verified async support, httpx dependency (HIGH confidence)
-- [RapidFuzz GitHub](https://github.com/rapidfuzz/RapidFuzz) -- verified version 3.12+, C extension performance (HIGH confidence)
-- [slack_sdk AsyncWebClient docs](https://docs.slack.dev/tools/python-slack-sdk/reference/web/async_client.html) -- verified aiohttp requirement, users_list pagination (HIGH confidence)
-- [aiofiles PyPI](https://pypi.org/project/aiofiles/) -- verified v25.1.0 latest (MEDIUM confidence, version from web search)
-- Installed package versions verified directly from local .venv (HIGH confidence)
-- [Notion API versioning](https://developers.notion.com/reference/versioning) -- API version 2026-03-11 (MEDIUM confidence, from web search)
+- [aiosqlite PyPI](https://pypi.org/project/aiosqlite/) -- version 0.22.1, released 2025-12-23 (HIGH confidence)
+- [aiosqlite docs](https://aiosqlite.omnilib.dev/) -- API reference, async context managers (HIGH confidence)
+- [aiosqlite GitHub](https://github.com/omnilib/aiosqlite) -- threading model, sqlite3 compatibility (HIGH confidence)
+- [RapidFuzz PyPI](https://pypi.org/project/RapidFuzz/) -- version 3.14.3 (HIGH confidence, already in project deps)
+- [RapidFuzz GitHub](https://github.com/rapidfuzz/RapidFuzz) -- benchmarks vs thefuzz, algorithm documentation (HIGH confidence)
+- [Python sqlite3 docs](https://docs.python.org/3/library/sqlite3.html) -- WAL mode, JSON1 support (HIGH confidence)
+- System SQLite version verified: `python3 -c "import sqlite3; print(sqlite3.sqlite_version)"` returned 3.51.0 (HIGH confidence)
+- LLM-based NER approaches validated via [AWS Bedrock NER patterns](https://aws.amazon.com/blogs/machine-learning/use-zero-shot-large-language-models-on-amazon-bedrock-for-custom-named-entity-recognition/) and [GPT-NER research](https://arxiv.org/abs/2304.10428) (MEDIUM confidence -- approach is sound, prompt design needs iteration)
+- Existing project code reviewed: src/synthesis/models.py, src/dedup.py, src/pipeline_async.py, src/config.py, src/main.py (HIGH confidence)
 
 ---
-*Stack research for: Work Intelligence System v1.5.1*
-*Researched: 2026-04-04*
+*Stack research for: Entity layer additions (v2.0) to Work Intelligence System*
+*Researched: 2026-04-05*

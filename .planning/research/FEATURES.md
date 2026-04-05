@@ -1,292 +1,417 @@
-# Feature Research: v1.5.1 -- Notion + Performance + Reliability
+# Feature Research: v2.0 -- Entity Layer
 
-**Domain:** Work intelligence pipeline -- Notion ingestion, performance, reliability, structured outputs
-**Researched:** 2026-04-04
-**Confidence:** HIGH (existing codebase well-understood, API docs verified)
+**Domain:** Work intelligence pipeline -- entity registry, discovery, merge/resolution, attribution, scoped views, initiative tracking
+**Researched:** 2026-04-05
+**Confidence:** HIGH (existing pipeline well-understood, entity resolution patterns well-established, LLM entity extraction proven with current structured output infrastructure)
 
 ## Feature Landscape
 
 ### Table Stakes (Users Expect These)
 
-Features that complete the v1.5.1 milestone promise. Without these, the milestone is incomplete.
+Features without which "entity-aware intelligence" feels broken or useless.
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Notion page/database ingestion | Notion is the last major daily-use tool not yet ingested; PROJECT.md lists it as primary user tool | MEDIUM | Notion API has no diff endpoint -- must query by `last_edited_time` filter and compare content. SDK: `notion-sdk-py` (ramnes) supports sync+async. |
-| Typed config model (Pydantic validation) | Current `load_config()` returns raw dict, zero validation. Typos in config silently produce wrong behavior (e.g., `enbled: true`). Every ingest module does its own `.get()` with fallback defaults scattered across the codebase. | LOW-MEDIUM | Pydantic already a dependency (v2.12+). Define nested BaseModel classes mirroring config.yaml structure. Validate on startup, fail fast with field-specific errors. |
-| Claude API structured output migration | PROJECT.md explicitly states "migration overdue." Current extractors parse markdown with brittle regex (`_parse_section_items`, `_parse_legacy_blocks`, `_parse_synthesis_response`). Multiple parsing formats maintained for backward compat. Any Claude response format drift breaks extraction. | MEDIUM | Use `output_config.format` with `json_schema` type (GA on Sonnet 4.5+). Anthropic SDK has `client.messages.parse()` with native Pydantic model support. Eliminates ~200 lines of regex parsing in extractor.py and synthesizer.py. |
-| Raw data cache retention policy | Pipeline caches raw API responses to disk (calendar JSON, transcript emails). No cleanup mechanism exists. Over time, output/ directory grows unbounded. | LOW | Scan output dirs older than TTL, delete raw_* files. Config: `pipeline.cache_retention_days: 30`. Run at pipeline start or as separate CLI command. |
+| Feature | Why Expected | Complexity | Depends On (Existing) |
+|---------|--------------|------------|----------------------|
+| Entity registry (SQLite) for partners and people | Cannot attribute, query, or merge entities without persistent storage. Foundation for everything. | MEDIUM | First SQLite usage in project. Schema: entities table + entity_mentions junction table. Pydantic models for Entity, EntityMention. |
+| Entity discovery from existing summaries (backfill) | 6+ months of daily summaries already exist. Without backfill, entity layer starts empty and feels useless until weeks of new runs accumulate. | MEDIUM-HIGH | Existing `DailySynthesisOutput` structured outputs. Async pipeline patterns from v1.5.1. LLM extracts entities from historical synthesis text. |
+| Ongoing entity discovery from new pipeline runs | New synthesis runs must tag entities automatically or the system falls out of date after day one. | MEDIUM | Extends current `DailySynthesisOutput` Pydantic model with entity reference fields. Runs as post-synthesis step. |
+| Entity attribution in synthesis output | Synthesis items must reference entities so scoped views can filter. Without attribution, entities exist in a registry but are disconnected from intelligence. | MEDIUM | Extends `SynthesisItem`, `CommitmentRow`, `ExtractionItemOutput` with `entity_refs: list[str]` fields. Prompt engineering to instruct Claude to tag items with known entity names. |
+| Entity merge proposals with user confirmation | Names fragment across sources ("Colin" in meetings, "Colin R." in Slack, "colin@partner.com" in HubSpot). Without merge, same person appears as 3 entities. | MEDIUM | Entity registry must exist. Similarity detection (string distance + LLM verification). CLI prompt for confirm/reject/skip. |
+| Scoped entity views (CLI query) | The core value proposition: "what's happening with Affirm?" Without query, the entity layer has no user-facing surface. | LOW-MEDIUM | Entity registry + attribution. CLI command `python -m src.main entity "Affirm"` that queries entity_mentions, aggregates synthesis items, prints markdown. |
 
 ### Differentiators (Competitive Advantage)
 
-Features that make v1.5.1 meaningfully better than v1.5, beyond just adding another source.
+Features that make this entity layer meaningfully better than a naive tag-and-search.
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Parallel ingest modules (asyncio) | Current pipeline runs 4-5 ingest sources sequentially. With 5+ API sources, wall-clock time scales linearly. Parallelizing independent sources cuts total ingest time to the slowest source. | MEDIUM | Pipeline.py is synchronous. Need `asyncio.gather()` for independent sources. Calendar+transcripts have internal dependencies so stay sequential internally but run parallel with other sources. Use `asyncio.Semaphore` to cap concurrent API calls. Anthropic SDK supports async via `AsyncAnthropic`. |
-| Parallel per-meeting transcript extraction | `extract_all_meetings()` iterates meetings sequentially, one Claude API call per meeting. With 5-8 meetings/day at ~3-5s each = 15-40s. Parallel calls reduce to ~5s. | LOW-MEDIUM | `asyncio.gather()` over async Claude calls. Anthropic rate limits are per-minute, so 5-8 concurrent calls are well within limits. |
-| Slack user batch resolution | Current `resolve_user_names()` makes one `users.info` API call per unique user ID. With 10-20 unique users, that is 10-20 serial API calls. `users.list` returns all workspace users in one call. | LOW | Replace N `users.info` calls with one paginated `users.list` call. Build full user_id -> display_name map upfront. For typical company scale (<500 users), single call is fine. |
-| Algorithmic cross-source deduplication | Current dedup is LLM-based only (prompt instructs Claude to merge duplicates). Non-deterministic and costs tokens. Pre-LLM algorithmic pass catches obvious duplicates cheaply and deterministically. | MEDIUM | TF-IDF + cosine similarity on SourceItem content/title. Scikit-learn `TfidfVectorizer`. Threshold ~0.85 for conservative matching. Supplements LLM dedup, does not replace it. |
+| Feature | Value Proposition | Complexity | Depends On (Existing) |
+|---------|-------------------|------------|----------------------|
+| Scoped entity markdown reports | Generated markdown file per entity covering configurable time range. Portable, shareable, reviewable. Goes beyond CLI output to persistent artifact. | LOW | Scoped CLI views (same query, different output target). Uses existing `output/writer.py` patterns. |
+| Initiative tracking as entity type | "Q2 launch" or "MSA renegotiation" -- cross-cutting themes that span multiple partners and people. Most work intelligence tools only track people and orgs. | MEDIUM | Partners + people must be stable first. Initiatives have different lifecycle (start/end dates, status). Schema extension. |
+| Confidence scoring on entity mentions | Not all mentions are equal. "Colin will send the contract" (high confidence, direct attribution) vs "the team discussed contract terms" (low confidence, indirect). | LOW | Extends entity_mentions with `confidence: float` field. LLM provides confidence during extraction. Scoped views can filter by confidence threshold. |
+| Temporal entity activity summaries | Roll-up entity activity over weeks/months: "Affirm: 12 mentions across 8 days, 3 open commitments, last active April 3." | MEDIUM | Entity registry + attribution + existing weekly/monthly roll-up infrastructure. Piggybacks on `src/synthesis/weekly.py` and `monthly.py`. |
+| HubSpot entity cross-reference | Auto-link discovered entities to HubSpot contacts/deals when names match. Enriches entity records with CRM context without manual mapping. | LOW-MEDIUM | HubSpot ingestion already fetches contacts/deals with names. String matching between entity names and HubSpot contact/deal names. |
+| Alias management (explicit) | User can manually add aliases ("CR" = "Colin R." = "Colin Roberts") beyond what merge proposals catch. Power-user feature for known abbreviations. | LOW | Entity registry. Simple CLI: `entity alias add "CR" --target "Colin Roberts"`. Updates aliases JSON array on entity record. |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| Real-time Notion webhook ingestion | "Get Notion changes as they happen" | Notion webhooks (automations API) are limited to triggers within Notion, not external consumers. No reliable webhook-to-external-URL path. Adds always-on server requirement for a batch pipeline. | Poll by `last_edited_time` filter during daily pipeline run. Batch is sufficient per PROJECT.md constraints. |
-| Full Notion workspace crawl | "Ingest everything from Notion" | Workspaces contain thousands of pages. Most are stale reference material. Crawling everything wastes API quota and drowns signal in noise. | Configure specific database IDs and/or page IDs. Filter by `last_edited_time` for pages changed on target date. Mirror the Google Docs pattern: curated scope + recency filter. |
-| Embedding-based dedup (sentence transformers) | "Use semantic embeddings for better duplicate detection" | Adds heavy dependency (sentence-transformers, torch) for marginal improvement over TF-IDF at this scale (~50-100 items/day). Increases install size by hundreds of MB. | TF-IDF + cosine similarity handles 70-85% of lexical duplicates. LLM-based dedup (already in place) catches semantic remainder. Two-layer approach is sufficient. |
-| Full async rewrite of entire pipeline | "Make everything async for maximum performance" | Calendar/transcript pipeline has inherent sequential dependencies (fetch events, then fetch transcripts, then match, then extract). Making everything async adds complexity without meaningful speedup for serial-dependency paths. | Targeted async: parallelize independent sources and independent Claude calls. Keep sequential logic sequential. This is the 80/20 approach. |
-| Config hot-reload | "Auto-detect config changes without restart" | Adds file-watching complexity and partial-state concerns for a CLI tool that runs once per day. | Validate config on startup. Fail fast with clear error. Re-run pipeline after fixing. |
-| Notion content diffing via stored snapshots | "Show me what changed in each Notion page" | Requires storing full page content snapshots, running diffs, managing storage growth. Over-engineered for daily intelligence use case. | Fetch current content of pages modified today. Title + content excerpt is sufficient for daily synthesis. |
+| Full NER model (spaCy/BERT) for entity extraction | "Use a proper NER pipeline for accuracy" | Adds heavy dependencies (spaCy models, torch). Claude already performs zero-shot NER extremely well via structured outputs -- it is the extraction engine. Adding a second NER system creates conflicting results, dual maintenance, and complexity for marginal accuracy gain at this scale (50-100 items/day). | Use Claude structured outputs for entity extraction. The LLM already reads the full context and can extract people/org names with high accuracy. No second model needed. |
+| Automatic entity merge (no confirmation) | "Just merge obvious duplicates automatically" | False merges are catastrophic and irreversible in practice. "Chris" could be Chris Chen or Chris Park. "Amazon" could be AWS or Amazon Retail. Auto-merge destroys data integrity. | Semi-automated: system proposes merges, user confirms. High-confidence merges (email match) can be auto-approved with a config flag, but default to manual confirmation. |
+| Knowledge graph / relationship mapping | "Build a graph of who knows whom, which partners are connected" | Over-engineered for a personal intelligence tool. Graph databases (Neo4j), graph visualization, relationship inference -- all add massive complexity. The user's actual question is "what's happening with X?" not "show me the social graph." | Flat entity registry with mentions. Relationships are implicit (entities co-mentioned in same synthesis item). If graph is ever needed, the mention data supports future extraction. |
+| Real-time entity notifications | "Alert me when a key entity is mentioned in Slack" | Requires always-on Slack listener, push notification infrastructure, real-time event processing. Contradicts the batch-pipeline architecture. Massive scope increase. | Entity scoped views after daily pipeline run. If urgent, the user is already in Slack and sees it live. The pipeline provides structured retrospective intelligence, not real-time alerts. |
+| Entity-level sentiment tracking | "Is the Affirm relationship getting better or worse?" | Personnel framing constraint from PROJECT.md: "evidence only, never evaluative language." Sentiment scoring violates this core constraint. Subjective, unreliable from text alone, and potentially harmful if used in business decisions. | Surface activity frequency and commitment status. "3 meetings this week, 2 open commitments" is objective. Let the user form their own assessment. |
+| Embedding-based entity resolution | "Use vector similarity for smarter entity matching" | Requires embedding model, vector storage, adds latency and complexity. At the scale of this system (hundreds of entities, not millions), string similarity + LLM verification is sufficient and simpler. | Levenshtein/Jaro-Winkler distance for candidate generation + LLM for ambiguous cases. Two-tier approach handles the scale perfectly. |
 
 ## Feature Dependencies
 
 ```
-[Typed Config Model]
-    +--enables--> [Notion Ingestion] (new config section validated at startup)
-    +--enables--> [Cache Retention Policy] (retention_days from typed config)
-    +--enables--> [All Ingest Modules] (typed access replaces .get() fallbacks)
+[Entity Registry (SQLite)]
+    +--enables--> [Backfill Discovery]
+    +--enables--> [Ongoing Discovery]
+    +--enables--> [Entity Merge Proposals]
+    +--enables--> [Alias Management]
 
-[Parallel Ingest (asyncio)]
-    +--requires--> [Notion Ingestion exists] (to parallelize it with other sources)
-    +--enables--> [Parallel Per-Meeting Extraction] (same async infrastructure)
+[Backfill Discovery]
+    +--populates--> [Entity Registry]
+    +--enables--> [Entity Attribution] (entities must exist to reference)
 
-[Structured Output Migration]
-    +--independent-- (no dependency on other v1.5.1 features)
-    +--enables--> [Notion extraction quality] (Notion items parsed via structured outputs)
+[Ongoing Discovery]
+    +--extends--> [Entity Attribution] (discovers new entities from new runs)
 
-[Algorithmic Dedup]
-    +--requires--> [Notion Ingestion] (so Notion items are included in dedup)
-    +--enhances--> [Existing LLM Dedup] (pre-filter before synthesis prompt)
+[Entity Attribution in Synthesis]
+    +--requires--> [Entity Registry] (needs entity list for prompt context)
+    +--extends--> [DailySynthesisOutput model] (adds entity_refs fields)
+    +--extends--> [Synthesis prompts] (instructions to tag items)
+    +--enables--> [Scoped CLI Views]
+    +--enables--> [Scoped Markdown Reports]
 
-[Slack Batch User Resolution]
-    +--independent-- (pure optimization, can be done anytime)
+[Entity Merge Proposals]
+    +--requires--> [Entity Registry] (needs entities to compare)
+    +--enhances--> [All Scoped Views] (merged entities consolidate results)
 
-[Cache Retention]
-    +--independent-- (pure maintenance, can be done anytime)
+[Scoped CLI Views]
+    +--requires--> [Entity Attribution] (needs entity_refs to filter)
+    +--enables--> [Scoped Markdown Reports] (same query, file output)
+
+[Initiative Tracking]
+    +--requires--> [Entity Registry stable] (schema extension)
+    +--requires--> [Entity Attribution working] (initiative tagging in synthesis)
+
+[Temporal Entity Summaries]
+    +--requires--> [Scoped Views]
+    +--extends--> [Weekly/Monthly roll-ups]
+
+[HubSpot Cross-Reference]
+    +--requires--> [Entity Registry]
+    +--enhances--> [Entity records with CRM data]
 ```
 
 ### Dependency Notes
 
-- **Typed Config Model first:** Every other feature touches config. Notion needs a new config section; parallelization may need concurrency settings; cache retention needs TTL. Building typed config first means new features use it from day one rather than the raw dict pattern.
-- **Notion before parallelization:** Build and test the Notion ingestor in the simpler synchronous world first, then wrap all ingestors in async. Parallelizing without Notion means retouching the code when Notion is added.
-- **Structured outputs are independent:** The extraction/synthesis migration touches different code paths (Claude API call sites) than ingestion. No ordering constraint with other features. Good candidate for early work.
-- **Algorithmic dedup after Notion:** Dedup logic should account for all source types. Building it before Notion exists means retrofitting later.
+- **Entity Registry is the absolute foundation.** Every other feature depends on it. Must be first.
+- **Backfill before ongoing discovery** because the entity list produced by backfill seeds the prompt context for ongoing discovery. Without backfill, ongoing discovery starts cold with no entity list to reference, producing fragmented names.
+- **Attribution requires entity list** because the synthesis prompt needs to know which entities exist to tag items with canonical names. Discovery produces the list, attribution uses it.
+- **Merge proposals can run anytime after registry has data** but should run before scoped views are the primary workflow, so views show consolidated entities.
+- **Initiative tracking deferred until people/partners stable** because initiatives reference people and partners. Building initiatives on an unstable entity foundation creates orphaned references.
 
 ## MVP Definition
 
-### Phase 1: Foundation (Config + Structured Outputs)
+### Phase 1: Registry + Backfill Discovery
 
-- [ ] **Typed config model with Pydantic validation** -- catches config errors on startup, provides typed access throughout pipeline, establishes pattern for new config sections
-- [ ] **Structured output migration for extraction + synthesis** -- eliminates brittle regex parsing in extractor.py (~130 lines) and synthesizer.py (~80 lines), highest reliability improvement per effort
+- [ ] **SQLite entity registry** -- schema design, Pydantic models, CRUD operations. Partners and people entity types. This is the data foundation.
+- [ ] **Backfill entity discovery** -- LLM extraction from existing daily synthesis markdown files. Populates registry with historical entities. Async batch processing.
+- [ ] **Basic merge detection** -- string similarity (Jaro-Winkler) on entity names to flag likely duplicates during backfill. Store as pending merge proposals.
 
-### Phase 2: Notion + Quick Wins
+### Phase 2: Attribution + Ongoing Discovery
 
-- [ ] **Notion page/database ingestion** -- completes the ingest surface with the last major daily-use tool
-- [ ] **Slack user batch resolution** -- quick API optimization, reduces Slack API calls by 10-20x
-- [ ] **Cache retention policy** -- maintenance hygiene, prevents unbounded disk growth
+- [ ] **Entity attribution in synthesis** -- extend `SynthesisItem`, `CommitmentRow` Pydantic models with `entity_refs` field. Update synthesis prompt to tag items with known entity names from registry.
+- [ ] **Ongoing entity discovery** -- post-synthesis step that extracts new entities from each run and adds to registry. Checks for near-matches before creating new entries.
+- [ ] **Entity merge CLI** -- `entity merge list` (show proposals), `entity merge accept <id>`, `entity merge reject <id>`. Merging updates all historical references.
 
-### Phase 3: Performance + Intelligence
+### Phase 3: Scoped Views + Initiative Tracking
 
-- [ ] **Parallel ingest via asyncio** -- requires async refactor of pipeline runner, wraps all ingest modules
-- [ ] **Parallel per-meeting extraction** -- piggybacks on async infrastructure from ingest parallelization
-- [ ] **Algorithmic cross-source dedup** -- TF-IDF pre-filter supplements existing LLM dedup
+- [ ] **Scoped CLI views** -- `entity view "Affirm"` or `entity view "Colin"` with time range. Queries entity_mentions, aggregates synthesis items, prints structured markdown.
+- [ ] **Scoped markdown reports** -- same query, writes to `output/entities/affirm_2026-04.md`. Configurable time range.
+- [ ] **Initiative tracking** -- third entity type with start/end dates, status, linked partners/people. Discovery and attribution support.
 
-### Ordering Rationale
+### Future Consideration (v2.x+)
 
-1. **Config model first** because every subsequent feature adds config. Retroactive validation is harder.
-2. **Structured outputs early** because they are independent, high-ROI, and reduce the surface area for parsing bugs before Notion adds a new source type.
-3. **Notion before async** because building and debugging a new ingestor is easier in synchronous code. Test it works, then parallelize.
-4. **Async after all ingestors exist** because the async refactor wraps all ingest modules. Doing it earlier means touching the same code twice when Notion is added.
-5. **Algorithmic dedup last** because it operates on the output of all ingestors, so all should be stable first. Also the feature with most uncertainty (threshold tuning needed).
+- [ ] **Temporal entity summaries in roll-ups** -- defer until weekly/monthly roll-ups incorporate entity data
+- [ ] **HubSpot cross-reference** -- defer until entity registry is stable and naming conventions are understood
+- [ ] **Confidence scoring on mentions** -- defer until attribution is working and there is real data to calibrate thresholds
 
 ## Feature Prioritization Matrix
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| Typed config model (Pydantic) | MEDIUM | LOW | P1 |
-| Structured output migration | HIGH | MEDIUM | P1 |
-| Notion ingestion | HIGH | MEDIUM | P1 |
-| Slack user batch resolution | LOW | LOW | P2 |
-| Cache retention policy | LOW | LOW | P2 |
-| Parallel ingest (asyncio) | MEDIUM | MEDIUM | P2 |
-| Parallel extraction | MEDIUM | LOW | P2 |
-| Algorithmic dedup | MEDIUM | MEDIUM | P3 |
+| Entity registry (SQLite) | HIGH | MEDIUM | P1 |
+| Backfill discovery | HIGH | MEDIUM-HIGH | P1 |
+| Entity attribution in synthesis | HIGH | MEDIUM | P1 |
+| Ongoing entity discovery | HIGH | MEDIUM | P1 |
+| Entity merge proposals + CLI | HIGH | MEDIUM | P1 |
+| Scoped CLI views | HIGH | LOW-MEDIUM | P1 |
+| Scoped markdown reports | MEDIUM | LOW | P2 |
+| Initiative tracking | MEDIUM | MEDIUM | P2 |
+| Alias management | LOW | LOW | P2 |
+| Confidence scoring | LOW | LOW | P3 |
+| Temporal entity summaries | MEDIUM | MEDIUM | P3 |
+| HubSpot cross-reference | LOW | LOW-MEDIUM | P3 |
 
 **Priority key:**
-- P1: Must have -- core milestone deliverables
-- P2: Should have -- meaningful improvements, add when core is stable
-- P3: Nice to have -- valuable but lowest risk of deferral
+- P1: Must have -- core entity layer that delivers the v2.0 value proposition
+- P2: Should have -- completes the experience, add once core is stable
+- P3: Nice to have -- valuable refinements, defer to v2.x
 
 ## Detailed Feature Specifications
 
-### Notion Ingestion
+### Entity Registry (SQLite)
 
-**What it does:** Query configured Notion databases and pages for content modified on the target date. Convert to SourceItem objects matching the existing pattern (Google Docs, Slack, HubSpot).
+**What it does:** Persistent storage for entity records with types, aliases, metadata, and mention tracking.
 
-**Expected behavior:**
-- Config section: `notion.enabled`, `notion.databases` (list of database IDs), `notion.pages` (list of page IDs), `notion.content_max_chars`, `notion.max_pages_per_day`
-- Filter: `last_edited_time` timestamp filter on database queries (after start_of_day, before end_of_day)
-- For databases: query with filter, iterate results, extract page content via blocks API
-- For standalone pages: retrieve page, check `last_edited_time`, extract content if modified
-- Content extraction: recursively fetch page blocks, convert to plain text (paragraph, heading, bulleted_list_item, numbered_list_item, toggle, callout, quote, code, table blocks)
-- New SourceTypes: `NOTION_PAGE_EDIT`, `NOTION_DATABASE_ITEM`
-- Attribution: `(per Notion "Page Title")`
+**Schema design:**
+```sql
+CREATE TABLE entities (
+    id TEXT PRIMARY KEY,           -- UUID
+    canonical_name TEXT NOT NULL,  -- "Affirm", "Colin Roberts"
+    entity_type TEXT NOT NULL,     -- "partner", "person", "initiative"
+    aliases TEXT DEFAULT '[]',     -- JSON array: ["Affirm Inc", "Affirm Holdings"]
+    metadata TEXT DEFAULT '{}',    -- JSON: {"hubspot_id": "...", "domain": "affirm.com"}
+    created_at TEXT NOT NULL,      -- ISO timestamp
+    updated_at TEXT NOT NULL,      -- ISO timestamp
+    merged_into TEXT,              -- NULL or entity_id if this was merged
+    FOREIGN KEY (merged_into) REFERENCES entities(id)
+);
 
-**Key API details (verified):**
-- Database query filter: `{"filter": {"timestamp": "last_edited_time", "last_edited_time": {"on_or_after": "2026-04-04T00:00:00-04:00"}}}`
-- Pagination: max 100 items per request, use `start_cursor` for next page
-- Block children: `GET /v1/blocks/{block_id}/children` -- paginated, recursive for nested blocks
-- Rich text: each block has `rich_text` array, concatenate `plain_text` fields
-- SDK: `notion-sdk-py` (ramnes/notion-sdk-py) -- sync and async clients available
-- Auth: integration token via `NOTION_API_KEY` env var
+CREATE TABLE entity_mentions (
+    id TEXT PRIMARY KEY,           -- UUID
+    entity_id TEXT NOT NULL,       -- FK to entities
+    synthesis_date TEXT NOT NULL,  -- Date of the synthesis (YYYY-MM-DD)
+    item_type TEXT NOT NULL,       -- "substance", "decision", "commitment"
+    item_content TEXT NOT NULL,    -- The synthesis item text
+    source_context TEXT,           -- Attribution text from synthesis
+    confidence REAL DEFAULT 1.0,  -- 0.0-1.0 extraction confidence
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (entity_id) REFERENCES entities(id)
+);
 
-**Follows existing pattern from:** `src/ingest/google_docs.py` -- curated list of sources, date-based filtering, content extraction with max_chars truncation, conversion to SourceItem
+CREATE TABLE merge_proposals (
+    id TEXT PRIMARY KEY,
+    source_entity_id TEXT NOT NULL,
+    target_entity_id TEXT NOT NULL,
+    similarity_score REAL NOT NULL,
+    reason TEXT,                   -- "name_similarity", "email_match", "llm_proposed"
+    status TEXT DEFAULT 'pending', -- "pending", "accepted", "rejected"
+    created_at TEXT NOT NULL,
+    resolved_at TEXT,
+    FOREIGN KEY (source_entity_id) REFERENCES entities(id),
+    FOREIGN KEY (target_entity_id) REFERENCES entities(id)
+);
 
-**Confidence:** HIGH -- API endpoints verified via official Notion docs.
-
-### Structured Output Migration
-
-**What it does:** Replace markdown-response-then-regex-parse pattern with Claude structured outputs (json_schema). Define Pydantic response models, use `client.messages.parse()` or `output_config.format`.
-
-**Where it applies (3 call sites):**
-1. **`extractor.py` -- `extract_meeting()`**: Per-meeting extraction. Currently returns markdown parsed by `_parse_extraction_response()` with `_parse_section_items()` and `_parse_legacy_blocks()` (~130 lines of regex/string parsing). Handles two response formats plus a legacy fallback.
-2. **`synthesizer.py` -- `synthesize_daily()`**: Daily synthesis. Currently returns markdown parsed by `_parse_synthesis_response()` (~80 lines of section-splitting and bullet/table-row parsing).
-3. **`commitments.py` -- `extract_commitments()`**: Commitment extraction from synthesis text.
-
-**Migration pattern per call site:**
-1. Define Pydantic response model (e.g., `MeetingExtractionResponse` with `decisions: list[ExtractionItem]`, etc.)
-2. Use `client.messages.parse(output_format=MeetingExtractionResponse, ...)` -- SDK transforms Pydantic schema, validates response, returns `response.parsed_output` as typed model
-3. Remove all `_parse_*` functions and regex logic
-
-**Key technical details (verified from Anthropic docs):**
-- GA on Claude Sonnet 4.5, Opus 4.5, Sonnet 4.6, Opus 4.6, Haiku 4.5
-- API parameter: `output_config={"format": {"type": "json_schema", "schema": {...}}}`
-- SDK helper: `client.messages.parse()` auto-transforms Pydantic models
-- Response in `response.content[0].text` as valid JSON (or `response.parsed_output` with `.parse()`)
-- Pydantic field constraints (e.g., `minimum`) are converted to descriptions; SDK validates post-response
-- Already available in `anthropic>=0.45.0` (project dependency)
-
-**Confidence:** HIGH -- verified against official Anthropic structured outputs docs (GA, not beta).
-
-### Asyncio Pipeline Parallelization
-
-**What it does:** Run independent ingest modules concurrently using `asyncio.gather()`.
-
-**Current state:** `run_pipeline()` in pipeline.py calls `_ingest_slack()`, `_ingest_hubspot()`, `_ingest_docs()`, `_ingest_calendar()` sequentially at lines 207-210. Each makes network calls. Total ingest time = sum of all source times.
-
-**Target state:**
-```python
-async def run_pipeline_async(ctx):
-    # Independent sources run in parallel
-    results = await asyncio.gather(
-        _ingest_slack_async(ctx),
-        _ingest_hubspot_async(ctx),
-        _ingest_docs_async(ctx),
-        _ingest_notion_async(ctx),
-        _ingest_calendar_async(ctx),
-        return_exceptions=True,
-    )
-    # Unpack results, handle any exceptions
+CREATE INDEX idx_mentions_entity ON entity_mentions(entity_id);
+CREATE INDEX idx_mentions_date ON entity_mentions(synthesis_date);
+CREATE INDEX idx_entities_type ON entities(entity_type);
+CREATE INDEX idx_entities_name ON entities(canonical_name);
+CREATE INDEX idx_merge_status ON merge_proposals(status);
 ```
 
-**Library async support:**
-- `httpx` (dependency): async via `httpx.AsyncClient` -- native
-- `slack-sdk`: `slack_sdk.web.async_client.AsyncWebClient` available
-- `google-api-python-client`: sync only. Wrap in `asyncio.to_thread()` -- pragmatic, avoids risky library swap
-- `anthropic`: `AsyncAnthropic` for parallel Claude calls -- native
-- `notion-sdk-py`: async client built in -- native
-- `hubspot-api-client`: sync only. Wrap in `asyncio.to_thread()`
+**Pydantic models:**
+```python
+class EntityType(StrEnum):
+    PARTNER = "partner"
+    PERSON = "person"
+    INITIATIVE = "initiative"
 
-**Error isolation:** `return_exceptions=True` in `asyncio.gather()` so one source failure does not cancel others. Matches current pattern where each `_ingest_*` function catches its own errors.
+class Entity(BaseModel):
+    id: str
+    canonical_name: str
+    entity_type: EntityType
+    aliases: list[str] = Field(default_factory=list)
+    metadata: dict = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+    merged_into: str | None = None
 
-**Confidence:** HIGH -- asyncio.gather() is well-established, key libraries support async or can be thread-wrapped.
+class EntityMention(BaseModel):
+    id: str
+    entity_id: str
+    synthesis_date: date
+    item_type: str  # "substance", "decision", "commitment"
+    item_content: str
+    source_context: str | None = None
+    confidence: float = 1.0
+    created_at: datetime
+```
 
-### Algorithmic Cross-Source Dedup
+**Why SQLite:** First structured storage in the project. SQLite is zero-config, file-based (matches existing flat-file patterns), supports concurrent reads, and handles the scale (thousands of entities, tens of thousands of mentions) easily. No server process needed.
 
-**What it does:** Pre-filter obvious duplicates before the synthesis LLM call, reducing token usage and improving dedup determinism.
+**Why not a heavier DB:** The system is a personal tool running locally. SQLite handles the volume. PostgreSQL or similar would add deployment complexity for zero benefit.
+
+**Confidence:** HIGH -- SQLite is well-suited, schema is straightforward, Pydantic models follow existing project patterns.
+
+### Backfill Entity Discovery
+
+**What it does:** Scans existing daily synthesis markdown files, extracts entity mentions via LLM, populates the entity registry.
 
 **Approach:**
-1. After all sources are ingested, collect all SourceItems
-2. Compute TF-IDF vectors on `title + " " + content` fields using sklearn `TfidfVectorizer`
-3. Compute pairwise cosine similarity within same-day items
-4. Flag pairs above threshold (0.80-0.85) as potential duplicates
-5. For flagged pairs: keep item from higher-priority source, annotate with cross-references
-6. Pass deduplicated items to synthesis, with annotations so LLM knows about merged sources
+1. Glob `output/daily/YYYY-MM-DD.md` files (or structured JSON sidecars if available)
+2. Batch files into groups of 5-10 (to manage LLM context window and cost)
+3. For each batch, send synthesis text to Claude with structured output schema requesting entity extraction
+4. LLM returns: `[{name: "Affirm", type: "partner", mentions: [{item: "...", item_type: "decision"}]}, ...]`
+5. Deduplicate extracted entities against existing registry (string similarity check)
+6. Insert new entities, create entity_mentions records, flag potential merges
 
-**Why TF-IDF over embeddings:** At 50-100 items/day, TF-IDF is instantaneous (<100ms), requires no GPU/model download, and catches lexical duplicates well. LLM dedup (already in synthesis prompt) catches semantic duplicates. Two layers is the right architecture.
-
-**What it does NOT replace:** The synthesis prompt's cross-source dedup instructions. Algorithmic dedup is a pre-filter. The LLM still handles nuanced semantic merging ("Q3 timeline slipped" in meeting vs "we're pushing to Q3" in Slack).
-
-**New dependency:** `scikit-learn` (for `TfidfVectorizer` and `cosine_similarity`). Lightweight, well-maintained, no GPU requirement.
-
-**Confidence:** MEDIUM -- approach is sound, but threshold tuning requires experimentation with real data. May need adjustment after observing false positives/negatives.
-
-### Typed Config Model
-
-**What it does:** Replace `dict` config with validated Pydantic models. Fail on startup if config is invalid.
-
-**Current state:** `load_config()` in config.py returns raw `dict` (line 9-41). Every module does `config.get("slack", {}).get("enabled", False)` with scattered defaults. Typos are silent. Missing sections cause runtime KeyError deep in the pipeline.
-
-**Target state:**
+**Structured output model for extraction:**
 ```python
-class SlackConfig(BaseModel):
-    enabled: bool = False
-    channels: list[str] = Field(default_factory=list)
-    dms: list[str] = Field(default_factory=list)
-    thread_min_replies: int = 3
-    thread_min_participants: int = 2
-    max_messages_per_channel: int = 100
-    bot_allowlist: list[str] = Field(default_factory=list)
-    # ... etc
+class ExtractedEntity(BaseModel):
+    name: str
+    entity_type: str  # "partner" or "person"
+    mentions: list[str]  # synthesis item texts where entity appears
 
-class PipelineConfig(BaseModel):
-    pipeline: PipelineSettings
-    calendars: CalendarSettings
-    transcripts: TranscriptSettings
-    synthesis: SynthesisSettings
-    slack: SlackConfig = SlackConfig()
-    google_docs: GoogleDocsConfig = GoogleDocsConfig()
-    hubspot: HubSpotConfig = HubSpotConfig()
-    notion: NotionConfig = NotionConfig()
+class EntityExtractionOutput(BaseModel):
+    reasoning: str = ""
+    entities: list[ExtractedEntity]
 ```
 
-**Migration path:** Define models matching current config.yaml structure. Update `load_config()` to return `PipelineConfig` via `PipelineConfig.model_validate(yaml_data)`. Update all call sites from `config.get("slack", {})` to `config.slack`. This touches many files but is mechanical -- each module gains typed access.
+**Scale estimate:** ~180 daily files (6 months). At 5 per batch = 36 LLM calls. At ~3s each = ~2 minutes total. Cost: ~$2-5 with Sonnet.
 
-**Environment variable overrides:** Keep existing pattern (lines 32-39 of config.py) by applying overrides to the dict before Pydantic validation, or use pydantic-settings for env var integration.
+**Confidence:** HIGH -- LLM entity extraction from structured text is a solved problem. The synthesis output is already well-structured (sections, bullet points), making extraction reliable.
 
-**Confidence:** HIGH -- Pydantic v2 already a dependency, pattern is well-documented and widely used.
+### Entity Attribution in Synthesis
 
-### Slack User Batch Resolution
+**What it does:** Extends existing synthesis pipeline so each output item is tagged with entity references.
 
-**What it does:** Replace per-user `users.info` API calls with a single `users.list` call.
+**Model changes:**
+```python
+# Extend existing SynthesisItem
+class SynthesisItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    content: str
+    entity_refs: list[str] = Field(default_factory=list)  # Canonical entity names
 
-**Current state:** `resolve_user_names()` in slack.py (lines 54-90) iterates user_ids, calling `client.users_info(user=uid)` for each. Module-level `_user_cache` prevents repeat calls within a run, but first run still makes N calls (10-20 for a typical day).
+# Extend existing CommitmentRow
+class CommitmentRow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    who: str
+    what: str
+    by_when: str
+    source: str
+    entity_refs: list[str] = Field(default_factory=list)
+```
 
-**Target state:** At start of Slack ingestion, call `client.users_list()` once, build complete `user_id -> display_name` map, cache for session. For large workspaces, paginate (200 users per page).
+**Prompt engineering:** The synthesis prompt receives a list of known entity canonical names from the registry. Claude is instructed to tag each synthesis item with the entity names that appear or are referenced. The structured output schema enforces the `entity_refs` field.
 
-**Confidence:** HIGH -- standard Slack API pattern, trivial change.
+**Why not post-hoc tagging:** Tagging during synthesis is more accurate because Claude has full context of the source material. Post-hoc tagging from the synthesis text alone loses source context.
 
-### Cache Retention Policy
+**Confidence:** HIGH -- extends the existing structured output pattern. Adding a list field to Pydantic models is trivial. Prompt update is the main work.
 
-**What it does:** Auto-delete raw cached data (API responses, raw emails) older than a configurable TTL.
+### Ongoing Entity Discovery
 
-**Current state:** `cache_raw_response()` and `cache_raw_emails()` write to `output/raw/` with date-stamped filenames. No cleanup.
+**What it does:** After each daily synthesis, checks for entities mentioned in the output that are not yet in the registry.
 
-**Target config:** `pipeline.cache_retention_days: 30` (default). On pipeline start, scan `output/raw/`, delete directories/files older than TTL.
+**Approach:**
+1. After synthesis completes, collect all `entity_refs` from the output
+2. For each ref, check registry: exact match or alias match?
+3. For unmatched refs, check near-matches (Jaro-Winkler > 0.85)
+4. If near-match found: create merge proposal (do not auto-merge)
+5. If no match: create new entity record with type inferred from context
 
-**Confidence:** HIGH -- pure file system operation, no API or library concerns.
+**Type inference heuristic:**
+- Name appears in `CommitmentRow.who` -> likely "person"
+- Name appears with org-related context ("deal with X", "X's contract") -> likely "partner"
+- LLM can classify when heuristics are ambiguous
+
+**Confidence:** HIGH -- straightforward extension of backfill logic, running on a single day instead of batch.
+
+### Entity Merge Proposals
+
+**What it does:** Detects likely-duplicate entities and presents them for user resolution via CLI.
+
+**Detection methods (ranked by confidence):**
+1. **Email domain match:** colin@affirm.com -> link person "Colin" to partner "Affirm" (HIGH confidence)
+2. **Substring match:** "Colin R." contains "Colin" (MEDIUM confidence, needs confirmation)
+3. **Jaro-Winkler similarity > 0.85:** "Colin Roberts" vs "Colin Robers" (MEDIUM confidence)
+4. **LLM verification for ambiguous cases:** Send candidate pairs to Claude: "Are these the same entity?" (LOW-MEDIUM confidence, used as tiebreaker)
+
+**CLI interface:**
+```
+$ python -m src.main entity merge list
+Pending merge proposals:
+  [1] "Colin" + "Colin R." (score: 0.87, reason: name_similarity) -> MERGE / SKIP / REJECT
+  [2] "Affirm" + "Affirm Inc" (score: 0.91, reason: name_similarity) -> MERGE / SKIP / REJECT
+
+$ python -m src.main entity merge accept 1
+Merged "Colin" into "Colin R." -> canonical: "Colin R."
+Updated 14 historical mentions.
+
+$ python -m src.main entity merge reject 2
+Rejected. "Affirm" and "Affirm Inc" will remain separate.
+```
+
+**Merge mechanics:** When merging A into B:
+1. Update A.merged_into = B.id
+2. Move all entity_mentions from A to B
+3. Add A's canonical_name to B's aliases
+4. A remains in DB (soft delete via merged_into) for audit trail
+
+**Confidence:** HIGH -- merge/dedup patterns are well-established. The user-confirmation model avoids the catastrophic false-merge anti-pattern.
+
+### Scoped Entity Views (CLI)
+
+**What it does:** Query command that shows all intelligence related to a specific entity over a time range.
+
+**CLI interface:**
+```
+$ python -m src.main entity view "Affirm"
+$ python -m src.main entity view "Affirm" --since 2026-03-01 --until 2026-04-05
+$ python -m src.main entity view "Colin" --type commitments
+```
+
+**Output format (printed to terminal):**
+```markdown
+# Entity Report: Affirm (partner)
+Aliases: Affirm Inc, Affirm Holdings
+Period: 2026-03-01 to 2026-04-05
+Activity: 23 mentions across 12 days
+
+## Recent Substance
+- [2026-04-03] Contract terms for Q3 renewal discussed in detail (per weekly sync)
+- [2026-04-01] Affirm requesting expanded API scope for payment processing (per Slack #partnerships)
+
+## Decisions
+- [2026-03-28] Affirm MSA renewal approved at existing terms (per exec sync)
+
+## Open Commitments
+- Colin to send revised pricing sheet by 2026-04-10 (per weekly sync, 2026-04-03)
+```
+
+**Query implementation:** SQL query on entity_mentions joining entities, filtered by entity_id (resolved via name/alias lookup), date range, and optionally item_type. Group by date, format as markdown.
+
+**Confidence:** HIGH -- standard SQL query + markdown formatting. Follows existing output patterns.
+
+### Initiative Tracking
+
+**What it does:** Third entity type representing cross-cutting work themes (e.g., "Q2 Launch", "MSA Renegotiation").
+
+**Schema extension:**
+```python
+class Initiative(Entity):
+    """Extends base entity with initiative-specific fields."""
+    status: str = "active"  # "active", "completed", "paused", "cancelled"
+    start_date: date | None = None
+    target_date: date | None = None
+    linked_entities: list[str] = Field(default_factory=list)  # partner/people entity IDs
+```
+
+**Why defer until people/partners stable:** Initiatives reference people ("who owns it") and partners ("who is it about"). If the people/partner entity layer is still churning (frequent merges, schema changes), initiatives built on top will be fragile.
+
+**Discovery:** Initiatives are harder to auto-discover than people/partners because they are conceptual, not named entities. Likely approach: user creates initiatives manually (`entity add --type initiative "Q2 Launch"`), and the system tags mentions during synthesis. LLM-assisted discovery can suggest initiatives ("these 5 mentions seem related to a common theme").
+
+**Confidence:** MEDIUM -- the concept is clear but discovery heuristics need experimentation. Manual creation with LLM-assisted tagging is the pragmatic path.
+
+## Competitor/Reference Analysis
+
+| Capability | Capacities (PKM) | Notion Databases | HubSpot CRM | Our Approach |
+|-----------|-------------------|------------------|-------------|--------------|
+| Entity types | Flexible object types | Freeform databases | Contacts, companies, deals | Three types: partner, person, initiative. Intentionally constrained. |
+| Entity discovery | Manual creation only | Manual creation only | Manual + form capture | Semi-automated: LLM extracts from synthesis, user confirms |
+| Merge/dedup | No built-in | Manual | Built-in merge tool | Proposal-based with user confirmation |
+| Attribution | Manual tagging/linking | Manual relations | Automatic via CRM activity | Automatic via LLM during synthesis |
+| Scoped views | Object-centric pages | Database views + filters | Contact/company timeline | CLI query + markdown reports |
+| Initiative tracking | No special support | Possible via databases | Deals as proxy | First-class entity type with lifecycle |
+
+**Key insight:** CRM tools (HubSpot) have sophisticated entity resolution but operate on explicitly entered data. PKM tools (Capacities, Notion) have flexible schemas but no automated discovery. This system's differentiator is **automated entity discovery from passive data ingestion** -- entities emerge from daily work without manual entry.
 
 ## Sources
 
-- [Notion API Database Query Filter](https://developers.notion.com/reference/post-database-query-filter) -- HIGH confidence, official docs
-- [Notion API Timestamp Filter Changelog](https://developers.notion.com/changelog/filter-databases-by-timestamp-even-if-they-dont-have-a-timestamp-property) -- HIGH confidence, official changelog
-- [notion-sdk-py (GitHub)](https://github.com/ramnes/notion-sdk-py) -- HIGH confidence, primary Python SDK
-- [Anthropic Structured Outputs Docs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) -- HIGH confidence, official GA docs
-- [Pydantic Settings Management](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) -- HIGH confidence, official docs
-- [asyncio.gather() Best Practices](https://blog.poespas.me/posts/2024/05/24/python-asyncio-gather-examples/) -- MEDIUM confidence, community source verified against Python docs
-- [TF-IDF + Cosine Similarity for Text Matching](https://bergvca.github.io/2017/10/14/super-fast-string-matching.html) -- MEDIUM confidence, well-established technique
+- [Entity Resolution at Scale (Medium, Jan 2026)](https://medium.com/@shereshevsky/entity-resolution-at-scale-deduplication-strategies-for-knowledge-graph-construction-7499a60a97c3) -- MEDIUM confidence, community source but aligns with established patterns
+- [Structured Entity Extraction Using LLMs (Simon Willison, Feb 2025)](https://simonwillison.net/2025/Feb/28/llm-schemas/) -- HIGH confidence, demonstrates Pydantic + LLM structured extraction
+- [Building with LLMs: Structured Extraction (PyCon 2025)](https://building-with-llms-pycon-2025.readthedocs.io/en/latest/structured-data-extraction.html) -- HIGH confidence, verified patterns for entity extraction with structured outputs
+- [NER with LLMs for Conversation Metadata (Medium)](https://medium.com/@grisanti.isidoro/named-entity-recognition-with-llms-extract-conversation-metadata-94d5536178f2) -- MEDIUM confidence, demonstrates LLM NER from conversational text
+- [Jaro-Winkler Distance (Wikipedia)](https://en.wikipedia.org/wiki/Jaro%E2%80%93Winkler_distance) -- HIGH confidence, well-established string similarity metric
+- [SQLite Documentation](https://sqlite.org/docs.html) -- HIGH confidence, official docs
+- Existing codebase analysis: `src/synthesis/models.py`, `src/models/sources.py`, `src/dedup.py`, `src/config.py` -- HIGH confidence, direct code inspection
 
 ---
-*Feature research for: Work Intelligence Pipeline v1.5.1 -- Notion + Performance + Reliability*
-*Researched: 2026-04-04*
+*Feature research for: Work Intelligence Pipeline v2.0 -- Entity Layer*
+*Researched: 2026-04-05*

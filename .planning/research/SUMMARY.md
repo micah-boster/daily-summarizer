@@ -1,194 +1,243 @@
 # Project Research Summary
 
-**Project:** Work Intelligence Pipeline v1.5.1
-**Domain:** Python data pipeline — Notion ingestion, asyncio parallelization, structured outputs, config validation, algorithmic dedup
-**Researched:** 2026-04-04
+**Project:** Work Intelligence System — Entity Layer (v2.0)
+**Domain:** Entity registry, discovery, resolution, attribution, and scoped views for an existing personal work intelligence pipeline
+**Researched:** 2026-04-05
 **Confidence:** HIGH
 
 ## Executive Summary
 
-The v1.5.1 milestone is a well-scoped enhancement to an existing, working daily intelligence pipeline. The research task was not "how to build something new" but "how to extend something known" — the codebase is thoroughly understood, all target libraries are verified against installed versions, and all API docs are confirmed. The recommended approach follows three principles: (1) foundation before features (Pydantic config model first, since every subsequent feature adds config), (2) sequential correctness before parallel complexity (structured outputs in sync mode before asyncio), and (3) new source before performance work (Notion ingestor built synchronously, then wrapped in parallel execution).
+The v2.0 entity layer is an additive enhancement to an existing, working Python pipeline. The system already ingests 6+ sources (calendar, Gmail, Slack, HubSpot, Notion, transcripts), deduplicates, synthesizes via Claude structured outputs, and writes daily/weekly/monthly markdown reports. The goal is to make named entities — partners, people, and initiatives — first-class citizens so a user can ask "what's happening with Affirm?" and get a coherent, time-filtered view of all related intelligence. The recommended approach treats entity processing as a strict post-synthesis stage: the existing pipeline runs unchanged, and entity operations layer on top via optional fields and a dedicated SQLite registry.
 
-The core technical choices are clear and validated. Four new dependencies are required: `notion-client` (official Notion SDK with native async), `rapidfuzz` (algorithmic dedup, C-extension speed), `aiohttp` (required by slack_sdk's AsyncWebClient), and `aiofiles` (async file I/O in cache layer). The asyncio parallelization strategy uses `asyncio.to_thread()` to wrap synchronous SDK clients (Google, HubSpot) rather than rewriting them, while leveraging native async for Notion and Claude (AsyncAnthropic). Structured outputs are GA on the current claude-sonnet model and will replace approximately 234 lines of brittle regex parsing across extractor.py and synthesizer.py.
+The stack requires only one new dependency: `aiosqlite` for async SQLite access. Everything else — Claude for entity extraction, rapidfuzz for fuzzy matching, Pydantic for models, argparse for CLI, Jinja2 for reports — is already in the project. The architecture adds a single new package (`src/entities/`) with clean boundaries: it reads synthesis output, writes to SQLite, and surfaces results via CLI commands. Critically, the existing `async_pipeline()` wraps the entity stage in graceful degradation — if entity processing fails for any reason, the daily summary still generates.
 
-The biggest risks are the two cross-cutting changes: asyncio refactor (which can silently deliver zero parallelism if sync SDKs are not wrapped in `to_thread()`) and structured output migration (which can silently break downstream consumers if the output schema shape diverges from what parsers currently produce). Both risks are mitigated by strict phase ordering: structured outputs first with the sequential pipeline, asyncio last after all other features are stable. The Pydantic config migration carries the highest startup-failure risk but is low-complexity to execute if every field is Optional with sensible defaults and the model is tested against the actual production config.yaml.
+The most important risk is false entity merges, which corrupt downstream attribution and erode trust in the entire system. Research is unambiguous: false merges are catastrophic, false misses are merely annoying. The correct default is zero auto-merging on fuzzy signals. Only deterministic signals (matching email, Slack user ID, HubSpot contact ID) should trigger automatic merges. All fuzzy matches become proposals requiring user confirmation. The second major risk is pipeline contamination — entity logic must never block the daily summary. Both risks have straightforward mitigations, and the architecture is designed around them from the start.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The existing stack requires only four additions for v1.5.1. All other features (structured outputs, config validation, cache management, Slack batch resolution, async per-meeting extraction) use already-installed packages. The `anthropic>=0.82.0` minimum pin should be bumped to ensure GA `output_config` support, though the installed 0.88.0 already satisfies this.
+The entity layer needs exactly one new package. `aiosqlite` (v0.22.0+) provides async SQLite access compatible with the existing asyncio pipeline. SQLite itself (v3.51.0 on system) handles the scale comfortably: hundreds of entities, tens of thousands of mentions, database size under 20MB even at 3 years of data. No ORM, no server, no migration framework — hand-written SQL with a `schema_version` table via `PRAGMA user_version`.
+
+Entity extraction reuses the existing Claude structured output infrastructure by extending `DailySynthesisOutput` with `entity_names` fields on `SynthesisItem` and `CommitmentRow`. This is a near-zero-cost addition to an existing API call, not a new one. Entity merge uses rapidfuzz (already in deps from v1.5.1) with a two-tier threshold: 0.95+ auto-merges on deterministic signals, 0.85–0.95 proposes for confirmation, below 0.85 stays separate. Scoped views use existing argparse subcommands and Jinja2 templates.
 
 **Core technologies:**
-- `notion-client>=3.0.0` (NEW): Official Notion SDK, both sync `Client` and async `AsyncClient` built on httpx — already in the dependency tree. No conflicts. Rate limit is 3 req/s, most restrictive of all services.
-- `rapidfuzz>=3.12.0` (NEW): Algorithmic dedup via `fuzz.token_set_ratio` and `process.cdist`. C-extension, ~100x faster than difflib. Strict superset of the deprecated thefuzz library.
-- `aiohttp>=3.11.0` (NEW): Required transport for `slack_sdk.AsyncWebClient`. Not installed by default with slack_sdk — will raise `ImportError` if omitted.
-- `aiofiles>=25.1.0` (NEW): Async file I/O to avoid blocking the event loop during cache reads/writes in async ingest paths.
-- `asyncio` (stdlib): `asyncio.gather()` with `return_exceptions=True` for ingest parallelization; `asyncio.to_thread()` for sync SDK wrappers.
-- `anthropic` (existing, bumped to >=0.82.0): `AsyncAnthropic` for parallel per-meeting extraction; `output_config` parameter for structured outputs.
-- `pydantic>=2.12.5` (existing): Config model validation, JSON schema generation for Claude structured outputs.
-
-**What NOT to add:** instructor (native SDK handles structured outputs), celery (asyncio.gather suffices), scikit-learn (rapidfuzz covers the dedup use case at this scale), langchain (direct SDK is simpler), tenacity (built-in retry handles most cases).
+- `sqlite3` + `aiosqlite 0.22.x`: Entity registry storage — zero new dependencies beyond aiosqlite; WAL mode for concurrent pipeline reads
+- `anthropic` (existing): Entity extraction via extended structured output schema — no second LLM call, piggybacks on synthesis
+- `rapidfuzz` (existing): Fuzzy name matching for merge proposals — already a project dependency from v1.5.1
+- `pydantic` (existing): Entity and mention models, config section — consistent with all existing project patterns
+- `argparse` (existing): New `entity` CLI subcommand — consistent with existing daily/weekly/monthly/discover subcommands
+- `jinja2` (existing): Scoped markdown report generation — same output pattern as daily reports
 
 ### Expected Features
 
-See `.planning/research/FEATURES.md` for full specifications.
+See `.planning/research/FEATURES.md` for full specifications with schema, Pydantic models, and CLI interface examples.
 
 **Must have (table stakes):**
-- Notion page/database ingestion — last major daily-use tool not yet ingested; PROJECT.md identifies this as the primary gap
-- Typed config model (Pydantic validation) — current raw-dict config silently accepts typos; failures are runtime KeyErrors deep in the pipeline
-- Structured output migration — PROJECT.md explicitly notes this as "overdue"; eliminates two fragile parsers covering 234 lines of regex
-- Cache retention policy — output/ directory grows unbounded; no cleanup mechanism exists
+- Entity registry (SQLite) for partners and people — without persistent storage, nothing else works
+- Backfill entity discovery from existing daily summaries — 6+ months of summaries exist; without backfill the registry starts empty and is useless
+- Ongoing entity discovery on new pipeline runs — entity layer must stay current without manual intervention
+- Entity attribution in synthesis output — synthesis items must carry entity references for scoped filtering
+- Entity merge proposals with CLI confirmation — name fragmentation across sources ("Colin" / "Colin R." / "colin@partner.com") is the norm, not the exception
+- Scoped entity CLI views (`entity show "Affirm"`) — this is the core value proposition
 
 **Should have (differentiators):**
-- Parallel ingest via asyncio — cuts wall-clock ingest time from ~30-45s (sequential) to ~10-15s (parallel), bottlenecked by slowest source
-- Parallel per-meeting extraction — single largest performance win: 8 meetings at 3-5s each drops from 24-40s to ~5s with AsyncAnthropic
-- Slack user batch resolution — replaces 10-20 serial `users.info` calls with one paginated `users.list` call
-- Algorithmic cross-source dedup — deterministic pre-filter using content fingerprints + time-bucket matching reduces tokens sent to LLM synthesis
+- Scoped markdown reports per entity — persistent, shareable artifact vs. ephemeral CLI output
+- Initiative tracking as a third entity type — cross-cutting themes that span partners and people; deferred until people/partners are stable
+- Confidence scoring on entity mentions — allows filtering by attribution quality
+- Alias management (explicit user-defined aliases) — power-user feature for known abbreviations
+- Temporal entity activity summaries in weekly/monthly roll-ups
 
-**Defer (v2+):**
-- Real-time Notion webhook ingestion — Notion's automation API does not expose external webhooks reliably; batch polling on `last_edited_time` is sufficient
-- Full Notion workspace crawl — workspaces contain thousands of stale pages; curated database IDs + recency filter is the correct scope
-- Embedding-based dedup — sentence-transformers adds hundreds of MB for marginal improvement over rapidfuzz at ~50-100 items/day
-- Full async rewrite of all ingest modules — calendar/transcript pipeline has inherent sequential dependencies; targeted async is the 80/20 approach
-- Config hot-reload — file-watching complexity for a CLI tool that runs once per day
+**Defer to v2.x:**
+- HubSpot entity cross-reference — enrichment once the entity registry naming conventions are stable
+- Embedding-based entity resolution — string similarity + LLM is sufficient at this scale
+- Full NER model (spaCy/BERT) — Claude structured outputs already perform LLM-quality NER; a separate model adds cost and inconsistency
+- Real-time entity notifications — contradicts the batch pipeline architecture
+- Entity-level sentiment tracking — violates the project's "evidence only, never evaluative" constraint
 
 ### Architecture Approach
 
-The architecture follows a straightforward enhancement pattern: the pipeline runner becomes the async orchestration layer while individual ingest modules remain synchronous and are wrapped in `asyncio.to_thread()`. Only two components use native async: `ingest/notion.py` (uses `AsyncClient`) and `synthesis/extractor.py` (uses `AsyncAnthropic` for parallel Claude calls). The existing three-layer structure (ingest → synthesis → output) is preserved with one new layer inserted between ingest and synthesis: algorithmic dedup via `dedup/fingerprint.py`. The config layer moves from `load_config() -> dict` to `load_config() -> PipelineConfig` with full Pydantic validation at startup. The public API of `run_pipeline()` stays synchronous; asyncio is an internal implementation detail bridged via `asyncio.run(_run_pipeline_async(ctx))`.
+The entity layer follows a strict additive integration pattern. The existing pipeline flow (ingest → normalize → dedup → synthesize → write) is untouched. A new Phase 2.5 inserts after synthesis: `entity_discover()` extracts entity names from structured synthesis output, matches against the SQLite registry, persists mentions, and generates merge proposals. A new `src/entities/` package provides clean component boundaries with no circular imports into existing modules. SQLite is the only new storage class — connection is opened at pipeline start, passed through `PipelineContext`, closed at pipeline end.
 
 **Major components:**
-1. `models/config.py` (NEW) — Pydantic BaseModel hierarchy matching config.yaml structure; replaces all `.get()` chains with typed attribute access across every ingest module
-2. `ingest/notion.py` (NEW) — Follows established SourceItem pattern (mirrors google_docs.py); queries database IDs from config, filters by `last_edited_time`, fetches top-level block children only
-3. `models/outputs.py` (NEW) — Pydantic schemas for Claude structured responses: `MeetingExtractionOutput`, `DailySynthesisOutput`; replaces ~234 lines of markdown parsing in extractor.py and synthesizer.py
-4. `dedup/fingerprint.py` (NEW) — Content fingerprint + time-bucket matching; runs after all ingest, before synthesis; replaces and generalizes the existing `_dedup_hubspot_items()` in synthesizer.py
-5. `pipeline.py` (MODIFIED) — Converts `_run_pipeline_async()` private function using `asyncio.gather(return_exceptions=True)` over `asyncio.to_thread()` wrappers for each ingest source
-6. `cache/manager.py` (NEW) — TTL-based cleanup of `output/raw/` files only; never touches `output/daily/` or `output/quality/`
+1. `src/entities/registry.py` — SQLite CRUD, alias resolution, merge/split operations; the single source of truth for entity state
+2. `src/entities/discoverer.py` — matches entity names from synthesis output against the registry; creates new entities and merge proposals
+3. `src/entities/attributor.py` — enriches sidecar JSON with entity references; writes entity_mentions to SQLite
+4. `src/entities/views.py` + `cli.py` — scoped query logic and CLI surface (`entity show`, `entity list`, `entity backfill`, `entity review`)
+5. `src/entities/db.py` — connection management, WAL mode, versioned schema migrations via `PRAGMA user_version`
 
 ### Critical Pitfalls
 
-See `.planning/research/PITFALLS.md` for full analysis with 15 documented pitfalls.
+See `.planning/research/PITFALLS.md` for full analysis with 12 documented pitfalls across critical, moderate, and minor severity levels.
 
-1. **Sync SDKs blocking the event loop** — wrapping sync ingest functions in `async def` without `asyncio.to_thread()` produces code that looks concurrent but runs sequentially and blocks all other coroutines. Use `asyncio.to_thread(_ingest_slack, ctx)` for every sync SDK. Detect with `PYTHONASYNCIODEBUG=1`.
+1. **False merges corrupt the system irreversibly** — Default to zero auto-merge on fuzzy signals. Only deterministic identifiers (email, Slack ID, HubSpot ID) trigger auto-merge. Implement split before shipping merge. Design merges as soft pointer links (`merge_target_id`) so splits are a pointer removal, not a data reconstruction.
 
-2. **Structured output migration breaking downstream consumers** — schemas that produce different shapes than the old markdown parsers cause silent data loss (items missing, commitments table empty). Migrate one call site at a time, regression-test output by running both code paths on a known date, keep old parsing behind a flag for one release cycle.
+2. **Entity logic must never block the daily summary** — Wrap the entire entity stage in `try/except` with graceful degradation. All entity fields on existing Pydantic models must be `Optional` with `None` defaults. Test the pipeline with the entity DB deleted, corrupt, and missing — it must still produce a valid daily summary.
 
-3. **Pydantic config model rejecting existing valid configs** — a strict model will fail on production configs that have grown organically. Use `extra="ignore"` initially, make every field Optional with defaults, and test the actual production config.yaml through the model before shipping.
+3. **LLM entity extraction is non-deterministic by nature** — Normalize all extracted names before registry insertion (lowercase, strip titles/suffixes, standardize format). Use structured output constraints with `source_evidence` fields to catch hallucinations. Validate extraction consistency on 20-30 real historical summaries before building the full backfill pipeline.
 
-4. **Parallel Claude calls hitting rate limits** — 8 concurrent extraction calls can exhaust RPM limits, causing thundering-herd retries that make parallelization slower than sequential. Use `asyncio.Semaphore(3)` on Claude calls; tune based on API tier limits observed in `x-ratelimit-remaining-requests` headers.
+4. **SQLite schema must be designed for evolution from day one** — Use `PRAGMA user_version` for migrations, numbered SQL migration files, soft deletes (`is_active`), `merge_target_id` nullable FK on all entity rows, and a separate `entity_aliases` table. The schema will change when initiatives are added; plan for it now.
 
-5. **Notion API version 2025-09-03 breaking changes** — the September 2025 API update introduced `data_source_id` for multi-source databases. Queries using `database_id` alone may fail silently. Pin `notion_version="2025-09-03"` in the client constructor and build an integration health check before the first real run.
+5. **Merge proposal fatigue will stall the workflow** — Present proposals ranked by confidence, cap at 5-10 per review session, batch similar proposals (all "Colin" variants as one decision), and provide a "reject and never ask again" option that persists to the DB.
 
 ## Implications for Roadmap
 
-Based on the combined research, the feature dependency graph and pitfall analysis both converge on the same phase order. The ordering is not preference — each phase creates the stable foundation the next requires.
+Based on combined research, the entity layer has a strict dependency chain that dictates phase order. Each phase produces a testable, independently valuable artifact before the next begins.
 
-### Phase 1: Typed Config Foundation
+### Phase 1: Entity Registry Foundation
 
-**Rationale:** Every subsequent feature adds new config fields (Notion needs `notion.databases`, cache retention needs `cache.retention_days`, async may need concurrency limits). Building the Pydantic model first means all new config sections are validated from day one rather than retroactively added. This is a pure refactor with no behavior change — correctness is verified by confirming pipeline output is identical before and after.
+**Rationale:** The SQLite registry is the absolute prerequisite for every other feature. No discovery, attribution, merge, or view can work without persistent entity storage. This phase has zero integration with the existing pipeline — it is a standalone new module, making it safe to build and validate independently.
 
-**Delivers:** `models/config.py` with full Pydantic hierarchy; `load_config()` returns `PipelineConfig`; all consumers migrated from `.get()` chains to typed access.
+**Delivers:** `src/entities/` package with Pydantic models, db connection management (WAL mode on), registry CRUD, and `EntityConfig` section in `src/config.py`. SQLite schema with all 5 tables (entities, entity_aliases, entity_mentions, merge_proposals, entity_relationships). Schema migrations via `PRAGMA user_version`. Soft delete and `merge_target_id` fields baked in from the start.
 
-**Addresses:** Table stakes — typed config model (FEATURES.md)
+**Addresses:** Entity registry (P1 table stakes from FEATURES.md)
 
-**Avoids:** Pitfall 5 (Pydantic rejects existing configs), Integration Pitfall 2 (Notion config vs. config model chicken-and-egg)
+**Avoids:** Schema-that-cannot-evolve (#4) by building migration infrastructure first; SQLite file locking (#12) by enabling WAL mode on creation; overengineering before validation (#11) by starting with a minimal entity model validated against 20 real summaries.
 
-### Phase 2: Structured Output Migration
+**Research flag:** Standard patterns — SQLite + Pydantic + versioned migrations is well-documented. No phase research needed.
 
-**Rationale:** Structured outputs are independent of all other v1.5.1 work — they touch only the Claude API call sites in extractor.py and synthesizer.py, not ingest modules or async infrastructure. Doing this in sequential mode makes correctness easy to verify: run on a known date, diff the output. Once stable, the async phase only needs to swap sync for async clients without simultaneously changing response shapes.
+---
 
-**Delivers:** `models/outputs.py` with `MeetingExtractionOutput` and `DailySynthesisOutput`; deletion of ~234 lines of regex parsing; per-meeting extraction and daily synthesis return typed Pydantic models instead of parsed markdown dicts.
+### Phase 2: Entity Discovery + Extraction
 
-**Addresses:** Table stakes — structured output migration (FEATURES.md)
+**Rationale:** Discovery populates the registry. Without data in the registry, attribution has nothing to tag against and views return nothing. This phase extends existing Pydantic models and the synthesis prompt — all changes are additive (optional fields with defaults) and do not affect existing pipeline behavior.
 
-**Avoids:** Pitfall 2 (downstream parsing mismatch), Pitfall 10 (schema rejects edge cases on empty days), Integration Pitfall 1 (async + structured outputs = double migration risk)
+**Delivers:** Extended `SynthesisItem` and `CommitmentRow` with `entity_names`/`related_entities` fields. Updated synthesis prompt requesting entity extraction. `src/entities/discoverer.py` that matches extracted names against the registry. Name normalization layer. Merge proposal generation logic.
 
-### Phase 3: Notion Ingestion
+**Addresses:** Ongoing entity discovery (P1), basic merge detection
 
-**Rationale:** A new ingest module is best built and debugged in synchronous code. It follows the established SourceItem pattern (mirrors google_docs.py) and can be wired into pipeline.py sequentially first, tested in isolation, then parallelized in Phase 5. Building Notion after config validation means the `NotionConfig` model is already in place.
+**Avoids:** LLM extraction brittleness (#3) via normalization layer and prompt engineering validated on 20+ real summaries before full rollout; pipeline contamination (#2) via optional fields only.
 
-**Delivers:** `ingest/notion.py`; `NOTION_PAGE` and `NOTION_DATABASE` source types; Notion databases/pages ingested as SourceItems filtered by `last_edited_time`; `NOTION_TOKEN` in .env.
+**Research flag:** Needs validation — entity extraction prompt engineering should be tested on real historical data before this phase is considered complete. The extraction schema and normalization rules will need iteration based on actual entity names in the corpus.
 
-**Addresses:** Table stakes — Notion ingestion (FEATURES.md)
+---
 
-**Avoids:** Pitfall 3 (Notion API version breaking changes), Pitfall 8 (block pagination drops content), Pitfall 11 (rate limit timeout on large workspaces)
+### Phase 3: Pipeline Attribution Integration
 
-### Phase 4: Reliability Quick Wins
+**Rationale:** This is where the entity layer joins the live pipeline. Discovery logic from Phase 2 runs as Phase 2.5 in `async_pipeline()`, persisting mentions to SQLite and enriching the sidecar JSON. Requires both registry (Phase 1) and discovery logic (Phase 2) to be stable.
 
-**Rationale:** Three low-risk, low-dependency improvements that deliver independent value before the riskiest phase. Slack batch user resolution and module global elimination are also prerequisites for async safety — module-level mutable caches must be removed before ingest functions run concurrently in threads.
+**Delivers:** `src/entities/attributor.py`. Modified `PipelineContext` with `entity_registry: EntityRegistry | None` field. New Phase 2.5 in `async_pipeline()` with try/except graceful degradation. Enriched `DailySidecar` with `entity_mentions` field. End-to-end: daily pipeline run produces entity-tagged sidecar JSON.
 
-**Delivers:** Slack `users.list()` batch resolution; `cache/manager.py` with TTL cleanup of `output/raw/` only (never processed output); `dedup/fingerprint.py` with content-fingerprint + time-bucket matching replacing `_dedup_hubspot_items()`.
+**Addresses:** Entity attribution in synthesis (P1), ongoing entity discovery fully wired into the live pipeline
 
-**Addresses:** Table stakes — cache retention; Differentiators — Slack batch resolution, algorithmic dedup (FEATURES.md)
+**Avoids:** Pipeline contamination (#2) — the entire entity stage wrapped in try/except; silent attribution degradation (#7) via confidence tracking and junction table storage.
 
-**Avoids:** Pitfall 6 (cache deletes roll-up data — only raw, TTL >= 35 days), Pitfall 7 (false positives on short text — require multiple matching signals, threshold >= 0.85), Pitfall 12 (Slack paginated user list), Integration Pitfall 3 (cache retention unaware of Notion raw data)
+**Research flag:** Standard patterns — async pipeline integration follows existing v1.5.1 patterns (Slack, HubSpot, Notion all use the same optional-stage pattern with graceful degradation).
 
-### Phase 5: Asyncio Parallelization
+---
 
-**Rationale:** The async refactor touches pipeline orchestration and changes execution semantics — it is the riskiest change and goes last so all other features are stable. At this point: config is typed, structured outputs are verified, Notion exists as a synchronous module, module globals are eliminated, dedup is in place. The async layer wraps all of this in `asyncio.to_thread()` without touching ingest module internals. Parallel per-meeting extraction with `AsyncAnthropic` is added in the same phase since the async infrastructure is already present.
+### Phase 4: Backfill + Merge Review CLI
 
-**Delivers:** `run_pipeline()` bridges to `_run_pipeline_async()`; all ingest sources run concurrently via `asyncio.gather(return_exceptions=True)` over `asyncio.to_thread()` wrappers; `extract_all_meetings_async()` with `AsyncAnthropic` and `asyncio.Semaphore(3)`; `aiohttp` installed for slack_sdk async; wall-clock reduction from ~45-80s to ~15-20s.
+**Rationale:** Backfill populates the registry with 6+ months of historical intelligence — without it, the entity layer has minimal data and scoped views are nearly empty on day one. Merge review is necessary before views become the primary workflow, so queries return consolidated entities rather than fragmented duplicates.
 
-**Addresses:** Differentiators — parallel ingest, parallel per-meeting extraction (FEATURES.md)
+**Delivers:** `src/entities/cli.py` with `backfill` and `review` commands. `entity backfill --from DATE --to DATE` processes historical sidecar JSONs in weekly batches. `entity review` presents merge proposals one at a time with full context (which sources, which synthesis items). `entity merge accept/reject` with persistent rejection storage. Split (undo merge) ships in the same phase as merge.
 
-**Avoids:** Pitfall 1 (sync SDKs block event loop — use to_thread, not async def wrappers), Pitfall 4 (Claude rate limits — Semaphore), Pitfall 9 (asyncio.run from existing loop — keep public API sync), Pitfall 14 (error isolation — return_exceptions=True always)
+**Addresses:** Backfill entity discovery (P1), entity merge proposals + CLI (P1)
+
+**Avoids:** Backfill overwhelming volume (#5) via weekly batching with inspection between batches; merge proposal fatigue (#6) via ranked, capped, context-rich review UI; false merges (#1) — split capability ships in the same phase as merge, never merge without split.
+
+**Research flag:** Standard patterns for the CLI mechanics. The backfill batching strategy and cost estimate (~$2-5 for 180 days with Sonnet) are already established in research.
+
+---
+
+### Phase 5: Scoped Views + Reports
+
+**Rationale:** Scoped views are the user-facing payoff of the entire entity layer. They deliberately come last because they require populated data (from backfill, Phase 4) and stable entity attribution (from Phase 3). Shipping a simple `entity show` query during Phase 4 as a validation mechanism is recommended — if the output is not immediately useful, the entity model needs adjustment before Phase 5 investment.
+
+**Delivers:** `src/entities/views.py` with SQL query logic. CLI commands `entity show "Affirm"`, `entity list [--type partner|person]`, `entity commitments [--owner NAME]`. Per-entity markdown reports written to `output/entities/`. Terminal and file output modes using existing Jinja2 patterns.
+
+**Addresses:** Scoped CLI views (P1), scoped markdown reports (P2)
+
+**Avoids:** Overengineering before validation (#11) — the `entity show` query acts as the validation signal: if scoped views are not useful, the entity model needs to change before further investment.
+
+**Research flag:** Standard patterns — SQL query + Jinja2 markdown rendering matches existing daily/weekly output module patterns exactly.
+
+---
+
+### Phase 6: Initiative Tracking
+
+**Rationale:** Initiatives are fundamentally different from people and partners. They lack stable identifiers, have fuzzy semantic boundaries ("Q2 Launch" vs "Spring Release" vs "Product Launch" could all be the same initiative), and require temporal fields (start/end dates, status). Research is explicit: ship people and partners first, then add initiatives as a distinct phase after learning from Phases 1-5.
+
+**Delivers:** Initiative entity type with lifecycle fields (status, start_date, target_date, linked_entities). Schema migration (Phase 1 migration infrastructure makes this safe). User-created initiative workflow (`entity add --type initiative "Q2 Launch"`). LLM-assisted mention detection during synthesis.
+
+**Addresses:** Initiative tracking (P2 from FEATURES.md)
+
+**Avoids:** Initiative entities as a different beast (#8) — treated as a separate effort with its own schema extension, not squeezed into the same model as people/partners.
+
+**Research flag:** Needs research — initiative auto-discovery heuristics are not well-established. The recommended approach (user-created, LLM-assisted tagging) is the pragmatic fallback, but the detection approach for "these mentions seem related to a common initiative" requires a dedicated investigation before planning.
+
+---
 
 ### Phase Ordering Rationale
 
-- **Config first** because it is a pure refactor (zero behavior change, verifiable by output diff) and every subsequent feature adds config fields. Retroactive migration is harder than building on a typed foundation.
-- **Structured outputs before async** because changing response format and execution model simultaneously makes debugging impossible. Each must be independently testable.
-- **Notion before async** because new ingest modules are easier to build and verify in synchronous code. Test correctness first, then parallelize.
-- **Reliability wins before async** because they reduce the complexity surface of the riskiest phase, and two of them (module global elimination, Slack batch resolution) are prerequisites for async safety.
-- **Async last** because it is the capstone that benefits from all prior work being stable. It is also the only phase that changes execution semantics — keeping it last isolates failure modes.
+- **Strict dependency chain:** Registry → Discovery → Attribution → Backfill → Views. Each phase depends on the prior and produces something independently testable.
+- **Backfill before views as primary workflow:** Views are useless without populated data. Backfill fills 6+ months of historical data to make views immediately valuable.
+- **Merge before views as primary workflow:** Fragmented entities in scoped views produce misleading results. Merge review (Phase 4) happens before Phase 5 views become standard.
+- **Initiatives last:** They depend on a stable entity foundation and have genuinely different characteristics (semantic boundaries, no stable identifiers) that would complicate earlier phases if included.
+- **Pipeline safety throughout every phase:** Each phase adds entity features as optional, gracefully degrading additions to the existing pipeline. The daily summary is never at risk.
 
 ### Research Flags
 
-Phases with well-documented patterns (safe to plan without additional research):
-- **Phase 1 (Config):** Pydantic v2 config validation is thoroughly documented. Pattern is mechanical: define models, validate YAML, update call sites. `commitments.py` proves the Pydantic + structured output pattern already works in this codebase.
-- **Phase 2 (Structured Outputs):** `commitments.py` already proves the `output_config` pattern in this codebase. Migration is schema definition + deletion of existing parsers. One-at-a-time per call site.
-- **Phase 4 (Quick Wins):** Slack `users.list()` and cache TTL are standard operations. Fingerprint dedup approach is fully specified in ARCHITECTURE.md with example code.
+Phases likely needing deeper research during planning:
+- **Phase 2 (Entity Discovery):** Prompt engineering for entity extraction needs validation on 20-30 real historical summaries before the phase plan is finalized. The specific normalization rules for business names in the actual corpus need to be derived empirically.
+- **Phase 6 (Initiative Tracking):** Initiative auto-discovery heuristics are not well-established. This phase needs dedicated research before planning begins. User-created initiatives with LLM-assisted tagging is the recommended fallback approach.
 
-Phases needing careful planning attention:
-- **Phase 3 (Notion):** The Notion API 2025-09-03 breaking changes (data_source_id for multi-source databases) require explicit API version pinning and a health check. Block pagination handling for nested pages needs explicit test coverage. The integration must be manually shared with each configured page/database in the Notion UI — this must be documented as a setup prerequisite. Plan should be explicit about the API version constraint and the health check pattern.
-- **Phase 5 (Async):** The asyncio refactor of pipeline.py has the most concurrent-state risk. The `asyncio.Semaphore` value for Claude calls requires empirical tuning against actual API tier limits — this cannot be determined until execution. Plan should call out both the module-global elimination prerequisite and the semaphore tuning step explicitly.
+Phases with standard patterns (skip research):
+- **Phase 1 (Registry):** SQLite + Pydantic + versioned migrations is thoroughly documented; WAL mode and soft-delete patterns are standard.
+- **Phase 3 (Attribution Integration):** Follows the exact same optional-stage pattern used in v1.5.1 for Slack, HubSpot, and Notion.
+- **Phase 4 (Backfill CLI):** CLI mechanics and batching strategy are straightforward given existing argparse patterns.
+- **Phase 5 (Scoped Views):** SQL query + Jinja2 rendering matches existing output module patterns exactly.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All packages verified via pip, installed versions confirmed in .venv, Notion API version confirmed via official changelog, no transitive dependency conflicts |
-| Features | HIGH | Existing codebase analyzed directly, all API endpoints verified against official docs, feature dependencies mapped from actual code |
-| Architecture | HIGH | Based on direct codebase inspection of pipeline.py, extractor.py, synthesizer.py, commitments.py, config.py; `asyncio.to_thread()` pattern verified against Python 3.12 docs; target flow fully specified with example code |
-| Pitfalls | HIGH | All critical pitfalls grounded in codebase-specific analysis (actual parsing functions named, actual module globals identified); Notion API version pitfall confirmed via official upgrade guide; 15 pitfalls documented across 4 severity levels |
+| Stack | HIGH | Codebase directly inspected; aiosqlite is the only net-new dependency; all other choices reuse existing project packages with confirmed installed versions |
+| Features | HIGH | Feature dependencies are clearly mapped; must-haves vs. differentiators vs. anti-features are explicitly reasoned; dependency graph in FEATURES.md is deterministic |
+| Architecture | HIGH | Based on direct codebase analysis of all integration points (`pipeline_async.py`, `synthesis/models.py`, `sidecar.py`, `config.py`, `pipeline.py`); build order is dependency-driven with clear testable deliverables per phase |
+| Pitfalls | HIGH | Entity resolution pitfalls are well-documented (GDELT research, production system guides); integration-specific pitfalls derived from direct codebase inspection of the actual production code |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Algorithmic dedup threshold tuning:** The rapidfuzz threshold (~80-85 for token_set_ratio) requires testing against real SourceItem data to avoid false positives on short work intelligence items. PITFALLS.md flags this as the feature with most uncertainty. Build with conservative threshold, log near-matches for the first week, tune before enabling auto-merge.
-- **Claude API rate limit tier:** The `asyncio.Semaphore` value for parallel extraction depends on actual API tier limits, which vary by account. Research recommends starting at `Semaphore(3)` and tuning based on `x-ratelimit-remaining-requests` response headers. Cannot be determined until Phase 5 execution.
-- **Notion integration sharing:** Each Notion database and page must be manually shared with the integration in the Notion UI before the pipeline can access it. This is a one-time setup step, not a code concern, but it must be documented as a required pre-step in the Phase 3 plan.
-- **aiofiles version confidence:** aiofiles 25.1.0 version was confirmed via web search (MEDIUM confidence) rather than direct pip verification. Confirm with `pip index versions aiofiles` during Phase 5 dependency installation.
+- **Entity extraction prompt wording:** The exact prompt text for extracting entity names from synthesis output needs iteration against real data. The structured output schema is defined, but prompt instructions will need tuning based on extraction quality on 20+ real historical summaries. Address at the start of Phase 2 before full backfill.
+
+- **Normalization rules for business names:** Name normalization (stripping "Inc", "LLC", "Holdings", handling "Affirm" vs "Affirm Inc") needs a concrete ruleset derived from the actual entity names in the existing corpus — not assumed from general patterns. Address at the start of Phase 2.
+
+- **Backfill cost calibration:** The estimate ($2-5 for 180 days with Sonnet) needs verification against actual sidecar JSON structure and token counts. Run a 5-day backfill pilot at the start of Phase 4 to calibrate before committing to the full corpus.
+
+- **Initiative auto-discovery boundary:** Research concludes that user-created initiatives with LLM-assisted tagging is the pragmatic path, but the exact detection approach for "these mentions seem related to a common initiative" is unresolved. Address during Phase 6 research (before planning).
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- Anthropic Structured Outputs docs (GA) — `output_config` parameter shape, supported models, GA status
-- notion-sdk-py GitHub (ramnes) — async client support, httpx dependency, pagination helpers, `collect_paginated_api` helper
-- Notion API Reference — database query filter, block children endpoint, rate limits (3 req/s)
-- Notion API Upgrade Guide 2025-09-03 — data_source_id breaking changes, filter value changes for multi-source databases
-- Python 3.12 asyncio docs — `asyncio.gather()`, `asyncio.to_thread()`, event loop constraints
-- Pydantic v2 docs — BaseModel, ConfigDict, `model_json_schema()`, ValidationError behavior
-- RapidFuzz GitHub — token_set_ratio algorithm, process.cdist for batch comparison, version 3.12+
-- slack_sdk AsyncWebClient docs — aiohttp requirement, users_list pagination
-- Direct codebase inspection — `src/pipeline.py`, `src/synthesis/extractor.py`, `src/synthesis/synthesizer.py`, `src/synthesis/commitments.py`, `src/ingest/slack.py`, `src/ingest/google_docs.py`, `src/config.py`, `src/models/sources.py`
-- Installed package versions — verified from .venv directly
+
+- Direct codebase analysis: `src/pipeline_async.py`, `src/synthesis/synthesizer.py`, `src/synthesis/models.py`, `src/models/sources.py`, `src/sidecar.py`, `src/config.py`, `src/pipeline.py`, `src/output/writer.py`, `src/dedup.py`
+- [Python sqlite3 docs](https://docs.python.org/3/library/sqlite3.html) — WAL mode, JSON1, schema patterns
+- [aiosqlite documentation](https://aiosqlite.omnilib.dev/en/latest/) — async context managers, threading model
+- [aiosqlite GitHub](https://github.com/omnilib/aiosqlite) — v0.22.1 (Dec 2025), actively maintained
+- [RapidFuzz PyPI](https://pypi.org/project/RapidFuzz/) — v3.14.3, algorithm documentation
+- [SQLite documentation](https://sqlite.org/docs.html) — schema design patterns, WAL mode
+- [Structured Entity Extraction Using LLMs (Simon Willison, Feb 2025)](https://simonwillison.net/2025/Feb/28/llm-schemas/) — Pydantic + LLM structured extraction patterns
+- [Building with LLMs: Structured Extraction (PyCon 2025)](https://building-with-llms-pycon-2025.readthedocs.io/en/latest/structured-data-extraction.html) — verified entity extraction with structured outputs
+- `.planning/V2_VISION.md` — entity layer data model and phasing (project-internal)
+- `.planning/codebase/ARCHITECTURE.md` — current pipeline architecture (project-internal)
 
 ### Secondary (MEDIUM confidence)
-- asyncio.gather() best practices (community blog, verified against Python docs) — `return_exceptions=True` pattern and error isolation
-- Notion API version date (2026-03-11) — confirmed via web search
-- aiofiles 25.1.0 version — confirmed via web search, not direct pip verification
+
+- [GDELT: LLM Entity Extraction Hallucination and Brittleness](https://blog.gdeltproject.org/experiments-in-entity-extraction-using-llms-hallucination-how-a-single-apostrophe-can-change-the-results/) — extraction non-determinism patterns and mitigation strategies
+- [The Entity Resolution Playbook for Production Systems](https://www.minimalistinnovation.com/post/entity-resolution-orchestration-framework) — merge/split workflow design
+- [System Design for Entity Resolution](https://www.sheshbabu.com/posts/system-design-for-entity-resolution/) — schema patterns for entity registry
+- [Suckless SQLite Schema Migrations in Python](https://eskerda.com/sqlite-schema-migrations-python/) — version table migration pattern
+- [Entity Resolution at Scale (Medium, Jan 2026)](https://medium.com/@shereshevsky/entity-resolution-at-scale-deduplication-strategies-for-knowledge-graph-construction-7499a60a97c3) — general deduplication strategies
+- [NER with LLMs for Conversation Metadata (Medium)](https://medium.com/@grisanti.isidoro/named-entity-recognition-with-llms-extract-conversation-metadata-94d5536178f2) — LLM NER from conversational text
+
+### Tertiary (LOW confidence)
+
+- [AWS Bedrock NER patterns](https://aws.amazon.com/blogs/machine-learning/use-zero-shot-large-language-models-on-amazon-bedrock-for-custom-named-entity-recognition/) — zero-shot LLM NER approach validation (approach is sound, prompt design needs iteration)
+- [GPT-NER research](https://arxiv.org/abs/2304.10428) — LLM-based NER accuracy benchmarks (validates approach, not specific to Claude)
 
 ---
-*Research completed: 2026-04-04*
+*Research completed: 2026-04-05*
 *Ready for roadmap: yes*
