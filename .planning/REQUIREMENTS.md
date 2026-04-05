@@ -127,12 +127,19 @@
 | DOCS-02 | Phase 9 | Complete |
 | SYNTH-06 | Phase 10 | Complete |
 | SYNTH-08 | Phase 10 | Complete |
+| CONFIG-01 | Phase 13 | Pending |
+| STRUCT-01 | Phase 14 | Pending |
+| NOTION-01 | Phase 15 | Pending |
+| PERF-03 | Phase 16 | Pending |
+| OPS-01 | Phase 16 | Pending |
+| DEDUP-01 | Phase 16 | Pending |
+| PERF-01 | Phase 17 | Pending |
+| PERF-02 | Phase 17 | Pending |
 
 **Coverage:**
-- v1.5 requirements: 15 total
-- Mapped to phases: 15
-- Unmapped: 0
+- v1.5 requirements: 15 total, 15 mapped, 0 unmapped
+- v1.5.1 requirements: 8 total, 8 mapped, 0 unmapped
 
 ---
 *Requirements defined: 2026-04-03*
-*Last updated: 2026-04-04 after milestone v1.5.1 requirements definition*
+*Last updated: 2026-04-04 after v1.5.1 roadmap creation*
