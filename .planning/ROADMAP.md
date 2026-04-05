@@ -277,7 +277,10 @@ Plans:
   2. Daily synthesis returns a typed `DailySynthesisOutput` Pydantic model with all section content structured
   3. Running the pipeline on a known date produces equivalent content to the old markdown-parsing path (no silent data loss)
   4. The ~234 lines of regex/markdown parsing in extractor.py and synthesizer.py are deleted and replaced by Pydantic model access
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 14-01-PLAN.md -- Migrate per-meeting extraction to structured outputs (TDD)
+- [ ] 14-02-PLAN.md -- Migrate daily synthesis to structured outputs (TDD)
 
 ### Phase 15: Notion Ingestion
 **Goal**: Daily summaries include Notion page updates and database changes, completing the set of work tools ingested by the pipeline
