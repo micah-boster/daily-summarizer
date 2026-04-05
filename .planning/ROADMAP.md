@@ -341,10 +341,11 @@ Plans:
   3. Deprecated output-format-2025-01-24 beta header removed from all API call sites — no 400 errors on extraction
   4. Dead import of dedup_source_items removed from pipeline.py
   5. All existing tests pass; new tests cover structured output paths for weekly and monthly
-**Plans**: 0 plans
+**Plans**: 2 plans
 
 Plans:
-(to be planned)
+- [ ] 18-01-PLAN.md -- Migrate weekly.py and monthly.py to structured outputs with Pydantic output models and converter functions (TDD)
+- [ ] 18-02-PLAN.md -- Remove deprecated beta header fallback from extractor/synthesizer/commitments, remove dead dedup import from pipeline.py
 
 ## Progress
 
@@ -372,4 +373,4 @@ Phase 18 is a gap closure phase from the v1.5.1 milestone audit.
 | 15. Notion Ingestion | 3/3 | Complete    | 2026-04-05 | - |
 | 16. Reliability Quick Wins | v1.5.1 | 0/3 | Not started | - |
 | 17. Asyncio Parallelization | 2/2 | Complete    | 2026-04-05 | - |
-| 18. Structured Output Completion | v1.5.1 | 0/0 | Not started | - |
+| 18. Structured Output Completion | v1.5.1 | 0/2 | Planned | - |
