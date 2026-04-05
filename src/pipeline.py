@@ -8,6 +8,7 @@ All imports are at module level for fail-fast on missing dependencies.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
@@ -212,12 +213,13 @@ def _ingest_calendar(
 def run_pipeline(ctx: PipelineContext) -> None:
     """Orchestrate a single day's pipeline: ingest -> synthesize -> output.
 
+    Delegates to the async pipeline orchestrator which runs all ingest sources
+    concurrently. Cache cleanup runs synchronously first (quick operation).
+
     Args:
         ctx: PipelineContext with config, dates, services, and shared client.
     """
-    current = ctx.target_date
-
-    # Cache retention: cleanup old raw data
+    # Cache retention: cleanup old raw data (quick sync operation)
     try:
         deleted, freed = cleanup_raw_cache(
             ctx.output_dir,
@@ -229,198 +231,7 @@ def run_pipeline(ctx: PipelineContext) -> None:
     except Exception as e:
         logger.warning("Cache cleanup failed: %s. Continuing.", e)
 
-    # Phase 1: Ingest from all sources
-    slack_items = _ingest_slack(ctx)
-    hubspot_items = _ingest_hubspot(ctx)
-    docs_items = _ingest_docs(ctx)
-    notion_items = _ingest_notion(ctx)
-    categorized, transcripts, unmatched, extractions = _ingest_calendar(ctx)
+    # Run the async pipeline (parallel ingest -> sequential synthesis -> output)
+    from src.pipeline_async import async_pipeline
 
-    # Cross-source dedup pre-filter
-    all_source_items = (slack_items or []) + (hubspot_items or []) + (docs_items or []) + (notion_items or [])
-    if len(all_source_items) > 1:
-        try:
-            deduped_items = dedup_source_items(all_source_items, ctx.config, current)
-            items_removed = len(all_source_items) - len(deduped_items)
-            if items_removed:
-                # Redistribute back to per-source lists for synthesis compatibility
-                slack_types = {SourceType.SLACK_MESSAGE, SourceType.SLACK_THREAD}
-                hubspot_types = {SourceType.HUBSPOT_DEAL, SourceType.HUBSPOT_CONTACT, SourceType.HUBSPOT_TICKET, SourceType.HUBSPOT_ACTIVITY}
-                docs_types = {SourceType.GOOGLE_DOC_EDIT, SourceType.GOOGLE_DOC_COMMENT}
-                notion_types = {SourceType.NOTION_PAGE, SourceType.NOTION_DB}
-                slack_items = [i for i in deduped_items if i.source_type in slack_types]
-                hubspot_items = [i for i in deduped_items if i.source_type in hubspot_types]
-                docs_items = [i for i in deduped_items if i.source_type in docs_types]
-                notion_items = [i for i in deduped_items if i.source_type in notion_types]
-                logger.info("Dedup pre-filter: consolidated %d items", items_removed)
-        except Exception as e:
-            logger.warning("Dedup pre-filter failed: %s. Continuing with unfiltered items.", e)
-
-    # Phase 2: Synthesis
-    synthesis_result: dict = {
-        "substance": [],
-        "decisions": [],
-        "commitments": [],
-        "executive_summary": None,
-    }
-
-    if categorized is not None:
-        # Full pipeline with calendar data
-        active_events = categorized["timed_events"] + categorized["all_day_events"]
-        meeting_count = len(active_events)
-        total_meeting_hours = sum(
-            (e.duration_minutes or 0) for e in categorized["timed_events"]
-        ) / 60.0
-        transcript_count = sum(1 for e in active_events if e.transcript_text is not None)
-
-        try:
-            if extractions or slack_items or docs_items or hubspot_items or notion_items:
-                synthesis_result = synthesize_daily(
-                    extractions, current, ctx.config,
-                    slack_items=slack_items, docs_items=docs_items,
-                    hubspot_items=hubspot_items, notion_items=notion_items,
-                    client=ctx.claude_client,
-                )
-                logger.info("Daily synthesis complete")
-        except Exception as e:
-            logger.warning("Synthesis failed: %s. Continuing with empty synthesis.", e)
-
-        meetings_without_transcripts = [
-            e for e in active_events if e.transcript_text is None
-        ]
-
-        synthesis = DailySynthesis(
-            date=current,
-            generated_at=datetime.now(timezone.utc),
-            meeting_count=meeting_count,
-            total_meeting_hours=total_meeting_hours,
-            transcript_count=transcript_count,
-            all_day_events=categorized["all_day_events"],
-            timed_events=categorized["timed_events"],
-            declined_events=categorized["declined_events"],
-            cancelled_events=categorized["cancelled_events"],
-            unmatched_transcripts=unmatched,
-            executive_summary=synthesis_result.get("executive_summary"),
-            extractions=extractions,
-            meetings_without_transcripts=meetings_without_transcripts,
-            substance=Section(
-                title="Substance",
-                items=synthesis_result.get("substance", []),
-            ),
-            decisions=Section(
-                title="Decisions",
-                items=synthesis_result.get("decisions", []),
-            ),
-            commitments=Section(
-                title="Commitments",
-                items=synthesis_result.get("commitments", []),
-            ),
-        )
-    else:
-        # No Google credentials: synthesize Slack/HubSpot/Docs if available
-        if slack_items or docs_items or hubspot_items or notion_items:
-            try:
-                synthesis_result = synthesize_daily(
-                    [], current, ctx.config,
-                    slack_items=slack_items, docs_items=docs_items,
-                    hubspot_items=hubspot_items, notion_items=notion_items,
-                    client=ctx.claude_client,
-                )
-                logger.info("Daily synthesis complete (no-creds path)")
-            except Exception as e:
-                logger.warning("Synthesis failed (no-creds path): %s", e)
-
-        synthesis = DailySynthesis(
-            date=current,
-            generated_at=datetime.now(timezone.utc),
-            meeting_count=0,
-            total_meeting_hours=0.0,
-            transcript_count=0,
-            executive_summary=synthesis_result.get("executive_summary"),
-            substance=Section(
-                title="Substance",
-                items=synthesis_result.get("substance", []),
-            ),
-            decisions=Section(
-                title="Decisions",
-                items=synthesis_result.get("decisions", []),
-            ),
-            commitments=Section(
-                title="Commitments",
-                items=synthesis_result.get("commitments", []),
-            ),
-        )
-
-    # Commitment extraction (second Claude call)
-    extracted_commitments: list = []
-    try:
-        synthesis_text_parts: list[str] = []
-        if synthesis_result.get("executive_summary"):
-            synthesis_text_parts.append(synthesis_result["executive_summary"])
-        for section in ["substance", "decisions", "commitments"]:
-            for item in synthesis_result.get(section, []):
-                synthesis_text_parts.append(item)
-        synthesis_text = "\n".join(synthesis_text_parts)
-        if synthesis_text.strip():
-            extracted_commitments = extract_commitments(
-                synthesis_text, current, ctx.config, client=ctx.claude_client
-            )
-            logger.info("Extracted %d structured commitments", len(extracted_commitments))
-    except Exception as e:
-        logger.warning(
-            "Commitment extraction failed: %s. Continuing without structured commitments.", e
-        )
-
-    # Phase 3: Output
-    # Quality tracking: detect edits
-    try:
-        edit_result = detect_edits(current, ctx.output_dir)
-        if edit_result is not None:
-            update_quality_report(edit_result, ctx.output_dir)
-            if edit_result["edited"]:
-                logger.info(
-                    "Edit detected for %s: similarity=%.0f%%, sections=%s",
-                    current,
-                    edit_result["similarity"] * 100,
-                    ", ".join(edit_result["sections_changed"]) or "none",
-                )
-            else:
-                logger.info("No edits detected for %s", current)
-    except Exception as e:
-        logger.warning("Quality tracking (detect) failed: %s", e)
-
-    # Write daily summary
-    path = write_daily_summary(
-        synthesis, ctx.output_dir, ctx.template_dir,
-        slack_items=slack_items, docs_items=docs_items,
-        hubspot_items=hubspot_items, notion_items=notion_items,
-    )
-    logger.info(
-        "Wrote daily summary for %s -> %s (%d meetings, %.1fh)",
-        current, path, synthesis.meeting_count, synthesis.total_meeting_hours,
-    )
-
-    # Quality tracking: save raw output
-    try:
-        raw_content = path.read_text(encoding="utf-8")
-        raw_path = save_raw_output(raw_content, current, ctx.output_dir)
-        logger.info("Saved raw output -> %s", raw_path)
-    except Exception as e:
-        logger.warning("Quality tracking (save) failed: %s", e)
-
-    # JSON sidecar
-    try:
-        sidecar_path = write_daily_sidecar(
-            synthesis, extractions, ctx.output_dir,
-            extracted_commitments=extracted_commitments,
-        )
-        logger.info("Wrote JSON sidecar -> %s", sidecar_path)
-    except Exception as e:
-        logger.warning("Sidecar generation failed: %s. Daily summary still written.", e)
-
-    # Slack notification
-    try:
-        summary_content = path.read_text(encoding="utf-8")
-        send_slack_summary(summary_content, current)
-    except Exception as e:
-        logger.warning("Slack notification failed: %s", e)
+    asyncio.run(async_pipeline(ctx))
