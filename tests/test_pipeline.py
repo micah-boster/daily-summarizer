@@ -108,47 +108,55 @@ class TestIngestDocs:
 
 
 class TestRunPipeline:
-    @patch("src.pipeline.send_slack_summary")
-    @patch("src.pipeline.write_daily_sidecar")
-    @patch("src.pipeline.save_raw_output")
-    @patch("src.pipeline.detect_edits", return_value=None)
-    @patch("src.pipeline.write_daily_summary")
+    @patch("src.pipeline_async.send_slack_summary")
+    @patch("src.pipeline_async.write_daily_sidecar")
+    @patch("src.pipeline_async.save_raw_output")
+    @patch("src.pipeline_async.detect_edits", return_value=None)
+    @patch("src.pipeline_async.write_daily_summary")
+    @patch("src.pipeline_async._ingest_notion", return_value=[])
+    @patch("src.pipeline_async._ingest_docs", return_value=[])
+    @patch("src.pipeline_async._ingest_hubspot", return_value=[])
+    @patch("src.pipeline_async._ingest_slack", return_value=[])
+    @patch("src.pipeline_async.anthropic.AsyncAnthropic")
     def test_happy_path_no_sources(
-        self, mock_write, mock_detect, mock_save_raw, mock_sidecar, mock_slack_notify, tmp_path: Path
+        self, mock_async_anthropic,
+        mock_slack, mock_hubspot, mock_docs, mock_notion,
+        mock_write, mock_detect, mock_save_raw, mock_sidecar, mock_slack_notify, tmp_path: Path
     ):
         """All sources disabled: pipeline runs to completion writing an empty summary."""
         output_file = tmp_path / "daily" / "2026" / "04" / "2026-04-01.md"
         output_file.parent.mkdir(parents=True, exist_ok=True)
         output_file.write_text("# Daily Summary")
         mock_write.return_value = output_file
+        mock_async_anthropic.return_value = MagicMock()
 
         ctx = _make_ctx(tmp_path)
         run_pipeline(ctx)
 
         mock_write.assert_called_once()
 
-    @patch("src.pipeline.send_slack_summary")
-    @patch("src.pipeline.write_daily_sidecar")
-    @patch("src.pipeline.save_raw_output")
-    @patch("src.pipeline.detect_edits", return_value=None)
-    @patch("src.pipeline.write_daily_summary")
-    @patch("src.pipeline.synthesize_daily")
-    @patch("src.pipeline.fetch_slack_items")
-    @patch("src.pipeline.build_slack_client")
-    @patch("src.pipeline.load_slack_state")
-    @patch("src.pipeline.save_slack_state")
-    @patch("src.pipeline.check_new_channels")
+    @patch("src.pipeline_async.send_slack_summary")
+    @patch("src.pipeline_async.write_daily_sidecar")
+    @patch("src.pipeline_async.save_raw_output")
+    @patch("src.pipeline_async.detect_edits", return_value=None)
+    @patch("src.pipeline_async.write_daily_summary")
+    @patch("src.pipeline_async.synthesize_daily")
+    @patch("src.pipeline_async._ingest_notion", return_value=[])
+    @patch("src.pipeline_async._ingest_docs", return_value=[])
+    @patch("src.pipeline_async._ingest_hubspot", return_value=[])
+    @patch("src.pipeline_async._ingest_slack")
+    @patch("src.pipeline_async.anthropic.AsyncAnthropic")
     def test_happy_path_with_slack(
-        self, mock_check, mock_save_state, mock_load, mock_build, mock_fetch,
+        self, mock_async_anthropic,
+        mock_slack, mock_hubspot, mock_docs, mock_notion,
         mock_synthesize, mock_write, mock_detect, mock_save_raw, mock_sidecar, mock_slack_notify,
         tmp_path: Path,
     ):
         """Slack enabled: items flow through to synthesize_daily."""
         ctx = _make_ctx(tmp_path, config=make_test_config(slack={"enabled": True, "channels": ["general"]}))
-        mock_build.return_value = MagicMock()
-        mock_load.return_value = {}
         slack_items = [_make_source_item("Slack item")]
-        mock_fetch.return_value = slack_items
+        mock_slack.return_value = slack_items
+        mock_async_anthropic.return_value = MagicMock()
         mock_synthesize.return_value = {
             "substance": ["Item from Slack"],
             "decisions": [],
@@ -166,16 +174,20 @@ class TestRunPipeline:
         call_kwargs = mock_synthesize.call_args
         assert call_kwargs.kwargs.get("slack_items") == slack_items
 
-    @patch("src.pipeline.send_slack_summary")
-    @patch("src.pipeline.write_daily_sidecar")
-    @patch("src.pipeline.save_raw_output")
-    @patch("src.pipeline.detect_edits", return_value=None)
-    @patch("src.pipeline.write_daily_summary")
-    @patch("src.pipeline.synthesize_daily")
-    @patch("src.pipeline.fetch_hubspot_items")
-    @patch("src.pipeline.build_slack_client")
+    @patch("src.pipeline_async.send_slack_summary")
+    @patch("src.pipeline_async.write_daily_sidecar")
+    @patch("src.pipeline_async.save_raw_output")
+    @patch("src.pipeline_async.detect_edits", return_value=None)
+    @patch("src.pipeline_async.write_daily_summary")
+    @patch("src.pipeline_async.synthesize_daily")
+    @patch("src.pipeline_async._ingest_hubspot")
+    @patch("src.pipeline_async._ingest_notion", return_value=[])
+    @patch("src.pipeline_async._ingest_docs", return_value=[])
+    @patch("src.pipeline_async._ingest_slack")
+    @patch("src.pipeline_async.anthropic.AsyncAnthropic")
     def test_single_source_failure_continues(
-        self, mock_build_slack, mock_fetch_hubspot,
+        self, mock_async_anthropic,
+        mock_slack, mock_docs, mock_notion, mock_hubspot,
         mock_synthesize, mock_write, mock_detect, mock_save_raw, mock_sidecar, mock_slack_notify,
         tmp_path: Path,
     ):
@@ -184,11 +196,12 @@ class TestRunPipeline:
             slack={"enabled": True, "channels": ["general"]},
             hubspot={"enabled": True, "owner_id": "123"},
         ))
+        mock_async_anthropic.return_value = MagicMock()
         # Slack fails
-        mock_build_slack.side_effect = Exception("Slack down")
+        mock_slack.side_effect = Exception("Slack down")
         # HubSpot succeeds
         hubspot_items = [_make_source_item("HubSpot deal")]
-        mock_fetch_hubspot.return_value = hubspot_items
+        mock_hubspot.return_value = hubspot_items
         mock_synthesize.return_value = {
             "substance": ["HubSpot item"], "decisions": [], "commitments": [], "executive_summary": None,
         }
@@ -206,27 +219,27 @@ class TestRunPipeline:
         assert call_kwargs.kwargs.get("slack_items") == []
         assert call_kwargs.kwargs.get("hubspot_items") == hubspot_items
 
-    @patch("src.pipeline.send_slack_summary")
-    @patch("src.pipeline.write_daily_sidecar")
-    @patch("src.pipeline.save_raw_output")
-    @patch("src.pipeline.detect_edits", return_value=None)
-    @patch("src.pipeline.write_daily_summary")
-    @patch("src.pipeline.synthesize_daily")
-    @patch("src.pipeline.fetch_slack_items")
-    @patch("src.pipeline.build_slack_client")
-    @patch("src.pipeline.load_slack_state")
-    @patch("src.pipeline.save_slack_state")
-    @patch("src.pipeline.check_new_channels")
+    @patch("src.pipeline_async.send_slack_summary")
+    @patch("src.pipeline_async.write_daily_sidecar")
+    @patch("src.pipeline_async.save_raw_output")
+    @patch("src.pipeline_async.detect_edits", return_value=None)
+    @patch("src.pipeline_async.write_daily_summary")
+    @patch("src.pipeline_async.synthesize_daily")
+    @patch("src.pipeline_async._ingest_notion", return_value=[])
+    @patch("src.pipeline_async._ingest_docs", return_value=[])
+    @patch("src.pipeline_async._ingest_hubspot", return_value=[])
+    @patch("src.pipeline_async._ingest_slack")
+    @patch("src.pipeline_async.anthropic.AsyncAnthropic")
     def test_synthesis_failure_still_writes(
-        self, mock_check, mock_save_state, mock_load, mock_build, mock_fetch,
+        self, mock_async_anthropic,
+        mock_slack, mock_hubspot, mock_docs, mock_notion,
         mock_synthesize, mock_write, mock_detect, mock_save_raw, mock_sidecar, mock_slack_notify,
         tmp_path: Path,
     ):
         """Synthesis fails: pipeline still writes a summary with empty synthesis."""
         ctx = _make_ctx(tmp_path, config=make_test_config(slack={"enabled": True, "channels": ["general"]}))
-        mock_build.return_value = MagicMock()
-        mock_load.return_value = {}
-        mock_fetch.return_value = [_make_source_item("Item")]
+        mock_slack.return_value = [_make_source_item("Item")]
+        mock_async_anthropic.return_value = MagicMock()
         mock_synthesize.side_effect = Exception("Claude API down")
         output_file = tmp_path / "daily" / "2026" / "04" / "2026-04-01.md"
         output_file.parent.mkdir(parents=True, exist_ok=True)
