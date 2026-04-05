@@ -291,7 +291,12 @@ Plans:
   2. Notion database items modified on the target date appear in the daily summary with property values and context
   3. Every Notion-sourced item is attributed with "(per Notion [page/database title])"
   4. The Notion integration handles API rate limits (3 req/s) without failing or dropping content
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 15-01-PLAN.md -- Notion ingest module: API client, page/DB fetching, SourceItem conversion, config model, tests
+- [ ] 15-02-PLAN.md -- Notion database discovery CLI and main.py subcommand wiring
+- [ ] 15-03-PLAN.md -- Pipeline integration: wire into synthesizer, writer, template, retry error handling
 
 ### Phase 16: Reliability Quick Wins
 **Goal**: Three independent improvements that reduce API call volume, manage disk growth, and add a deterministic dedup layer before LLM synthesis
@@ -338,7 +343,7 @@ Each phase builds on the stability of the prior phase. Phase 17 (async) goes las
 | 11. Pipeline Hardening | v1.5 | 2/2 | Complete | 2026-04-04 |
 | 12. Reliability & Test Coverage | v1.5 | 3/3 | Complete | 2026-04-05 |
 | 13. Typed Config Foundation | 2/2 | Complete    | 2026-04-05 | - |
-| 14. Structured Output Migration | v1.5.1 | 0/0 | Not started | - |
+| 14. Structured Output Migration | 1/2 | In Progress|  | - |
 | 15. Notion Ingestion | v1.5.1 | 0/0 | Not started | - |
 | 16. Reliability Quick Wins | v1.5.1 | 0/0 | Not started | - |
 | 17. Asyncio Parallelization | v1.5.1 | 0/0 | Not started | - |
