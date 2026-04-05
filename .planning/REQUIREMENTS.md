@@ -61,15 +61,33 @@
 - [x] **SYNTH-07**: Source attribution in all output ("per Slack #channel", "per HubSpot deal", "per Google Doc")
 - [x] **SYNTH-08**: Commitment deadlines extracted and structured (who/what/by-when) in synthesis output and JSON sidecar
 
-## v1.5.1 Requirements (Deferred)
+## v1.5.1 Requirements
 
-- **NOTION-01**: Ingest Notion page updates and database changes for the target date
-- **DEDUP-01**: Algorithmic cross-source deduplication as alternative/supplement to LLM-based
-- **PERF-01**: Parallel ingest modules (asyncio/threads for independent sources)
-- **PERF-02**: Parallel per-meeting extraction (concurrent Claude API calls)
-- **CONFIG-01**: Typed config model (Pydantic validation on config.yaml load)
-- **OPS-01**: Raw data cache retention policy (auto-delete after configurable TTL)
-- **PERF-03**: Slack user batch resolution (users_list instead of N users_info calls)
+### Foundation (CONFIG)
+
+- [ ] **CONFIG-01**: Typed config model (Pydantic validation on config.yaml load) with backward-compatible defaults for all existing optional sections
+
+### Structured Outputs (STRUCT)
+
+- [ ] **STRUCT-01**: All Claude API call sites migrated from markdown response parsing to structured outputs (json_schema) with Pydantic model validation
+
+### Notion Ingestion (NOTION)
+
+- [ ] **NOTION-01**: Ingest Notion page updates and database changes for the target date, with content extraction and SourceItem conversion
+
+### Performance (PERF)
+
+- [ ] **PERF-01**: Parallel ingest modules via asyncio (independent sources run concurrently, sequential dependencies preserved)
+- [ ] **PERF-02**: Parallel per-meeting transcript extraction (concurrent Claude API calls with rate-limit-aware semaphore)
+- [ ] **PERF-03**: Slack user batch resolution (users_list instead of N individual users_info calls)
+
+### Intelligence (DEDUP)
+
+- [ ] **DEDUP-01**: Algorithmic cross-source deduplication as conservative pre-filter to supplement LLM-based dedup
+
+### Operations (OPS)
+
+- [ ] **OPS-01**: Raw data cache retention policy (auto-delete after configurable TTL)
 
 ## v2+ Requirements (Future)
 
@@ -83,7 +101,6 @@
 
 | Feature | Reason |
 |---------|--------|
-| Notion ingestion | API complexity, breaking Sept 2025 changes, no diff API — defer to v1.5.x |
 | Entity layer | v2.0 — requires attributed data from v1.5 first |
 | Commitment reminders/alerts | v2.0 — v1.5 extracts and structures only |
 | Response drafting | v3.0 scope |
@@ -118,4 +135,4 @@
 
 ---
 *Requirements defined: 2026-04-03*
-*Last updated: 2026-04-04 after v1.5 milestone audit and gap closure planning*
+*Last updated: 2026-04-04 after milestone v1.5.1 requirements definition*
