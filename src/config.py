@@ -123,6 +123,7 @@ class SynthesisConfig(BaseModel):
     synthesis_max_output_tokens: int = Field(default=8192, ge=1)
     weekly_max_output_tokens: int = Field(default=8192, ge=1)
     monthly_max_output_tokens: int = Field(default=8192, ge=1)
+    max_concurrent_extractions: int = Field(default=3, ge=1, le=10)
 
     @field_validator("model", mode="after")
     @classmethod
