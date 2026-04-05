@@ -48,24 +48,6 @@ def _call_claude_structured_with_retry(client, model, max_tokens, prompt, schema
     )
 
 
-@retry_api_call
-def _call_claude_structured_fallback_with_retry(client, model, max_tokens, prompt, schema):
-    """Call Claude structured outputs (beta fallback) with retry on transient errors."""
-    return client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}],
-        extra_headers={
-            "anthropic-beta": "output-format-2025-01-24",
-        },
-        extra_body={
-            "output_format": {
-                "type": "json_schema",
-                "schema": schema,
-            }
-        },
-    )
-
 EXECUTIVE_SUMMARY_INSTRUCTION = """Note: Since there are 5+ meetings with transcripts, provide an executive_summary (3-5 sentences summarizing the most significant items, focusing on decisions with broad impact, new commitments with tight deadlines, and substance that changes direction).
 
 """
@@ -628,16 +610,9 @@ def synthesize_daily(
 
     # Call Claude API with structured output
     client = client or anthropic.Anthropic()
-    try:
-        response = _call_claude_structured_with_retry(
-            client, model, max_tokens, prompt, schema
-        )
-    except (TypeError, anthropic.BadRequestError):
-        # Fallback: older SDK or API version may use different parameter
-        logger.info("output_config not supported, falling back to beta header")
-        response = _call_claude_structured_fallback_with_retry(
-            client, model, max_tokens, prompt, schema
-        )
+    response = _call_claude_structured_with_retry(
+        client, model, max_tokens, prompt, schema
+    )
 
     # Parse and validate structured response
     data = json.loads(response.content[0].text)

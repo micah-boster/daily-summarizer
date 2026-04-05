@@ -47,25 +47,6 @@ def _call_claude_structured_with_retry(client, model, max_tokens, prompt, schema
     )
 
 
-@retry_api_call
-def _call_claude_structured_fallback_with_retry(client, model, max_tokens, prompt, schema):
-    """Call Claude structured outputs (beta fallback) with retry on transient errors."""
-    return client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}],
-        extra_headers={
-            "anthropic-beta": "output-format-2025-01-24",
-        },
-        extra_body={
-            "output_format": {
-                "type": "json_schema",
-                "schema": schema,
-            }
-        },
-    )
-
-
 def _convert_item(item: ExtractionItemOutput) -> ExtractionItem:
     """Convert an API output item to the downstream ExtractionItem model."""
     return ExtractionItem(
@@ -165,16 +146,9 @@ def extract_meeting(
 
     # Call Claude API with structured output
     client = client or anthropic.Anthropic()
-    try:
-        response = _call_claude_structured_with_retry(
-            client, model, max_tokens, prompt, schema
-        )
-    except (TypeError, anthropic.BadRequestError):
-        # Fallback: older SDK or API version may use different parameter
-        logger.info("output_config not supported, falling back to beta header")
-        response = _call_claude_structured_fallback_with_retry(
-            client, model, max_tokens, prompt, schema
-        )
+    response = _call_claude_structured_with_retry(
+        client, model, max_tokens, prompt, schema
+    )
 
     # Parse and validate structured response
     data = json.loads(response.content[0].text)
@@ -273,27 +247,6 @@ async def _call_claude_structured_async_with_retry(client, model, max_tokens, pr
     )
 
 
-@retry_api_call
-async def _call_claude_structured_async_fallback_with_retry(
-    client, model, max_tokens, prompt, schema
-):
-    """Async call to Claude structured outputs (beta fallback) with retry."""
-    return await client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}],
-        extra_headers={
-            "anthropic-beta": "output-format-2025-01-24",
-        },
-        extra_body={
-            "output_format": {
-                "type": "json_schema",
-                "schema": schema,
-            }
-        },
-    )
-
-
 async def extract_meeting_async(
     event: NormalizedEvent,
     config: PipelineConfig,
@@ -342,16 +295,9 @@ async def extract_meeting_async(
     schema = MeetingExtractionOutput.model_json_schema()
 
     # Call Claude API with structured output (async)
-    try:
-        response = await _call_claude_structured_async_with_retry(
-            client, model, max_tokens, prompt, schema
-        )
-    except (TypeError, anthropic.BadRequestError):
-        # Fallback: older SDK or API version may use different parameter
-        logger.info("output_config not supported, falling back to beta header")
-        response = await _call_claude_structured_async_fallback_with_retry(
-            client, model, max_tokens, prompt, schema
-        )
+    response = await _call_claude_structured_async_with_retry(
+        client, model, max_tokens, prompt, schema
+    )
 
     # Parse and validate structured response
     data = json.loads(response.content[0].text)

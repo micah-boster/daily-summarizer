@@ -368,34 +368,6 @@ def test_synthesize_daily_evidence_validation():
     assert len(result["substance"]) == 1
 
 
-def test_synthesize_daily_structured_fallback():
-    """Verify fallback to beta header when output_config fails."""
-    from src.synthesis.synthesizer import synthesize_daily
-    import anthropic as _anthropic
-
-    mock_client = MagicMock()
-    # First call raises TypeError, second succeeds
-    mock_client.messages.create.side_effect = [
-        TypeError("unexpected keyword argument 'output_config'"),
-        _make_mock_response(STRUCTURED_SYNTHESIS_DATA),
-    ]
-
-    extractions = [
-        MeetingExtraction(
-            meeting_title="Meeting",
-            meeting_time="2026-04-03T10:00:00",
-            decisions=[ExtractionItem(content="Something", participants=[])],
-        ),
-    ]
-
-    result = synthesize_daily(
-        extractions, date(2026, 4, 3), make_test_config(), client=mock_client
-    )
-
-    assert len(result["substance"]) == 2
-    assert mock_client.messages.create.call_count == 2
-
-
 # --- No-extraction edge case tests ---
 
 

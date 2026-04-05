@@ -36,25 +36,6 @@ def _call_claude_structured_with_retry(client, model, prompt, schema):
     )
 
 
-@retry_api_call
-def _call_claude_structured_fallback_with_retry(client, model, prompt, schema):
-    """Call Claude structured outputs (beta fallback) with retry on transient errors."""
-    return client.messages.create(
-        model=model,
-        max_tokens=4096,
-        messages=[{"role": "user", "content": prompt}],
-        extra_headers={
-            "anthropic-beta": "output-format-2025-01-24",
-        },
-        extra_body={
-            "output_format": {
-                "type": "json_schema",
-                "schema": schema,
-            }
-        },
-    )
-
-
 class ExtractedCommitment(BaseModel):
     """A single commitment extracted from synthesis output."""
 
@@ -144,16 +125,9 @@ def extract_commitments(
         schema = CommitmentsOutput.model_json_schema()
 
         # Use output_config for structured outputs (GA)
-        try:
-            response = _call_claude_structured_with_retry(
-                client, model, prompt, schema
-            )
-        except (TypeError, anthropic.BadRequestError):
-            # Fallback: older SDK or API version may use different parameter
-            logger.info("output_config not supported, falling back to betas header")
-            response = _call_claude_structured_fallback_with_retry(
-                client, model, prompt, schema
-            )
+        response = _call_claude_structured_with_retry(
+            client, model, prompt, schema
+        )
 
         data = json.loads(response.content[0].text)
         result = CommitmentsOutput.model_validate(data)

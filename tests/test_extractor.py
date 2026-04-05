@@ -330,33 +330,6 @@ def test_extract_meeting_structured_output_empty():
     assert len(result.commitments) == 0
 
 
-def test_extract_meeting_structured_fallback():
-    """Verify fallback to beta header when output_config fails."""
-    mock_client = MagicMock()
-
-    # First call raises TypeError (output_config not supported)
-    # Second call succeeds with beta header
-    mock_client.messages.create.side_effect = [
-        TypeError("unexpected keyword argument 'output_config'"),
-        _make_mock_response(STRUCTURED_RESPONSE_DATA),
-    ]
-
-    event = NormalizedEvent(
-        id="test-3",
-        title="Team Sync",
-        start_time=datetime(2026, 4, 3, 10, 0, tzinfo=timezone.utc),
-        transcript_text="Some transcript content here...",
-    )
-
-    config = make_test_config()
-    result = extract_meeting(event, config, client=mock_client)
-
-    assert result is not None
-    assert len(result.decisions) == 2
-    # Verify two calls were made (first failed, second succeeded)
-    assert mock_client.messages.create.call_count == 2
-
-
 def test_extract_meeting_no_transcript():
     """Verify extract_meeting returns None when event has no transcript_text."""
     event = NormalizedEvent(
