@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: Expanded Ingest
-status: unknown
-last_updated: "2026-04-04T23:59:48.860Z"
+milestone: v1.5.1
+milestone_name: Notion + Performance + Reliability
+status: roadmap_complete
+last_updated: "2026-04-04T00:00:00.000Z"
 progress:
-  total_phases: 13
+  total_phases: 18
   completed_phases: 12
   total_plans: 26
   completed_plans: 26
@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** Every morning I open a structured daily summary of yesterday's work and find it accurate, useful, and worth 5 minutes of my time -- without having produced it manually.
-**Current focus:** Defining requirements for v1.5.1
+**Current focus:** v1.5.1 roadmap complete, ready to plan Phase 13
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-04-04 — Milestone v1.5.1 started
+Phase: 13 - Typed Config Foundation (not started)
+Plan: --
+Status: Roadmap complete, awaiting phase planning
+Last activity: 2026-04-04 -- v1.5.1 roadmap created (Phases 13-17)
 
 ## Performance Metrics
 
@@ -56,6 +56,9 @@ Recent decisions affecting current work:
 - [v1.5 scoping]: Google Docs reuses existing OAuth -- do NOT modify SCOPES
 - [Phase 6]: runtime_checkable Protocol (not ABC) for SynthesisSource shared interface
 - [Phase 6]: source_type property on NormalizedEvent bridges existing 'source' field to Protocol
+- [v1.5.1 roadmap]: Phase order driven by dependency chain: config -> structured outputs -> Notion -> quick wins -> async
+- [v1.5.1 roadmap]: Async parallelization last because it changes execution semantics and benefits from all other features being stable
+- [v1.5.1 roadmap]: Structured outputs before async to avoid double-migration debugging complexity
 
 ### Pending Todos
 
@@ -63,12 +66,13 @@ None yet.
 
 ### Blockers/Concerns
 
-- Slack API: Need internal app setup (not Marketplace) to retain Tier 3 rate limits (50 req/min)
-- HubSpot: Verify `do_search` method location against pinned SDK 12.x before Phase 8
-- Google Docs: Confirm `drive.readonly` scope covers Docs content retrieval (research says yes)
+- Notion API 2025-09-03 breaking changes: must pin `notion_version` and build health check (Phase 15)
+- Claude API rate limit tier unknown: asyncio.Semaphore value requires empirical tuning (Phase 17)
+- Algorithmic dedup threshold needs tuning against real data to avoid false positives (Phase 16)
+- Each Notion database/page must be manually shared with integration in Notion UI (Phase 15 setup prereq)
 
 ## Session Continuity
 
 Last session: 2026-04-04
-Stopped at: Completed 06-01-PLAN.md, Phase 6 complete
+Stopped at: v1.5.1 roadmap created, Phases 13-17 defined
 Resume file: None
