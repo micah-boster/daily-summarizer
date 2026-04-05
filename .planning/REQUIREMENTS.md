@@ -160,9 +160,9 @@
 | CONFIG-01 | Phase 13 | Complete |
 | STRUCT-01 | Phase 18 (gap closure) | Complete |
 | NOTION-01 | Phase 15 | Complete |
-| PERF-03 | Phase 16 → Phase 18.1 (verification) | Pending |
-| OPS-01 | Phase 16 → Phase 18.1 (verification) | Pending |
-| DEDUP-01 | Phase 16 → Phase 18.1 (verification) | Pending |
+| PERF-03 | Phase 16 → Phase 18.1 (verification) | Complete |
+| OPS-01 | Phase 16 → Phase 18.1 (verification) | Complete |
+| DEDUP-01 | Phase 16 → Phase 18.1 (verification) | Complete |
 | PERF-01 | Phase 17 | Complete |
 | PERF-02 | Phase 17 | Complete |
 | ENTY-01 | Phase 19 | Pending |
