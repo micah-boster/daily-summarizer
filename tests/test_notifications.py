@@ -5,40 +5,33 @@ from unittest.mock import patch
 
 import pytest
 
-from src.notifications.slack import _build_blocks, _split_text, send_slack_summary
-
-
-class TestSplitText:
-    def test_short_text_single_chunk(self):
-        result = _split_text("Hello world", max_len=100)
-        assert result == ["Hello world"]
-
-    def test_splits_on_double_newline(self):
-        text = "Section 1 content\n\nSection 2 content"
-        result = _split_text(text, max_len=25)
-        assert len(result) == 2
-        assert result[0] == "Section 1 content"
-
-    def test_splits_on_single_newline_fallback(self):
-        text = "Line 1\nLine 2\nLine 3"
-        result = _split_text(text, max_len=10)
-        assert len(result) >= 2
-
-    def test_empty_text(self):
-        assert _split_text("") == [""]
+from src.notifications.slack import _build_blocks, send_slack_summary
 
 
 class TestBuildBlocks:
     def test_header_present(self):
         blocks = _build_blocks("Test content", date(2026, 3, 18))
         assert blocks[0]["type"] == "header"
-        assert "2026-03-18" in blocks[0]["text"]["text"]
+        assert "March" in blocks[0]["text"]["text"]
 
-    def test_content_in_section_block(self):
+    def test_no_transcript_fallback(self):
+        blocks = _build_blocks("No useful content here", date(2026, 3, 18))
+        # Should have at least header + fallback message + footer
+        assert len(blocks) >= 3
+
+    def test_decisions_section_extracted(self):
+        content = """## Decisions
+- Approved new vendor contract -- Sarah -- standup
+"""
+        blocks = _build_blocks(content, date(2026, 3, 18))
+        block_texts = [b.get("text", {}).get("text", "") for b in blocks if b.get("type") == "section"]
+        has_decisions = any("Decisions" in t for t in block_texts)
+        assert has_decisions
+
+    def test_footer_present(self):
         blocks = _build_blocks("Test content", date(2026, 3, 18))
-        assert len(blocks) >= 2
-        assert blocks[1]["type"] == "section"
-        assert "Test content" in blocks[1]["text"]["text"]
+        last_block = blocks[-1]
+        assert last_block["type"] == "context"
 
 
 class TestSendSlackSummary:
@@ -46,7 +39,7 @@ class TestSendSlackSummary:
         with patch.dict("os.environ", {}, clear=True):
             assert send_slack_summary("content", date(2026, 3, 18)) is False
 
-    @patch("src.notifications.slack.httpx.post")
+    @patch("src.notifications.slack._post_with_retry")
     def test_successful_send(self, mock_post):
         mock_post.return_value.status_code = 200
         result = send_slack_summary(
@@ -55,7 +48,7 @@ class TestSendSlackSummary:
         assert result is True
         mock_post.assert_called_once()
 
-    @patch("src.notifications.slack.httpx.post")
+    @patch("src.notifications.slack._post_with_retry")
     def test_failed_send_returns_false(self, mock_post):
         mock_post.return_value.status_code = 500
         mock_post.return_value.text = "error"
@@ -64,7 +57,7 @@ class TestSendSlackSummary:
         )
         assert result is False
 
-    @patch("src.notifications.slack.httpx.post", side_effect=Exception("connection error"))
+    @patch("src.notifications.slack._post_with_retry", side_effect=Exception("connection error"))
     def test_exception_returns_false(self, mock_post):
         result = send_slack_summary(
             "Test summary", date(2026, 3, 18), webhook_url="https://hooks.slack.com/test"

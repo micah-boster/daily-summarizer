@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from src.models.commitments import Commitment, CommitmentStatus
+from src.synthesis.commitments import ExtractedCommitment
 from src.models.events import NormalizedEvent
 from src.models.sources import (
     ContentType,
@@ -26,16 +26,15 @@ def _make_source_item(**kwargs) -> SourceItem:
     return SourceItem(**defaults)
 
 
-def _make_commitment(**kwargs) -> Commitment:
+def _make_commitment(**kwargs) -> ExtractedCommitment:
     defaults = {
-        "id": "commit_001",
-        "owner": "Sarah Chen",
-        "description": "Update the API docs by Friday",
-        "source_id": "slack_C123_1234567890",
-        "source_type": "source_item",
+        "who": "Sarah Chen",
+        "what": "Update the API docs by Friday",
+        "by_when": "2026-04-05",
+        "source": ["Slack #general"],
     }
     defaults.update(kwargs)
-    return Commitment(**defaults)
+    return ExtractedCommitment(**defaults)
 
 
 class TestSourceType:
@@ -77,22 +76,6 @@ class TestContentType:
     def test_str_enum_comparison(self):
         assert ContentType.THREAD == "thread"
         assert isinstance(ContentType.THREAD, str)
-
-
-class TestCommitmentStatus:
-    def test_all_expected_members_exist(self):
-        expected = ["OPEN", "COMPLETED", "DEFERRED"]
-        for member in expected:
-            assert hasattr(CommitmentStatus, member), f"Missing CommitmentStatus.{member}"
-
-    def test_values_are_lowercase(self):
-        assert CommitmentStatus.OPEN == "open"
-        assert CommitmentStatus.COMPLETED == "completed"
-        assert CommitmentStatus.DEFERRED == "deferred"
-
-    def test_str_enum_comparison(self):
-        assert CommitmentStatus.OPEN == "open"
-        assert isinstance(CommitmentStatus.OPEN, str)
 
 
 class TestSourceItem:
@@ -169,49 +152,36 @@ class TestSourceItem:
         assert item.attribution_text() == "(per slack_message)"
 
 
-class TestCommitment:
+class TestExtractedCommitment:
     def test_minimal_required_fields(self):
         c = _make_commitment()
-        assert c.id == "commit_001"
-        assert c.owner == "Sarah Chen"
-        assert c.description == "Update the API docs by Friday"
-        assert c.source_id == "slack_C123_1234567890"
-        assert c.source_type == "source_item"
+        assert c.who == "Sarah Chen"
+        assert c.what == "Update the API docs by Friday"
+        assert c.by_when == "2026-04-05"
+        assert c.source == ["Slack #general"]
 
-    def test_full_fields_with_by_when(self):
-        c = _make_commitment(
-            by_when=datetime(2026, 4, 5, 17, 0, 0, tzinfo=timezone.utc),
-            status=CommitmentStatus.COMPLETED,
-            source_context="Slack #general",
-            extracted_at=datetime(2026, 4, 1, 10, 5, 0, tzinfo=timezone.utc),
-        )
-        assert c.by_when == datetime(2026, 4, 5, 17, 0, 0, tzinfo=timezone.utc)
-        assert c.status == CommitmentStatus.COMPLETED
-        assert c.source_context == "Slack #general"
-        assert c.extracted_at is not None
+    def test_tbd_owner(self):
+        c = _make_commitment(who="TBD")
+        assert c.who == "TBD"
 
-    def test_default_status_is_open(self):
-        c = _make_commitment()
-        assert c.status == CommitmentStatus.OPEN
+    def test_unspecified_deadline(self):
+        c = _make_commitment(by_when="unspecified")
+        assert c.by_when == "unspecified"
 
-    def test_optional_by_when_defaults_to_none(self):
-        c = _make_commitment()
-        assert c.by_when is None
+    def test_multiple_sources(self):
+        c = _make_commitment(source=["standup", "Slack #proj-alpha"])
+        assert len(c.source) == 2
+        assert "standup" in c.source
+        assert "Slack #proj-alpha" in c.source
 
     def test_json_round_trip(self):
-        c = _make_commitment(
-            by_when=datetime(2026, 4, 5, 17, 0, 0, tzinfo=timezone.utc),
-            source_context="Slack #general",
-        )
+        c = _make_commitment()
         json_str = c.model_dump_json()
-        restored = Commitment.model_validate_json(json_str)
-        assert restored.id == c.id
-        assert restored.owner == c.owner
-        assert restored.description == c.description
+        restored = ExtractedCommitment.model_validate_json(json_str)
+        assert restored.who == c.who
+        assert restored.what == c.what
         assert restored.by_when == c.by_when
-        assert restored.source_id == c.source_id
-        assert restored.source_type == c.source_type
-        assert restored.source_context == c.source_context
+        assert restored.source == c.source
 
 
 class TestSynthesisSourceProtocol:
