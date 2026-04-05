@@ -232,6 +232,16 @@ class DedupConfig(BaseModel):
     log_dir: str = "output/dedup_logs"
 
 
+class EntityConfig(BaseModel):
+    """Entity registry settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    db_path: str = "data/entities.db"
+    auto_create: bool = True
+
+
 class PipelineConfig(BaseModel):
     """Root configuration model for the daily summarizer pipeline.
 
@@ -251,6 +261,7 @@ class PipelineConfig(BaseModel):
     notion: NotionConfig = Field(default_factory=NotionConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
     dedup: DedupConfig = Field(default_factory=DedupConfig)
+    entity: EntityConfig = Field(default_factory=EntityConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +279,7 @@ SECTION_EXAMPLES: dict[str, str] = {
     "notion": 'notion:\n  enabled: false\n  token: ""\n  watched_databases: []',
     "cache": 'cache:\n  raw_ttl_days: 14\n  dedup_log_ttl_days: 30',
     "dedup": 'dedup:\n  enabled: true\n  similarity_threshold: 0.85\n  log_dir: "output/dedup_logs"',
+    "entity": 'entity:\n  enabled: true\n  db_path: "data/entities.db"\n  auto_create: true',
 }
 
 
