@@ -15,6 +15,7 @@ from pathlib import Path
 
 import anthropic
 
+from src.cache_cleanup import cleanup_raw_cache
 from src.config import PipelineConfig, load_config
 from src.ingest.calendar import build_calendar_service, cache_raw_response, fetch_events_for_date
 from src.ingest.gmail import build_gmail_service, cache_raw_emails
@@ -214,6 +215,18 @@ def run_pipeline(ctx: PipelineContext) -> None:
         ctx: PipelineContext with config, dates, services, and shared client.
     """
     current = ctx.target_date
+
+    # Cache retention: cleanup old raw data
+    try:
+        deleted, freed = cleanup_raw_cache(
+            ctx.output_dir,
+            raw_ttl_days=ctx.config.cache.raw_ttl_days,
+            dedup_log_ttl_days=ctx.config.cache.dedup_log_ttl_days,
+        )
+        if deleted:
+            logger.info("Cache cleanup: deleted %d files, freed %d bytes", deleted, freed)
+    except Exception as e:
+        logger.warning("Cache cleanup failed: %s. Continuing.", e)
 
     # Phase 1: Ingest from all sources
     slack_items = _ingest_slack(ctx)
