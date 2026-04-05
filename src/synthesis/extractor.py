@@ -1,19 +1,25 @@
-"""Stage 1: Per-meeting extraction via Claude API.
+"""Stage 1: Per-meeting extraction via Claude API using structured outputs.
 
 Sends each meeting transcript to Claude for structured extraction of
 decisions, commitments, substance, open questions, and tensions.
+Uses json_schema constrained decoding for guaranteed valid output.
 """
 
 from __future__ import annotations
 
+import json
 import logging
-import re
 
 import anthropic
 
 from src.config import PipelineConfig
 from src.models.events import NormalizedEvent
-from src.synthesis.models import ExtractionItem, MeetingExtraction
+from src.synthesis.models import (
+    ExtractionItem,
+    ExtractionItemOutput,
+    MeetingExtraction,
+    MeetingExtractionOutput,
+)
 from src.retry import retry_api_call
 from src.synthesis.prompts import EXTRACTION_PROMPT
 
@@ -24,201 +30,88 @@ DEFAULT_MODEL = "claude-sonnet-4-20250514"
 DEFAULT_MAX_OUTPUT_TOKENS = 4096
 
 
-def _parse_section_items(section_text: str, section_type: str) -> list[ExtractionItem]:
-    """Parse items from a single extraction section.
-
-    Handles two formats:
-    1. Pipe-delimited: - [content] | [who] | [rationale]
-    2. Legacy structured: - **Decision:** content / - **Participants:** names
-
-    Args:
-        section_text: Text content of one section (e.g., everything under ## Decisions).
-        section_type: One of 'decisions', 'commitments', 'substance', 'open_questions', 'tensions'.
-
-    Returns:
-        List of ExtractionItem objects parsed from the section.
-    """
-    if not section_text.strip() or section_text.strip().lower() in ("none", "none."):
-        return []
-
-    items: list[ExtractionItem] = []
-
-    # Secondary labels that indicate multi-line block format (not standalone items)
-    _secondary_labels = {
-        "participants", "owner", "rationale", "deadline", "raised by",
-        "status", "context", "by",
-    }
-
-    # Detect if section uses multi-line block format by checking for secondary labels
-    has_secondary_labels = any(
-        re.match(r"-\s+\*\*(" + "|".join(re.escape(l) for l in _secondary_labels) + r"):\*\*", line.strip(), re.IGNORECASE)
-        for line in section_text.split("\n")
-        if line.strip().startswith("- ")
+@retry_api_call
+def _call_claude_structured_with_retry(client, model, max_tokens, prompt, schema):
+    """Call Claude structured outputs API with retry on transient errors."""
+    return client.messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        messages=[{"role": "user", "content": prompt}],
+        output_config={
+            "format": {
+                "type": "json_schema",
+                "schema": schema,
+            }
+        },
     )
 
-    # If multi-line block format detected, use legacy parser directly
-    if has_secondary_labels:
-        return _parse_legacy_blocks(section_text, section_type)
 
-    # Try pipe-delimited format first (new concise format)
-    for line in section_text.split("\n"):
-        line = line.strip()
-        if not line.startswith("- "):
-            continue
-        line = line[2:].strip()
-
-        # Check for pipe-delimited format
-        if "|" in line:
-            parts = [p.strip() for p in line.split("|")]
-            content = parts[0]
-            participants: list[str] = []
-            rationale: str | None = None
-
-            if len(parts) >= 2 and parts[1]:
-                participants = [p.strip() for p in parts[1].split(",") if p.strip()]
-            if len(parts) >= 3 and parts[2]:
-                rationale = parts[2] if parts[2].lower() not in ("not stated", "none", "") else None
-
-            if content:
-                items.append(ExtractionItem(content=content, participants=participants, rationale=rationale))
-            continue
-
-        # Check for bold-label format: - **Decision:** content (single-line, no secondary labels)
-        bold_match = re.match(r"\*\*\w[\w\s]*:\*\*\s*(.*)", line)
-        if bold_match:
-            content = bold_match.group(1).strip()
-            if content:
-                items.append(ExtractionItem(content=content, participants=[], rationale=None))
-            continue
-
-        # Plain bullet — just content
-        if line:
-            items.append(ExtractionItem(content=line, participants=[], rationale=None))
-
-    # Fall back to legacy multi-line block parsing if no items found
-    if not items:
-        items = _parse_legacy_blocks(section_text, section_type)
-
-    return items
+@retry_api_call
+def _call_claude_structured_fallback_with_retry(client, model, max_tokens, prompt, schema):
+    """Call Claude structured outputs (beta fallback) with retry on transient errors."""
+    return client.messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        messages=[{"role": "user", "content": prompt}],
+        extra_headers={
+            "anthropic-beta": "output-format-2025-01-24",
+        },
+        extra_body={
+            "output_format": {
+                "type": "json_schema",
+                "schema": schema,
+            }
+        },
+    )
 
 
-def _parse_legacy_blocks(section_text: str, section_type: str) -> list[ExtractionItem]:
-    """Parse legacy multi-line extraction format (- **Decision:** / - **Participants:**)."""
-    primary_labels = {
-        "decisions": "Decision",
-        "commitments": "Commitment",
-        "substance": "Item",
-        "open_questions": "Question",
-        "tensions": "Tension",
-    }
-    primary_label = primary_labels.get(section_type, "Item")
-    pattern = rf"-\s+\*\*{primary_label}:\*\*"
-    blocks = re.split(pattern, section_text)
-
-    items: list[ExtractionItem] = []
-    for block in blocks[1:]:
-        block = block.strip()
-        if not block:
-            continue
-
-        lines = block.split("\n")
-        content = lines[0].strip()
-        participants: list[str] = []
-        rationale: str | None = None
-
-        for line in lines[1:]:
-            line = line.strip()
-            if not line.startswith("- **"):
-                continue
-            field_match = re.match(r"-\s+\*\*(\w[\w\s]*):\*\*\s*(.*)", line)
-            if not field_match:
-                continue
-            field_name = field_match.group(1).strip().lower()
-            field_value = field_match.group(2).strip()
-
-            if field_name in ("participants", "owner", "raised by", "who"):
-                participants = [p.strip() for p in field_value.split(",") if p.strip()]
-            elif field_name in ("rationale", "context", "status", "deadline"):
-                if field_value.lower() != "not stated":
-                    rationale = field_value
-
-        if content:
-            items.append(ExtractionItem(content=content, participants=participants, rationale=rationale))
-
-    return items
+def _convert_item(item: ExtractionItemOutput) -> ExtractionItem:
+    """Convert an API output item to the downstream ExtractionItem model."""
+    return ExtractionItem(
+        content=item.content,
+        participants=item.participants,
+        rationale=item.rationale,
+    )
 
 
-def _parse_extraction_response(
-    response_text: str,
+def _convert_output_to_extraction(
+    output: MeetingExtractionOutput,
     meeting_title: str,
     meeting_time: str,
     participants: list[str],
 ) -> MeetingExtraction:
-    """Parse Claude's markdown extraction response into a MeetingExtraction model.
+    """Convert structured API output to a MeetingExtraction for downstream use.
+
+    Maps ExtractionItemOutput -> ExtractionItem for each category and adds
+    meeting metadata from the event (not from Claude's output).
 
     Args:
-        response_text: Claude's full response text in the expected markdown format.
+        output: Validated MeetingExtractionOutput from API response.
         meeting_title: Title of the meeting being extracted.
         meeting_time: ISO format time string.
         participants: List of participant names.
 
     Returns:
-        MeetingExtraction model populated from the response.
+        MeetingExtraction model populated from the structured output.
     """
-    # Split response by ## headers
-    sections: dict[str, str] = {}
-    current_section = ""
-    current_content: list[str] = []
+    decisions = [_convert_item(i) for i in output.decisions]
+    commitments = [_convert_item(i) for i in output.commitments]
+    substance = [_convert_item(i) for i in output.substance]
+    open_questions = [_convert_item(i) for i in output.open_questions]
+    tensions = [_convert_item(i) for i in output.tensions]
 
-    for line in response_text.split("\n"):
-        if line.startswith("## "):
-            if current_section:
-                sections[current_section] = "\n".join(current_content)
-            current_section = line[3:].strip().lower()
-            current_content = []
-        else:
-            current_content.append(line)
-
-    if current_section:
-        sections[current_section] = "\n".join(current_content)
-
-    # Map section names to extraction fields
-    section_map = {
-        "decisions": "decisions",
-        "commitments": "commitments",
-        "substance": "substance",
-        "open questions": "open_questions",
-        "tensions": "tensions",
-    }
-
-    parsed: dict[str, list[ExtractionItem]] = {}
-    for section_name, field_name in section_map.items():
-        section_text = sections.get(section_name, "")
-        parsed[field_name] = _parse_section_items(section_text, field_name)
-
-    # Determine if low-signal (all categories empty)
-    all_empty = all(len(items) == 0 for items in parsed.values())
+    all_empty = not any([decisions, commitments, substance, open_questions, tensions])
 
     return MeetingExtraction(
         meeting_title=meeting_title,
         meeting_time=meeting_time,
         meeting_participants=participants,
-        decisions=parsed.get("decisions", []),
-        commitments=parsed.get("commitments", []),
-        substance=parsed.get("substance", []),
-        open_questions=parsed.get("open_questions", []),
-        tensions=parsed.get("tensions", []),
+        decisions=decisions,
+        commitments=commitments,
+        substance=substance,
+        open_questions=open_questions,
+        tensions=tensions,
         low_signal=all_empty,
-    )
-
-
-@retry_api_call
-def _call_claude_with_retry(client, model, max_tokens, prompt):
-    """Call Claude API with retry on transient errors."""
-    return client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}],
     )
 
 
@@ -229,12 +122,13 @@ def extract_meeting(
 ) -> MeetingExtraction | None:
     """Extract structured information from a single meeting transcript.
 
-    Sends the transcript to Claude for extraction of decisions, commitments,
-    substance, open questions, and tensions.
+    Sends the transcript to Claude using json_schema structured outputs
+    for guaranteed valid JSON. Parses and validates with Pydantic.
 
     Args:
         event: NormalizedEvent with transcript_text attached.
-        config: Pipeline configuration dict with synthesis settings.
+        config: Pipeline configuration with synthesis settings.
+        client: Optional pre-configured Anthropic client.
 
     Returns:
         MeetingExtraction model, or None if event has no transcript.
@@ -265,14 +159,29 @@ def extract_meeting(
     model = config.synthesis.model
     max_tokens = config.synthesis.extraction_max_output_tokens
 
-    # Call Claude API with retry
-    client = client or anthropic.Anthropic()
-    response = _call_claude_with_retry(client, model, max_tokens, prompt)
-    response_text = response.content[0].text
+    # Generate JSON schema from Pydantic model
+    schema = MeetingExtractionOutput.model_json_schema()
 
-    # Parse response into model
-    extraction = _parse_extraction_response(
-        response_text, event.title, meeting_time, participants
+    # Call Claude API with structured output
+    client = client or anthropic.Anthropic()
+    try:
+        response = _call_claude_structured_with_retry(
+            client, model, max_tokens, prompt, schema
+        )
+    except (TypeError, anthropic.BadRequestError):
+        # Fallback: older SDK or API version may use different parameter
+        logger.info("output_config not supported, falling back to beta header")
+        response = _call_claude_structured_fallback_with_retry(
+            client, model, max_tokens, prompt, schema
+        )
+
+    # Parse and validate structured response
+    data = json.loads(response.content[0].text)
+    output = MeetingExtractionOutput.model_validate(data)
+
+    # Convert to downstream MeetingExtraction model
+    extraction = _convert_output_to_extraction(
+        output, event.title, meeting_time, participants
     )
 
     # Log stats
@@ -310,6 +219,7 @@ def extract_all_meetings(
     Args:
         events: List of NormalizedEvent objects.
         config: Pipeline configuration dict.
+        client: Optional pre-configured Anthropic client.
 
     Returns:
         List of MeetingExtraction objects for events that had transcripts.

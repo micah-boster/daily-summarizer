@@ -1,6 +1,6 @@
 """Prompt templates for extraction and synthesis pipeline."""
 
-EXTRACTION_PROMPT = """Extract factual information from this meeting transcript. Be concise — every word must earn its place.
+EXTRACTION_PROMPT = """Extract factual information from this meeting transcript into structured JSON.
 
 Meeting: {meeting_title}
 Date: {meeting_time}
@@ -9,26 +9,16 @@ Participants: {participants}
 Transcript:
 {transcript_text}
 
-Use this exact format. Each bullet = ONE short sentence (15-20 words max). Use first names only.
+Use the reasoning field to think through what happened in the meeting before extracting structured data.
 
-## Decisions
-- [What was decided] | [Who decided] | [Rationale if explicitly stated]
-
-## Commitments
-- [What was committed to] | [Owner] | [Deadline if stated]
-
-## Substance
-- [What happened or was shared that matters]
-
-## Open Questions
-- [Unresolved question] | [Who raised it]
-
-## Tensions
-- [What the disagreement was about] | [Who disagreed] | [resolved/unresolved]
+For each extracted item:
+- content: A single concise factual sentence (15-20 words max)
+- participants: First names only of people involved (e.g., ["Sarah", "Mike"])
+- rationale: The explicit reason if stated in the transcript, or null if not stated
 
 RULES:
 - Facts only. No inference, no editorializing, no evaluation of anyone.
-- If a category has no items, write "None."
+- If a category has no items, leave the list empty.
 - Skip trivial scheduling ("let's meet Tuesday") and social chatter.
 - Do NOT repeat the same point in multiple categories. Pick the best fit.
 - Use first names: "Micah" not "Micah Boster". "Colin" not "Colin Buys".
