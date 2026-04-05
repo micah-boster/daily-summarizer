@@ -4,7 +4,8 @@
 
 - ✅ **v1.0 Daily Intelligence Pipeline** - Phases 0-5 (shipped 2026-04-03)
 - ✅ **v1.5 Expanded Ingest** - Phases 6-12 (shipped 2026-04-05)
-- 📋 **v1.5.1 Notion + Performance + Reliability** - Phases 13-18 (planned)
+- ✅ **v1.5.1 Notion + Performance + Reliability** - Phases 13-18 (shipped 2026-04-05)
+- 🚧 **v2.0 Entity Layer** - Phases 19-23 (in progress)
 
 ## Phases
 
@@ -241,7 +242,8 @@ Plans:
 
 </details>
 
-### v1.5.1 Notion + Performance + Reliability
+<details>
+<summary>v1.5.1 Notion + Performance + Reliability (Phases 13-18) - SHIPPED 2026-04-05</summary>
 
 **Milestone Goal:** Complete the ingest surface with Notion, parallelize the pipeline for speed, harden configuration and caching, and migrate Claude API calls to structured outputs.
 
@@ -250,8 +252,7 @@ Plans:
 - [x] **Phase 15: Notion Ingestion** - Notion page and database ingestion completing the work source surface (completed 2026-04-05)
 - [x] **Phase 16: Reliability Quick Wins** - Slack batch resolution, cache retention policy, and algorithmic dedup pre-filter (completed 2026-04-05)
 - [x] **Phase 17: Asyncio Parallelization** - Concurrent ingest modules and parallel per-meeting extraction via asyncio (completed 2026-04-05)
-
-## Phase Details
+- [x] **Phase 18: Structured Output Completion** - Gap closure: weekly/monthly structured outputs, deprecated beta header removal (completed 2026-04-05)
 
 ### Phase 13: Typed Config Foundation
 **Goal**: Pipeline configuration is validated at startup with typed access, catching misconfigurations immediately instead of failing deep in a run
@@ -265,8 +266,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 13-01-PLAN.md -- Pydantic config model tree, load_config() returning PipelineConfig, error formatter with fuzzy matching, validation tests
-- [ ] 13-02-PLAN.md -- Migrate all 15 consumer files from .get() chains to typed attribute access, update PipelineContext and test fixtures
+- [x] 13-01-PLAN.md -- Pydantic config model tree, load_config() returning PipelineConfig, error formatter with fuzzy matching, validation tests
+- [x] 13-02-PLAN.md -- Migrate all 15 consumer files from .get() chains to typed attribute access, update PipelineContext and test fixtures
 
 ### Phase 14: Structured Output Migration
 **Goal**: Claude API responses are typed Pydantic models instead of parsed markdown, eliminating brittle regex extraction and enabling downstream schema validation
@@ -278,9 +279,10 @@ Plans:
   3. Running the pipeline on a known date produces equivalent content to the old markdown-parsing path (no silent data loss)
   4. The ~234 lines of regex/markdown parsing in extractor.py and synthesizer.py are deleted and replaced by Pydantic model access
 **Plans**: 2 plans
+
 Plans:
-- [ ] 14-01-PLAN.md -- Migrate per-meeting extraction to structured outputs (TDD)
-- [ ] 14-02-PLAN.md -- Migrate daily synthesis to structured outputs (TDD)
+- [x] 14-01-PLAN.md -- Migrate per-meeting extraction to structured outputs (TDD)
+- [x] 14-02-PLAN.md -- Migrate daily synthesis to structured outputs (TDD)
 
 ### Phase 15: Notion Ingestion
 **Goal**: Daily summaries include Notion page updates and database changes, completing the set of work tools ingested by the pipeline
@@ -294,9 +296,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 15-01-PLAN.md -- Notion ingest module: API client, page/DB fetching, SourceItem conversion, config model, tests
-- [ ] 15-02-PLAN.md -- Notion database discovery CLI and main.py subcommand wiring
-- [ ] 15-03-PLAN.md -- Pipeline integration: wire into synthesizer, writer, template, retry error handling
+- [x] 15-01-PLAN.md -- Notion ingest module: API client, page/DB fetching, SourceItem conversion, config model, tests
+- [x] 15-02-PLAN.md -- Notion database discovery CLI and main.py subcommand wiring
+- [x] 15-03-PLAN.md -- Pipeline integration: wire into synthesizer, writer, template, retry error handling
 
 ### Phase 16: Reliability Quick Wins
 **Goal**: Three independent improvements that reduce API call volume, manage disk growth, and add a deterministic dedup layer before LLM synthesis
@@ -310,9 +312,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 16-01-PLAN.md -- Batch Slack user resolution via users.list with disk cache and fallback (TDD)
-- [ ] 16-02-PLAN.md -- Cache retention policy with configurable TTL for raw data cleanup (TDD)
-- [ ] 16-03-PLAN.md -- Cross-source algorithmic dedup pre-filter with decision logging (TDD)
+- [x] 16-01-PLAN.md -- Batch Slack user resolution via users.list with disk cache and fallback (TDD)
+- [x] 16-02-PLAN.md -- Cache retention policy with configurable TTL for raw data cleanup (TDD)
+- [x] 16-03-PLAN.md -- Cross-source algorithmic dedup pre-filter with decision logging (TDD)
 
 ### Phase 17: Asyncio Parallelization
 **Goal**: Independent ingest sources run concurrently and per-meeting Claude calls run in parallel, cutting pipeline wall-clock time roughly in half
@@ -327,31 +329,123 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 17-01-PLAN.md -- Async extraction functions with AsyncAnthropic, semaphore rate limiting, config field
-- [ ] 17-02-PLAN.md -- Async pipeline orchestrator with parallel ingest via asyncio.gather, timing instrumentation
+- [x] 17-01-PLAN.md -- Async extraction functions with AsyncAnthropic, semaphore rate limiting, config field
+- [x] 17-02-PLAN.md -- Async pipeline orchestrator with parallel ingest via asyncio.gather, timing instrumentation
 
 ### Phase 18: Structured Output Completion
-**Goal**: Close STRUCT-01 gap — migrate weekly.py and monthly.py to structured outputs, fix deprecated beta header causing production 400 errors, clean up dead imports
+**Goal**: Close STRUCT-01 gap -- migrate weekly.py and monthly.py to structured outputs, fix deprecated beta header causing production 400 errors, clean up dead imports
 **Depends on**: Phase 14, Phase 17
 **Requirements**: STRUCT-01
 **Gap Closure**: Closes gaps from v1.5.1 milestone audit
 **Success Criteria** (what must be TRUE):
   1. weekly.py uses json_schema structured outputs with a Pydantic model instead of free-text markdown + regex parsing
   2. monthly.py uses json_schema structured outputs with a Pydantic model instead of free-text markdown + regex parsing
-  3. Deprecated output-format-2025-01-24 beta header removed from all API call sites — no 400 errors on extraction
+  3. Deprecated output-format-2025-01-24 beta header removed from all API call sites -- no 400 errors on extraction
   4. Dead import of dedup_source_items removed from pipeline.py
   5. All existing tests pass; new tests cover structured output paths for weekly and monthly
 **Plans**: 2 plans
 
 Plans:
-- [ ] 18-01-PLAN.md -- Migrate weekly.py and monthly.py to structured outputs with Pydantic output models and converter functions (TDD)
-- [ ] 18-02-PLAN.md -- Remove deprecated beta header fallback from extractor/synthesizer/commitments, remove dead dedup import from pipeline.py
+- [x] 18-01-PLAN.md -- Migrate weekly.py and monthly.py to structured outputs with Pydantic output models and converter functions (TDD)
+- [x] 18-02-PLAN.md -- Remove deprecated beta header fallback from extractor/synthesizer/commitments, remove dead dedup import from pipeline.py
+
+</details>
+
+### v2.0 Entity Layer
+
+**Milestone Goal:** Make every synthesis item traceable to partners, people, and initiatives -- so you can ask "what's happening with Affirm?" or "what does Colin owe me?" and get a sourced answer.
+
+- [ ] **Phase 19: Entity Registry Foundation** - SQLite entity storage with schema migrations, alias management, and confidence scoring models
+- [ ] **Phase 20: Entity Discovery + Backfill** - Populate the registry from historical summaries and wire ongoing discovery into the pipeline
+- [ ] **Phase 21: Entity Attribution** - Tag synthesis items with entity references and persist mentions to SQLite and JSON sidecar
+- [ ] **Phase 22: Merge + Split Review** - Entity merge proposals with CLI confirmation and split/undo capability
+- [ ] **Phase 23: Scoped Views + Reports** - CLI entity queries and generated per-entity markdown reports
+
+## Phase Details
+
+### Phase 19: Entity Registry Foundation
+**Goal**: Named entities (partners and people) have persistent storage with alias support and confidence scoring, forming the foundation every other entity feature depends on
+**Depends on**: Phase 18 (v1.5.1 complete)
+**Requirements**: ENTY-01, ENTY-02, ENTY-03
+**Success Criteria** (what must be TRUE):
+  1. User can run a CLI command to create a partner or person entity, and it persists in SQLite across pipeline runs
+  2. User can add, list, and remove aliases for an entity via CLI (e.g., `entity alias add "Colin Roberts" "CR"`) and alias resolution returns the canonical entity
+  3. The SQLite schema includes all tables needed for the full entity layer (entities, aliases, mentions, merge_proposals, relationships) with soft-delete and merge_target_id fields baked in from day one
+  4. Schema migrations run automatically on startup via PRAGMA user_version, so future phases can evolve the schema safely
+  5. Entity config section in config.yaml is validated by Pydantic at startup with sensible defaults
+**Plans**: TBD
+
+Plans:
+- [ ] 19-01: SQLite schema, db connection management (WAL mode), Pydantic entity models, schema migration infrastructure
+- [ ] 19-02: Entity CRUD operations, alias management, confidence scoring model, CLI commands (entity add/list/alias), EntityConfig in config.py
+
+### Phase 20: Entity Discovery + Backfill
+**Goal**: The entity registry is populated -- both from 6+ months of historical summaries and automatically on each new pipeline run -- with HubSpot cross-referencing for enrichment
+**Depends on**: Phase 19
+**Requirements**: DISC-01, DISC-02, DISC-05
+**Success Criteria** (what must be TRUE):
+  1. Running `entity backfill --from 2025-10-01 --to 2026-04-05` scans existing daily sidecar JSONs and populates the registry with discovered partners and people
+  2. A normal daily pipeline run automatically discovers and registers new entities as a post-synthesis step without manual intervention
+  3. Discovered entities are cross-referenced with HubSpot contacts and deals by name match, enriching the registry with external identifiers
+  4. Entity extraction from synthesis output uses structured output fields (extending existing Pydantic models with optional entity_names) and does not break the pipeline if entity processing fails
+  5. Name normalization handles common variants (stripping Inc/LLC, standardizing casing) so "Affirm Inc" and "Affirm" resolve to the same entity
+**Plans**: TBD
+
+Plans:
+- [ ] 20-01: Entity extraction prompt engineering, SynthesisItem/CommitmentRow model extension, name normalization layer, validation against 20+ real summaries
+- [ ] 20-02: Backfill CLI command with weekly batching, ongoing discovery wired into async_pipeline as optional post-synthesis step
+- [ ] 20-03: HubSpot contact/deal cross-reference by name match, entity enrichment with external IDs
+
+### Phase 21: Entity Attribution
+**Goal**: Every synthesis item carries entity references that are persisted to both SQLite (for querying) and JSON sidecar (for portability), making entity-scoped filtering possible
+**Depends on**: Phase 20
+**Requirements**: ATTR-01, ATTR-02
+**Success Criteria** (what must be TRUE):
+  1. Running the daily pipeline produces a sidecar JSON where each synthesis item includes an `entity_references` field linking to registered entities with confidence scores
+  2. Entity mentions are stored in the SQLite `entity_mentions` table with source, date, confidence, and the synthesis item they reference
+  3. The entity attribution stage in the pipeline is wrapped in try/except -- if it fails, the daily summary still generates normally with no entity fields
+  4. Running the pipeline with the entity database deleted or missing still produces a valid daily summary (graceful degradation)
+**Plans**: TBD
+
+Plans:
+- [ ] 21-01: Attributor module (match synthesis entity_names against registry), mention persistence to SQLite, sidecar enrichment
+- [ ] 21-02: Pipeline integration as optional post-synthesis stage in async_pipeline with graceful degradation, end-to-end validation
+
+### Phase 22: Merge + Split Review
+**Goal**: Users can consolidate fragmented entity references ("Colin" / "Colin R." / "colin@partner.com") via merge proposals and undo incorrect merges via split -- so scoped views return clean, consolidated results
+**Depends on**: Phase 21
+**Requirements**: DISC-03, DISC-04
+**Success Criteria** (what must be TRUE):
+  1. The system generates merge proposals when name similarity exceeds the configured threshold, ranked by confidence with full context (which sources, which synthesis items mention each variant)
+  2. User can review merge proposals via CLI (`entity review`) and accept or reject each one, with rejections persisted so the same pair is never proposed again
+  3. User can split an incorrectly merged entity (`entity split`) and mentions are re-attributed to the restored entities
+  4. Merge proposals are capped per review session (configurable, default 10) to prevent proposal fatigue
+**Plans**: TBD
+
+Plans:
+- [ ] 22-01: Merge proposal generation (rapidfuzz similarity), proposal storage, CLI review workflow (accept/reject/skip with persistent rejection)
+- [ ] 22-02: Merge execution (soft pointer via merge_target_id), split/undo capability with mention re-attribution, batch proposal presentation
+
+### Phase 23: Scoped Views + Reports
+**Goal**: Users can ask "what's happening with Affirm?" or "what does Colin owe me?" and get a sourced, time-filtered answer -- the payoff of the entire entity layer
+**Depends on**: Phase 22
+**Requirements**: VIEW-01, VIEW-02, VIEW-03
+**Success Criteria** (what must be TRUE):
+  1. User can run `entity show "Affirm"` and see a scoped report of all synthesis items referencing that entity, ordered by date, with source attribution
+  2. User can run `entity show "Affirm" --from 2026-03-01 --to 2026-04-01` to filter the scoped view by time range
+  3. Running `entity report "Affirm"` generates a per-entity markdown file in `output/entities/` covering the configured time range
+  4. Entity list command (`entity list --type partner`) shows all entities with mention frequency, open commitments count, and last-active date
+  5. Temporal entity summaries surface the most significant recent activity, not just a raw chronological dump
+**Plans**: TBD
+
+Plans:
+- [ ] 23-01: SQL query layer for entity-scoped views, CLI `entity show` and `entity list` commands with terminal output
+- [ ] 23-02: Per-entity markdown report generation via Jinja2, `entity report` CLI command, temporal summary logic (mention frequency, open commitments, last-active)
 
 ## Progress
 
 **Execution Order:**
-Phases 13-18 execute sequentially: 13 -> 14 -> 15 -> 16 -> 17 -> 18.
-Phase 18 is a gap closure phase from the v1.5.1 milestone audit.
+Phases 19-23 execute sequentially: 19 -> 20 -> 21 -> 22 -> 23.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -368,9 +462,14 @@ Phase 18 is a gap closure phase from the v1.5.1 milestone audit.
 | 10. Cross-Source Synthesis + Commitments | v1.5 | 2/2 | Complete | 2026-04-04 |
 | 11. Pipeline Hardening | v1.5 | 2/2 | Complete | 2026-04-04 |
 | 12. Reliability & Test Coverage | v1.5 | 3/3 | Complete | 2026-04-05 |
-| 13. Typed Config Foundation | 2/2 | Complete    | 2026-04-05 | - |
-| 14. Structured Output Migration | 2/2 | Complete    | 2026-04-05 | - |
-| 15. Notion Ingestion | 3/3 | Complete    | 2026-04-05 | - |
-| 16. Reliability Quick Wins | v1.5.1 | 0/3 | Not started | - |
-| 17. Asyncio Parallelization | 2/2 | Complete    | 2026-04-05 | - |
-| 18. Structured Output Completion | 2/2 | Complete    | 2026-04-05 | - |
+| 13. Typed Config Foundation | v1.5.1 | 2/2 | Complete | 2026-04-05 |
+| 14. Structured Output Migration | v1.5.1 | 2/2 | Complete | 2026-04-05 |
+| 15. Notion Ingestion | v1.5.1 | 3/3 | Complete | 2026-04-05 |
+| 16. Reliability Quick Wins | v1.5.1 | 3/3 | Complete | 2026-04-05 |
+| 17. Asyncio Parallelization | v1.5.1 | 2/2 | Complete | 2026-04-05 |
+| 18. Structured Output Completion | v1.5.1 | 2/2 | Complete | 2026-04-05 |
+| 19. Entity Registry Foundation | v2.0 | 0/2 | Not started | - |
+| 20. Entity Discovery + Backfill | v2.0 | 0/3 | Not started | - |
+| 21. Entity Attribution | v2.0 | 0/2 | Not started | - |
+| 22. Merge + Split Review | v2.0 | 0/2 | Not started | - |
+| 23. Scoped Views + Reports | v2.0 | 0/2 | Not started | - |

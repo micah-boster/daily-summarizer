@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: unknown
-last_updated: "2026-04-05T21:30:53.211Z"
+milestone: v2.0
+milestone_name: Entity Layer
+status: ready_to_plan
+last_updated: "2026-04-05T00:00:00.000Z"
 progress:
-  total_phases: 19
-  completed_phases: 18
-  total_plans: 43
-  completed_plans: 40
+  total_phases: 5
+  completed_phases: 0
+  total_plans: 11
+  completed_plans: 0
 ---
 
 # Project State
@@ -18,20 +18,35 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-05)
 
 **Core value:** Every morning I open a structured daily summary of yesterday's work and find it accurate, useful, and worth 5 minutes of my time -- without having produced it manually.
-**Current focus:** Defining v2.0 Entity Layer requirements
+**Current focus:** v2.0 Entity Layer -- Phase 19 Entity Registry Foundation
 
 ## Current Position
 
-Phase: 18-structured-output-completion (gap closure)
-Plan: 2/2 complete
-Status: Phase 18 complete
-Last activity: 2026-04-05 — Completed 18-01 weekly/monthly structured output migration
+Phase: 19 of 23 (Entity Registry Foundation)
+Plan: 0 of 2 in current phase
+Status: Ready to plan
+Last activity: 2026-04-05 -- Roadmap created for v2.0 Entity Layer (5 phases, 11 plans)
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2 (v2.0 gap closure, Phase 18 Plans 01+02)
-- Prior milestones: 14 (v1.0) + 7 (v1.5) + 12 (v1.5.1) = 33 plans
+- Total plans completed: 35 (v1.0: 14, v1.5: 7, v1.5.1: 12, v2.0 gap: 2)
+- Average duration: ~15 min
+- Total execution time: ~8.8 hours
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| Prior milestones | 35 | ~8.8h | ~15 min |
+
+**Recent Trend:**
+- Last 5 plans: Phase 17-01, 17-02, 18-01, 18-02 (all fast)
+- Trend: Stable
+
+*Updated after each plan completion*
 
 ## Accumulated Context
 
@@ -40,14 +55,11 @@ Last activity: 2026-04-05 — Completed 18-01 weekly/monthly structured output m
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [18-01]: Migrated weekly.py and monthly.py to json_schema structured outputs, eliminating last regex parsers
-- [18-02]: Removed fallback tests since beta header fallback was already broken (400 errors) and code path deleted
-- [v2.0 scoping]: Entity registry in SQLite (first non-flat-file storage)
-- [v2.0 scoping]: People/partners first, initiatives second
-- [v2.0 scoping]: Semi-automated discovery with user confirm/reject/merge
-- [v2.0 scoping]: Backfill from existing summaries to bootstrap entities
-- [v2.0 scoping]: Entity attribution during synthesis (structured output fields)
-- [v2.0 scoping]: Scoped views via CLI + generated markdown
+- [v2.0 roadmap]: 5 phases (19-23) following strict dependency chain: Registry -> Discovery -> Attribution -> Merge -> Views
+- [v2.0 roadmap]: Initiatives deferred to v2.1 -- people/partners must stabilize first
+- [v2.0 roadmap]: Split ships WITH merge (Phase 22) -- never merge without undo capability
+- [v2.0 roadmap]: Backfill + ongoing discovery in same phase (20) -- both populate the registry
+- [v2.0 roadmap]: HubSpot cross-reference in Phase 20 alongside discovery (enrichment during registration)
 
 ### Pending Todos
 
@@ -55,12 +67,13 @@ None yet.
 
 ### Blockers/Concerns
 
-- SQLite introduces new dependency and storage paradigm — schema design is critical
-- Entity merge is an unsolved problem in general; starting with semi-automated is the right call
-- Backfill discovery will process all historical summaries — may need batching for token costs
+- SQLite introduces new dependency and storage paradigm -- schema design is critical (Phase 19)
+- Entity extraction prompt needs validation on 20+ real summaries before full backfill (Phase 20)
+- Backfill cost estimate ($2-5 for 180 days) needs pilot verification (Phase 20)
+- False merges are catastrophic -- zero auto-merge on fuzzy signals, only deterministic IDs (Phase 22)
 
 ## Session Continuity
 
 Last session: 2026-04-05
-Stopped at: Completed 18-01-PLAN.md (weekly/monthly structured output migration)
+Stopped at: Created v2.0 Entity Layer roadmap (Phases 19-23)
 Resume file: None

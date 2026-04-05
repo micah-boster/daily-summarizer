@@ -165,12 +165,25 @@
 | DEDUP-01 | Phase 16 | Complete |
 | PERF-01 | Phase 17 | Complete |
 | PERF-02 | Phase 17 | Complete |
+| ENTY-01 | Phase 19 | Pending |
+| ENTY-02 | Phase 19 | Pending |
+| ENTY-03 | Phase 19 | Pending |
+| DISC-01 | Phase 20 | Pending |
+| DISC-02 | Phase 20 | Pending |
+| DISC-05 | Phase 20 | Pending |
+| ATTR-01 | Phase 21 | Pending |
+| ATTR-02 | Phase 21 | Pending |
+| DISC-03 | Phase 22 | Pending |
+| DISC-04 | Phase 22 | Pending |
+| VIEW-01 | Phase 23 | Pending |
+| VIEW-02 | Phase 23 | Pending |
+| VIEW-03 | Phase 23 | Pending |
 
 **Coverage:**
 - v1.5 requirements: 15 total, 15 mapped, 0 unmapped
 - v1.5.1 requirements: 8 total, 8 mapped, 0 unmapped
-- v2.0 requirements: 13 total, 0 mapped, 13 unmapped (pending roadmap)
+- v2.0 requirements: 13 total, 13 mapped, 0 unmapped
 
 ---
 *Requirements defined: 2026-04-03*
-*Last updated: 2026-04-05 after v2.0 requirements definition*
+*Last updated: 2026-04-05 after v2.0 roadmap creation*
