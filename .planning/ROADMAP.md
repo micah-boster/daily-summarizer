@@ -373,4 +373,4 @@ Phase 18 is a gap closure phase from the v1.5.1 milestone audit.
 | 15. Notion Ingestion | 3/3 | Complete    | 2026-04-05 | - |
 | 16. Reliability Quick Wins | v1.5.1 | 0/3 | Not started | - |
 | 17. Asyncio Parallelization | 2/2 | Complete    | 2026-04-05 | - |
-| 18. Structured Output Completion | 2/2 | Complete   | 2026-04-05 | - |
+| 18. Structured Output Completion | 2/2 | Complete    | 2026-04-05 | - |
