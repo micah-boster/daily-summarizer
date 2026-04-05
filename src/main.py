@@ -99,6 +99,17 @@ def parse_args() -> argparse.Namespace:
         help="Path to config YAML file.",
     )
 
+    # Discover-notion subcommand
+    discover_notion_parser = subparsers.add_parser(
+        "discover-notion", help="Discover and configure Notion databases for ingestion"
+    )
+    discover_notion_parser.add_argument(
+        "--config",
+        type=str,
+        default="config/config.yaml",
+        help="Path to config YAML file.",
+    )
+
     # For backward compatibility: add --from and --to at top level
     parser.add_argument(
         "--from",
@@ -281,6 +292,13 @@ def run_discover_slack(args: argparse.Namespace) -> None:
     run_discovery(config)
 
 
+def run_discover_notion(args: argparse.Namespace) -> None:
+    """Run Notion database discovery."""
+    from src.ingest.notion_discovery import run_notion_discovery
+
+    run_notion_discovery(args.config)
+
+
 def main() -> None:
     args = parse_args()
 
@@ -290,6 +308,8 @@ def main() -> None:
         run_monthly(args)
     elif args.command == "discover-slack":
         run_discover_slack(args)
+    elif args.command == "discover-notion":
+        run_discover_notion(args)
     else:
         # Default: daily pipeline (backward compatible)
         run_daily(args)
