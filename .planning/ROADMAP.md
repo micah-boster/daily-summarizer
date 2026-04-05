@@ -390,11 +390,11 @@ Plans:
   3. The SQLite schema includes all tables needed for the full entity layer (entities, aliases, mentions, merge_proposals, relationships) with soft-delete and merge_target_id fields baked in from day one
   4. Schema migrations run automatically on startup via PRAGMA user_version, so future phases can evolve the schema safely
   5. Entity config section in config.yaml is validated by Pydantic at startup with sensible defaults
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 19-01: SQLite schema, db connection management (WAL mode), Pydantic entity models, schema migration infrastructure
-- [ ] 19-02: Entity CRUD operations, alias management, confidence scoring model, CLI commands (entity add/list/alias), EntityConfig in config.py
+- [ ] 19-01-PLAN.md -- SQLite schema, Pydantic entity models, migration infrastructure, EntityConfig, db connection management
+- [ ] 19-02-PLAN.md -- EntityRepository CRUD, alias management, CLI commands (entity add/list/show/remove/alias), .gitignore update
 
 ### Phase 20: Entity Discovery + Backfill
 **Goal**: The entity registry is populated -- both from 6+ months of historical summaries and automatically on each new pipeline run -- with HubSpot cross-referencing for enrichment
@@ -406,7 +406,7 @@ Plans:
   3. Discovered entities are cross-referenced with HubSpot contacts and deals by name match, enriching the registry with external identifiers
   4. Entity extraction from synthesis output uses structured output fields (extending existing Pydantic models with optional entity_names) and does not break the pipeline if entity processing fails
   5. Name normalization handles common variants (stripping Inc/LLC, standardizing casing) so "Affirm Inc" and "Affirm" resolve to the same entity
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
 - [ ] 20-01: Entity extraction prompt engineering, SynthesisItem/CommitmentRow model extension, name normalization layer, validation against 20+ real summaries
@@ -422,7 +422,7 @@ Plans:
   2. Entity mentions are stored in the SQLite `entity_mentions` table with source, date, confidence, and the synthesis item they reference
   3. The entity attribution stage in the pipeline is wrapped in try/except -- if it fails, the daily summary still generates normally with no entity fields
   4. Running the pipeline with the entity database deleted or missing still produces a valid daily summary (graceful degradation)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
 - [ ] 21-01: Attributor module (match synthesis entity_names against registry), mention persistence to SQLite, sidecar enrichment
@@ -437,7 +437,7 @@ Plans:
   2. User can review merge proposals via CLI (`entity review`) and accept or reject each one, with rejections persisted so the same pair is never proposed again
   3. User can split an incorrectly merged entity (`entity split`) and mentions are re-attributed to the restored entities
   4. Merge proposals are capped per review session (configurable, default 10) to prevent proposal fatigue
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
 - [ ] 22-01: Merge proposal generation (rapidfuzz similarity), proposal storage, CLI review workflow (accept/reject/skip with persistent rejection)
@@ -453,7 +453,7 @@ Plans:
   3. Running `entity report "Affirm"` generates a per-entity markdown file in `output/entities/` covering the configured time range
   4. Entity list command (`entity list --type partner`) shows all entities with mention frequency, open commitments count, and last-active date
   5. Temporal entity summaries surface the most significant recent activity, not just a raw chronological dump
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
 - [ ] 23-01: SQL query layer for entity-scoped views, CLI `entity show` and `entity list` commands with terminal output
