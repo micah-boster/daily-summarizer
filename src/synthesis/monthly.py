@@ -8,6 +8,7 @@ structured MonthlySynthesis with arcs, shifts, risks, and metrics.
 from __future__ import annotations
 
 import calendar
+import json
 import logging
 import re
 from datetime import date, datetime, timezone
@@ -17,6 +18,7 @@ import anthropic
 
 from src.config import PipelineConfig
 from src.models.rollups import MonthlyMetrics, MonthlySynthesis, ThematicArc
+from src.synthesis.models import MonthlySynthesisOutput
 from src.synthesis.prompts import MONTHLY_NARRATIVE_PROMPT
 from src.retry import retry_api_call
 from src.synthesis.validator import validate_evidence_only
@@ -28,12 +30,18 @@ DEFAULT_MAX_OUTPUT_TOKENS = 8192
 
 
 @retry_api_call
-def _call_claude_with_retry(client, model, max_tokens, prompt):
-    """Call Claude API with retry on transient errors."""
+def _call_claude_structured_with_retry(client, model, max_tokens, prompt, schema):
+    """Call Claude API with structured output and retry on transient errors."""
     return client.messages.create(
         model=model,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
+        output_config={
+            "format": {
+                "type": "json_schema",
+                "schema": schema,
+            }
+        },
     )
 
 
@@ -220,141 +228,42 @@ def _build_monthly_narrative_prompt(
     )
 
 
-def _parse_monthly_response(
-    response_text: str,
+def _convert_monthly_output(
+    output: MonthlySynthesisOutput,
 ) -> tuple[list[ThematicArc], list[str], list[str], list[dict]]:
-    """Parse Claude's monthly narrative response into structured models.
+    """Convert structured output to domain models.
 
     Args:
-        response_text: Claude's full response text.
+        output: Validated MonthlySynthesisOutput from Claude.
 
     Returns:
         Tuple of (thematic_arcs, strategic_shifts, emerging_risks, still_open).
     """
     arcs: list[ThematicArc] = []
-    strategic_shifts: list[str] = []
-    emerging_risks: list[str] = []
+    for a in output.thematic_arcs:
+        arcs.append(
+            ThematicArc(
+                title=a.title,
+                trajectory=a.trajectory,
+                weeks_active=a.weeks_active,
+                description=a.description,
+                key_moments=a.key_moments,
+            )
+        )
+
+    strategic_shifts = list(output.strategic_shifts)
+    emerging_risks = list(output.emerging_risks)
+
     still_open: list[dict] = []
-
-    # Split by ## and ### headers
-    sections: dict[str, str] = {}
-    current_section = ""
-    current_content: list[str] = []
-
-    in_arcs_section = False
-
-    for line in response_text.split("\n"):
-        if line.startswith("## ") and "thematic arc" in line[3:].strip().lower():
-            # Entering the Thematic Arcs section
-            if current_section:
-                sections[current_section] = "\n".join(current_content).strip()
-            current_section = line[3:].strip()
-            current_content = []
-            in_arcs_section = True
-        elif line.startswith("### ") and (in_arcs_section or current_section.startswith("arc:")):
-            # Subsection under Thematic Arcs
-            if current_section:
-                sections[current_section] = "\n".join(current_content).strip()
-            current_section = f"arc:{line[4:].strip()}"
-            current_content = []
-        elif line.startswith("## "):
-            if current_section:
-                sections[current_section] = "\n".join(current_content).strip()
-            current_section = line[3:].strip()
-            current_content = []
-            in_arcs_section = False
-        else:
-            current_content.append(line)
-
-    if current_section:
-        sections[current_section] = "\n".join(current_content).strip()
-
-    # Parse thematic arcs (sections starting with "arc:")
-    for section_name, section_text in sections.items():
-        if section_name.startswith("arc:"):
-            arc_title = section_name[4:].strip()
-            arc = _parse_arc_section(arc_title, section_text)
-            if arc:
-                arcs.append(arc)
-
-    # Parse strategic shifts
-    for section_name, section_text in sections.items():
-        if "strategic" in section_name.lower() and "shift" in section_name.lower():
-            strategic_shifts = _parse_bullet_list(section_text)
-
-    # Parse emerging risks
-    for section_name, section_text in sections.items():
-        if "emerging" in section_name.lower() and "risk" in section_name.lower():
-            emerging_risks = _parse_bullet_list(section_text)
-
-    # Parse still open / carrying forward
-    for section_name, section_text in sections.items():
-        if "still open" in section_name.lower() or "carrying forward" in section_name.lower():
-            for item in _parse_bullet_list(section_text):
-                still_open.append({"content": item})
+    for item in output.still_open:
+        d: dict = {"content": item.content}
+        if item.owner is not None:
+            d["owner"] = item.owner
+        if item.since is not None:
+            d["since"] = item.since
+        still_open.append(d)
 
     return arcs, strategic_shifts, emerging_risks, still_open
-
-
-def _parse_arc_section(title: str, text: str) -> ThematicArc | None:
-    """Parse a single thematic arc section."""
-    if not title or not text.strip():
-        return None
-
-    trajectory = "stable"
-    weeks_active: list[int] = []
-    description = ""
-    key_moments: list[str] = []
-
-    description_lines: list[str] = []
-    in_key_moments = False
-
-    for line in text.split("\n"):
-        stripped = line.strip()
-
-        if stripped.lower().startswith("**trajectory:**"):
-            val = stripped.split(":", 1)[1].strip().strip("*").strip().lower()
-            if val in ("growing", "declining", "stable", "emerging", "resolved"):
-                trajectory = val
-
-        elif stripped.lower().startswith("**active weeks:**"):
-            weeks_str = stripped.split(":", 1)[1].strip().strip("*").strip()
-            # Parse "W14, W15, W16" or "14, 15, 16"
-            for part in weeks_str.split(","):
-                part = part.strip().upper().lstrip("W")
-                try:
-                    weeks_active.append(int(part))
-                except ValueError:
-                    pass
-
-        elif stripped.lower().startswith("key moments:") or stripped.lower().startswith("**key moments"):
-            in_key_moments = True
-
-        elif in_key_moments and stripped.startswith("- "):
-            key_moments.append(stripped[2:].strip())
-
-        elif not in_key_moments and stripped and not stripped.startswith("**"):
-            description_lines.append(stripped)
-
-    description = " ".join(description_lines).strip()
-
-    return ThematicArc(
-        title=title,
-        description=description,
-        weeks_active=weeks_active,
-        trajectory=trajectory,
-        key_moments=key_moments,
-    )
-
-
-def _parse_bullet_list(text: str) -> list[str]:
-    """Extract bullet items from text."""
-    items: list[str] = []
-    for line in text.split("\n"):
-        stripped = line.strip()
-        if stripped.startswith("- ") and stripped[2:].strip():
-            items.append(stripped[2:].strip())
-    return items
 
 
 def synthesize_monthly(
@@ -405,21 +314,13 @@ def synthesize_monthly(
     max_tokens = config.synthesis.monthly_max_output_tokens
 
     client = client or anthropic.Anthropic()
-    response = _call_claude_with_retry(client, model, max_tokens, prompt)
-    response_text = response.content[0].text
+    schema = MonthlySynthesisOutput.model_json_schema()
+    response = _call_claude_structured_with_retry(client, model, max_tokens, prompt, schema)
+    data = json.loads(response.content[0].text)
+    output = MonthlySynthesisOutput.model_validate(data)
 
-    # Validate evidence-only language
-    violations = validate_evidence_only(response_text)
-    if violations:
-        logger.warning(
-            "Monthly synthesis contains %d evaluative language violation(s):",
-            len(violations),
-        )
-        for v in violations[:5]:
-            logger.warning("  [%s] '%s' in: ...%s...", v.pattern, v.text, v.context)
-
-    # Parse response
-    arcs, strategic_shifts, emerging_risks, still_open = _parse_monthly_response(response_text)
+    # Convert structured output to domain models
+    arcs, strategic_shifts, emerging_risks, still_open = _convert_monthly_output(output)
 
     logger.info(
         "Monthly %s %d: %d arcs, %d shifts, %d risks",

@@ -7,6 +7,7 @@ WeeklySynthesis with threads, single-day items, and still-open tracking.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from datetime import date, datetime, timedelta, timezone
@@ -16,6 +17,7 @@ import anthropic
 
 from src.config import PipelineConfig
 from src.models.rollups import ThreadEntry, WeeklySynthesis, WeeklyThread
+from src.synthesis.models import WeeklySynthesisOutput
 from src.synthesis.prompts import WEEKLY_THREAD_DETECTION_PROMPT
 from src.retry import retry_api_call
 from src.synthesis.validator import validate_evidence_only
@@ -23,17 +25,23 @@ from src.synthesis.validator import validate_evidence_only
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
+DEFAULT_MAX_OUTPUT_TOKENS = 8192
 
 
 @retry_api_call
-def _call_claude_with_retry(client, model, max_tokens, prompt):
-    """Call Claude API with retry on transient errors."""
+def _call_claude_structured_with_retry(client, model, max_tokens, prompt, schema):
+    """Call Claude API with structured output and retry on transient errors."""
     return client.messages.create(
         model=model,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
+        output_config={
+            "format": {
+                "type": "json_schema",
+                "schema": schema,
+            }
+        },
     )
-DEFAULT_MAX_OUTPUT_TOKENS = 8192
 
 
 def _get_week_date_range(target_date: date) -> tuple[date, date]:
@@ -219,198 +227,86 @@ def _build_thread_detection_prompt(summaries: list[dict]) -> str:
     )
 
 
-def _parse_weekly_response(
-    response_text: str, summaries: list[dict]
-) -> tuple[list[WeeklyThread], list[ThreadEntry], list[dict]]:
-    """Parse Claude's thread detection response into structured models.
+def _resolve_date_from_label(day_label: str, summaries: list[dict]) -> date | None:
+    """Resolve a day label (e.g. 'Monday, March 30') to a date using summaries.
 
     Args:
-        response_text: Claude's full response text.
-        summaries: Original daily summaries (for date reference).
+        day_label: Day label string from structured output.
+        summaries: List of daily summary dicts with 'date' keys.
+
+    Returns:
+        Resolved date, or first summary date as fallback, or None.
+    """
+    for s in summaries:
+        summary_date = s["date"]
+        # Match by formatted day name with zero-padded and non-padded day
+        # strftime %d is zero-padded; also check non-padded via %-d (platform-dependent)
+        formatted_padded = summary_date.strftime("%A, %B %d")
+        formatted_unpadded = summary_date.strftime("%A, %B ") + str(summary_date.day)
+        if day_label in formatted_padded or day_label in formatted_unpadded:
+            return summary_date
+        # Also check if the formatted string is a substring of the label
+        if formatted_padded in day_label or formatted_unpadded in day_label:
+            return summary_date
+        # Match by ISO date string
+        if day_label == summary_date.isoformat():
+            return summary_date
+    # Fallback to first summary date
+    if summaries:
+        return summaries[0]["date"]
+    return None
+
+
+def _convert_weekly_output(
+    output: WeeklySynthesisOutput, summaries: list[dict]
+) -> tuple[list[WeeklyThread], list[ThreadEntry], list[dict]]:
+    """Convert structured output to domain models.
+
+    Args:
+        output: Validated WeeklySynthesisOutput from Claude.
+        summaries: Original daily summaries (for date resolution).
 
     Returns:
         Tuple of (threads, single_day_items, still_open).
     """
     threads: list[WeeklyThread] = []
+    for t in output.threads:
+        entries: list[ThreadEntry] = []
+        for e in t.entries:
+            entry_date = _resolve_date_from_label(e.day_label, summaries)
+            if entry_date and e.content:
+                entries.append(
+                    ThreadEntry(date=entry_date, content=e.content, category=e.category)
+                )
+        threads.append(
+            WeeklyThread(
+                title=t.title,
+                significance=t.significance,
+                entries=entries,
+                progression=t.progression,
+                status=t.status,
+                tags=t.tags,
+            )
+        )
+
     single_day_items: list[ThreadEntry] = []
+    for item in output.single_day_items:
+        entry_date = _resolve_date_from_label(item.day_label, summaries)
+        if entry_date and item.content:
+            single_day_items.append(
+                ThreadEntry(date=entry_date, content=item.content, category=item.category)
+            )
+
     still_open: list[dict] = []
-
-    # Split by ## headers
-    sections: dict[str, str] = {}
-    current_section = ""
-    current_content: list[str] = []
-
-    for line in response_text.split("\n"):
-        if line.startswith("## "):
-            if current_section:
-                sections[current_section] = "\n".join(current_content).strip()
-            current_section = line[3:].strip()
-            current_content = []
-        else:
-            current_content.append(line)
-
-    if current_section:
-        sections[current_section] = "\n".join(current_content).strip()
-
-    # Parse thread sections (## Thread: Title or ## Thread N: Title)
-    for section_name, section_text in sections.items():
-        if section_name.lower().startswith("thread"):
-            thread = _parse_thread_section(section_name, section_text, summaries)
-            if thread:
-                threads.append(thread)
-
-    # Parse single-day items
-    for section_name, section_text in sections.items():
-        if "single" in section_name.lower() and "item" in section_name.lower():
-            single_day_items = _parse_single_day_items(section_text)
-
-    # Parse still open
-    for section_name, section_text in sections.items():
-        if "still open" in section_name.lower() or "open" == section_name.lower():
-            still_open = _parse_still_open(section_text)
+    for item in output.still_open:
+        d: dict = {"content": item.content}
+        if item.owner is not None:
+            d["owner"] = item.owner
+        if item.since is not None:
+            d["since"] = item.since
+        still_open.append(d)
 
     return threads, single_day_items, still_open
-
-
-def _parse_thread_section(
-    section_name: str, section_text: str, summaries: list[dict]
-) -> WeeklyThread | None:
-    """Parse a single thread section into a WeeklyThread model."""
-    # Extract title from section name: "Thread 1: Title" or "Thread: Title"
-    title_match = re.match(r"Thread(?:\s+\d+)?:\s*(.*)", section_name, re.IGNORECASE)
-    title = title_match.group(1).strip() if title_match else section_name
-
-    if not title or not section_text.strip():
-        return None
-
-    # Parse fields
-    significance = "medium"
-    status = "open"
-    progression = ""
-    tags: list[str] = []
-    entries: list[ThreadEntry] = []
-
-    for line in section_text.split("\n"):
-        stripped = line.strip()
-
-        if stripped.lower().startswith("**significance:**"):
-            val = stripped.split(":", 1)[1].strip().strip("*").strip().lower()
-            if val in ("high", "medium"):
-                significance = val
-
-        elif stripped.lower().startswith("**status:**"):
-            val = stripped.split(":", 1)[1].strip().strip("*").strip().lower()
-            if val in ("resolved", "open", "escalated"):
-                status = val
-
-        elif stripped.lower().startswith("**progression:**"):
-            progression = stripped.split(":", 1)[1].strip().strip("*").strip()
-
-        elif stripped.lower().startswith("**tags:**"):
-            tags_str = stripped.split(":", 1)[1].strip().strip("*").strip()
-            tags = [t.strip() for t in tags_str.split(",") if t.strip()]
-
-        elif stripped.startswith("- **") and "):" in stripped:
-            # Entry: "- **Monday, April 3** (decision): Content here"
-            entry = _parse_thread_entry(stripped, summaries)
-            if entry:
-                entries.append(entry)
-
-    return WeeklyThread(
-        title=title,
-        significance=significance,
-        entries=entries,
-        progression=progression,
-        status=status,
-        tags=tags,
-    )
-
-
-def _parse_thread_entry(line: str, summaries: list[dict]) -> ThreadEntry | None:
-    """Parse a single thread entry line into a ThreadEntry model."""
-    # Pattern: "- **DayName, Month Day** (category): content"
-    # or: "- **YYYY-MM-DD** (category): content"
-    match = re.match(
-        r"-\s+\*\*([^*]+)\*\*\s*\((\w+)\)\s*:\s*(.*)", line.strip()
-    )
-    if not match:
-        return None
-
-    date_str = match.group(1).strip()
-    category = match.group(2).strip().lower()
-    content = match.group(3).strip()
-
-    # Try to resolve date from summaries
-    entry_date = None
-    for s in summaries:
-        # Match by formatted day name or ISO date
-        if date_str in s["date"].strftime("%A, %B %d") or date_str == s["date"].isoformat():
-            entry_date = s["date"]
-            break
-
-    if entry_date is None and summaries:
-        entry_date = summaries[0]["date"]  # Fallback
-
-    if entry_date and content:
-        return ThreadEntry(date=entry_date, content=content, category=category)
-    return None
-
-
-def _parse_single_day_items(section_text: str) -> list[ThreadEntry]:
-    """Parse single-day items section into ThreadEntry list."""
-    items: list[ThreadEntry] = []
-
-    for line in section_text.split("\n"):
-        stripped = line.strip()
-        if not stripped.startswith("- "):
-            continue
-
-        # Pattern: "- **YYYY-MM-DD** (category): content" or "- (category): content"
-        match = re.match(
-            r"-\s+(?:\*\*([^*]+)\*\*\s*)?\((\w+)\)\s*:\s*(.*)", stripped
-        )
-        if match:
-            date_str = match.group(1)
-            category = match.group(2).strip().lower()
-            content = match.group(3).strip()
-            try:
-                entry_date = date.fromisoformat(date_str) if date_str else date.today()
-            except (ValueError, TypeError):
-                entry_date = date.today()
-            if content:
-                items.append(
-                    ThreadEntry(date=entry_date, content=content, category=category)
-                )
-
-    return items
-
-
-def _parse_still_open(section_text: str) -> list[dict]:
-    """Parse still-open section into list of dicts."""
-    items: list[dict] = []
-
-    for line in section_text.split("\n"):
-        stripped = line.strip()
-        if not stripped.startswith("- "):
-            continue
-
-        # Simple parsing: each bullet is an open item
-        content = stripped[2:].strip()
-        if content and content.lower() != "none":
-            item: dict = {"content": content}
-
-            # Try to extract owner/date from content
-            owner_match = re.search(r"\*\*Owner:\*\*\s*([^|]+)", content)
-            if owner_match:
-                item["owner"] = owner_match.group(1).strip()
-
-            date_match = re.search(r"\*\*Since:\*\*\s*(\d{4}-\d{2}-\d{2})", content)
-            if date_match:
-                item["since"] = date_match.group(1)
-
-            items.append(item)
-
-    return items
 
 
 def synthesize_weekly(
@@ -480,21 +376,13 @@ def synthesize_weekly(
     max_tokens = config.synthesis.weekly_max_output_tokens
 
     client = client or anthropic.Anthropic()
-    response = _call_claude_with_retry(client, model, max_tokens, prompt)
-    response_text = response.content[0].text
+    schema = WeeklySynthesisOutput.model_json_schema()
+    response = _call_claude_structured_with_retry(client, model, max_tokens, prompt, schema)
+    data = json.loads(response.content[0].text)
+    output = WeeklySynthesisOutput.model_validate(data)
 
-    # Validate evidence-only language
-    violations = validate_evidence_only(response_text)
-    if violations:
-        logger.warning(
-            "Weekly synthesis contains %d evaluative language violation(s):",
-            len(violations),
-        )
-        for v in violations[:5]:
-            logger.warning("  [%s] '%s' in: ...%s...", v.pattern, v.text, v.context)
-
-    # Parse response
-    threads, single_day_items, still_open = _parse_weekly_response(response_text, summaries)
+    # Convert structured output to domain models
+    threads, single_day_items, still_open = _convert_weekly_output(output, summaries)
 
     logger.info(
         "Weekly %d-W%02d: %d threads, %d single-day items, %d still open",
