@@ -197,6 +197,20 @@ class HubSpotConfig(BaseModel):
     portal_url: str = ""
 
 
+class NotionConfig(BaseModel):
+    """Notion ingestion settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    token: str = ""
+    content_max_chars: int = Field(default=200, ge=50)
+    max_pages_per_day: int = Field(default=100, ge=1)
+    max_db_items_per_day: int = Field(default=200, ge=1)
+    watched_databases: list[str] = Field(default_factory=list)
+    notion_version: str = "2022-06-28"
+
+
 class PipelineConfig(BaseModel):
     """Root configuration model for the daily summarizer pipeline.
 
@@ -213,6 +227,7 @@ class PipelineConfig(BaseModel):
     slack: SlackConfig = Field(default_factory=SlackConfig)
     google_docs: GoogleDocsConfig = Field(default_factory=GoogleDocsConfig)
     hubspot: HubSpotConfig = Field(default_factory=HubSpotConfig)
+    notion: NotionConfig = Field(default_factory=NotionConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +242,7 @@ SECTION_EXAMPLES: dict[str, str] = {
     "slack": "slack:\n  enabled: false\n  channels: []\n  thread_min_replies: 3",
     "google_docs": "google_docs:\n  enabled: false\n  content_max_chars: 2500",
     "hubspot": 'hubspot:\n  enabled: false\n  ownership_scope: "mine"\n  max_deals: 50',
+    "notion": 'notion:\n  enabled: false\n  token: ""\n  watched_databases: []',
 }
 
 

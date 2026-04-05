@@ -16,6 +16,8 @@ class SourceType(StrEnum):
     HUBSPOT_ACTIVITY = "hubspot_activity"
     GOOGLE_DOC_EDIT = "google_doc_edit"
     GOOGLE_DOC_COMMENT = "google_doc_comment"
+    NOTION_PAGE = "notion_page"
+    NOTION_DB = "notion_db"
     MEETING = "meeting"
 
 
