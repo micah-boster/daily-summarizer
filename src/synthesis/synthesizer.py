@@ -1,20 +1,21 @@
-"""Stage 2: Daily cross-meeting synthesis via Claude API.
+"""Stage 2: Daily cross-meeting synthesis via Claude API using structured outputs.
 
 Merges per-meeting extractions into a unified daily intelligence brief
 organized by the three core questions: Substance, Decisions, Commitments.
+Uses json_schema constrained decoding for guaranteed valid output.
 """
 
 from __future__ import annotations
 
+import json
 import logging
-import re
 from datetime import date
 
 import anthropic
 
 from src.config import PipelineConfig
 from src.models.sources import SourceItem, SourceType
-from src.synthesis.models import MeetingExtraction
+from src.synthesis.models import CommitmentRow, DailySynthesisOutput, MeetingExtraction, SynthesisItem
 from src.retry import retry_api_call
 from src.synthesis.validator import validate_evidence_only
 
@@ -32,20 +33,44 @@ EFFECTIVE_CHAR_BUDGET = int(CHAR_BUDGET * SAFETY_MARGIN)  # 320,000 chars
 
 
 @retry_api_call
-def _call_claude_with_retry(client, model, max_tokens, prompt):
-    """Call Claude API with retry on transient errors."""
+def _call_claude_structured_with_retry(client, model, max_tokens, prompt, schema):
+    """Call Claude structured outputs API with retry on transient errors."""
     return client.messages.create(
         model=model,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
+        output_config={
+            "format": {
+                "type": "json_schema",
+                "schema": schema,
+            }
+        },
     )
 
-EXECUTIVE_SUMMARY_INSTRUCTION = """## Executive Summary
-[Provide 3-5 sentences summarizing the most significant items from today's meetings. Focus on decisions with broad impact, new commitments with tight deadlines, and substance that changes direction.]
+
+@retry_api_call
+def _call_claude_structured_fallback_with_retry(client, model, max_tokens, prompt, schema):
+    """Call Claude structured outputs (beta fallback) with retry on transient errors."""
+    return client.messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        messages=[{"role": "user", "content": prompt}],
+        extra_headers={
+            "anthropic-beta": "output-format-2025-01-24",
+        },
+        extra_body={
+            "output_format": {
+                "type": "json_schema",
+                "schema": schema,
+            }
+        },
+    )
+
+EXECUTIVE_SUMMARY_INSTRUCTION = """Note: Since there are 5+ meetings with transcripts, provide an executive_summary (3-5 sentences summarizing the most significant items, focusing on decisions with broad impact, new commitments with tight deadlines, and substance that changes direction).
 
 """
 
-SYNTHESIS_PROMPT = """You are producing a daily intelligence brief. Be concise. Every word must earn its place.
+SYNTHESIS_PROMPT = """You are producing a daily intelligence brief as structured JSON. Be concise. Every word must earn its place.
 
 Date: {date}
 Number of meetings with transcripts: {transcript_count}
@@ -71,43 +96,33 @@ CROSS-SOURCE DEDUPLICATION:
 - UNCERTAIN matches: keep SEPARATE. Two items > one incorrectly merged item.
 - Never merge items from different projects, even if they discuss similar themes.
 
-Produce a daily summary with these exact sections:
+Use the reasoning field for your cross-source deduplication analysis before structuring the output.
 
-{executive_summary_instruction}## Substance
-One bullet per distinct thing that happened. Keep it concise but include enough context to be useful standalone.
-- [What happened] — [Source meeting, Slack, Google Doc, or HubSpot attribution]
+{executive_summary_instruction}FIELD GUIDANCE:
 
-## Decisions
-One bullet per decision. Merge duplicates across meetings. Always include who decided.
-- [What was decided] — [Who decided] — [Source meeting, Slack, Google Doc, or HubSpot attribution]
+substance items: Each content field should be a concise sentence about what happened, with source attribution at the end after an em dash. Example: "Q2 pipeline has 3 deals over $100k — Team Sync"
 
-## Commitments
-One row per commitment. Extract ONLY explicit commitments (someone clearly said they will do something).
-Include everyone's commitments, not just the user's.
-Do NOT extract suggestions ("We should probably...") or observations ("The report needs updating").
-Only extract "I will..." / "X will..." / "X agreed to..." statements.
+decisions items: Each content field should include what was decided, who decided, and source attribution. Example: "Delay product launch to Q3 — Sarah, Mike — Team Sync"
 
-| Who | What | By When | Source |
-|-----|------|---------|--------|
-| [First name or "TBD"] | [What they committed to] | [Normalized date relative to {date}, or "unspecified"] | [Source attribution(s)] |
+commitments: Extract ONLY explicit commitments (someone clearly said they will do something). Include everyone's, not just the user's. Do NOT extract suggestions or observations.
+- who: First name of the person who committed, or "TBD" if unclear
+- what: Concise description of what they committed to
+- by_when: Normalized date relative to {date}. "by Friday" = next Friday's ISO date. "next week" = "week of YYYY-MM-DD". "end of day" = "{date}". "soon" or no deadline = "unspecified"
+- source: Attribution text (e.g., "Team Sync", "Slack #proj-alpha", "HubSpot deal Acme Renewal")
 
-Date normalization: "by Friday" = next Friday's date. "next week" = "week of YYYY-MM-DD". "end of day" = "{date}". "soon" or no deadline = "unspecified".
+executive_summary: Provide 3-5 sentences summarizing the most significant items ONLY if there are 5+ meetings with transcripts. Otherwise set to null.
 
 CRITICAL RULES:
-- CONCISE: Each bullet should be 1-2 short sentences max. No filler words.
-- CONTEXT: Every bullet must be understandable on its own without reading the full document. Include enough specifics.
-- OWNERS: Every commitment MUST name who owns it. Never write a commitment without an owner.
-- DEDUPLICATE: If the same topic came up in multiple meetings, write ONE bullet and list both meetings.
-- DEDUP COMMITMENTS: Same commitment in meeting AND Slack = one row with both sources.
-- COMMITMENTS TABLE: Every row must have a Who. Use "TBD" if unclear.
-- Slack items use their attribution format exactly as provided (e.g., "(per Slack #design-team)" or "(per Slack DM with Sarah Chen)").
-- Google Docs items use their attribution format exactly as provided (e.g., "(per Google Doc Project Roadmap)").
-- HubSpot items use their attribution format exactly as provided (e.g., "(per HubSpot deal Acme Renewal)" or "(per HubSpot contact John Smith)").
-- Merge duplicate topics across meetings, Slack, Google Docs, AND HubSpot. One bullet, multiple sources.
-- NO PADDING: "Hire HubSpot vendor (<$5K)" not "Team decided to move forward with hiring an external vendor for HubSpot onboarding and professional flow building."
-- Source meeting, Slack, Google Doc, or HubSpot attribution goes at end after an em dash.
+- CONCISE: Each item should be 1-2 short sentences max. No filler words.
+- CONTEXT: Every item must be understandable on its own. Include enough specifics.
+- OWNERS: Every commitment MUST name who owns it.
+- DEDUPLICATE: Same topic in multiple sources = ONE item with all sources listed.
+- NO PADDING: "Hire HubSpot vendor (<$5K)" not verbose alternatives.
+- Slack items use their attribution format exactly as provided.
+- Google Docs items use their attribution format exactly as provided.
+- HubSpot items use their attribution format exactly as provided.
 - Neutral tone. Facts only.
-- If a category has no items, write "No items for this day."
+- If a category has no items, leave the list empty.
 """
 
 
@@ -423,90 +438,28 @@ def _dedup_hubspot_items(
     return filtered
 
 
-def _parse_synthesis_response(response_text: str) -> dict:
-    """Parse Claude's synthesis response into structured sections.
+def _convert_synthesis_to_dict(output: DailySynthesisOutput) -> dict:
+    """Convert DailySynthesisOutput to backward-compatible dict format.
+
+    Maintains the existing return interface expected by writer.py,
+    sidecar.py, and pipeline.py.
 
     Args:
-        response_text: Claude's full response text.
+        output: Validated DailySynthesisOutput from API response.
 
     Returns:
-        Dict with keys: executive_summary (str or None), substance (list[str]),
-        decisions (list[str]), commitments (list[str]).
+        Dict with keys: substance (list[str]), decisions (list[str]),
+        commitments (list[str]), executive_summary (str or None).
     """
-    result: dict = {
-        "executive_summary": None,
-        "substance": [],
-        "decisions": [],
-        "commitments": [],
+    return {
+        "executive_summary": output.executive_summary,
+        "substance": [item.content for item in output.substance],
+        "decisions": [item.content for item in output.decisions],
+        "commitments": [
+            f"| {c.who} | {c.what} | {c.by_when} | {c.source} |"
+            for c in output.commitments
+        ],
     }
-
-    # Split by ## headers
-    sections: dict[str, str] = {}
-    current_section = ""
-    current_content: list[str] = []
-
-    for line in response_text.split("\n"):
-        if line.startswith("## "):
-            if current_section:
-                sections[current_section] = "\n".join(current_content).strip()
-            current_section = line[3:].strip().lower()
-            current_content = []
-        else:
-            current_content.append(line)
-
-    if current_section:
-        sections[current_section] = "\n".join(current_content).strip()
-
-    # Extract executive summary
-    if "executive summary" in sections:
-        summary = sections["executive summary"].strip()
-        if summary and summary.lower() != "no items for this day.":
-            result["executive_summary"] = summary
-
-    # Extract items from each section as formatted strings
-    for section_key, result_key in [
-        ("substance", "substance"),
-        ("decisions", "decisions"),
-        ("commitments", "commitments"),
-    ]:
-        section_text = sections.get(section_key, "")
-        if not section_text or section_text.strip().lower() in (
-            "no items for this day.",
-            "no items for this day",
-        ):
-            continue
-
-        items: list[str] = []
-
-        if section_key == "commitments":
-            # Parse commitments as table rows (pipe-delimited) or bullet items
-            for line in section_text.split("\n"):
-                stripped = line.strip()
-                # Skip table header and separator rows
-                if stripped.startswith("| Who") or stripped.startswith("|--"):
-                    continue
-                # Parse pipe-delimited table rows
-                if stripped.startswith("|") and stripped.endswith("|"):
-                    item = stripped.strip()
-                    if item:
-                        items.append(item)
-                # Fallback: also accept bullet-list format for backward compatibility
-                elif stripped.startswith("- "):
-                    item = stripped[2:].strip()
-                    if item:
-                        items.append(item)
-        else:
-            # Extract bullet items (lines starting with -)
-            for line in section_text.split("\n"):
-                stripped = line.strip()
-                if stripped.startswith("- "):
-                    item = stripped[2:].strip()
-                    if item:
-                        items.append(item)
-
-        result[result_key] = items
-
-    return result
 
 
 def synthesize_daily(
@@ -607,13 +560,34 @@ def synthesize_daily(
     model = config.synthesis.model
     max_tokens = config.synthesis.synthesis_max_output_tokens
 
-    # Call Claude API with retry
-    client = client or anthropic.Anthropic()
-    response = _call_claude_with_retry(client, model, max_tokens, prompt)
-    response_text = response.content[0].text
+    # Generate JSON schema from Pydantic model
+    schema = DailySynthesisOutput.model_json_schema()
 
-    # Validate evidence-only language
-    violations = validate_evidence_only(response_text)
+    # Call Claude API with structured output
+    client = client or anthropic.Anthropic()
+    try:
+        response = _call_claude_structured_with_retry(
+            client, model, max_tokens, prompt, schema
+        )
+    except (TypeError, anthropic.BadRequestError):
+        # Fallback: older SDK or API version may use different parameter
+        logger.info("output_config not supported, falling back to beta header")
+        response = _call_claude_structured_fallback_with_retry(
+            client, model, max_tokens, prompt, schema
+        )
+
+    # Parse and validate structured response
+    data = json.loads(response.content[0].text)
+    output = DailySynthesisOutput.model_validate(data)
+
+    # Validate evidence-only language on content fields
+    content_text = "\n".join(
+        [item.content for item in output.substance]
+        + [item.content for item in output.decisions]
+        + [f"{c.who}: {c.what}" for c in output.commitments]
+        + ([output.executive_summary] if output.executive_summary else [])
+    )
+    violations = validate_evidence_only(content_text)
     if violations:
         logger.warning(
             "Synthesis contains %d evaluative language violation(s) for %s:",
@@ -623,8 +597,8 @@ def synthesize_daily(
         for v in violations[:5]:  # Log first 5
             logger.warning("  [%s] '%s' in: ...%s...", v.pattern, v.text, v.context)
 
-    # Parse response
-    result = _parse_synthesis_response(response_text)
+    # Convert to backward-compatible dict
+    result = _convert_synthesis_to_dict(output)
 
     # Track truncated sources for downstream consumers
     if truncated_sources:

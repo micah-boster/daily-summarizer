@@ -1,16 +1,23 @@
-"""Tests for daily cross-meeting synthesis formatting and parsing."""
+"""Tests for daily cross-meeting synthesis formatting and structured output."""
 
+import json
 from datetime import date, datetime, timezone
 from unittest.mock import MagicMock, patch
 
 from src.config import make_test_config
 from src.models.sources import ContentType, SourceItem, SourceType
-from src.synthesis.models import ExtractionItem, MeetingExtraction
+from src.synthesis.models import (
+    CommitmentRow,
+    DailySynthesisOutput,
+    ExtractionItem,
+    MeetingExtraction,
+    SynthesisItem,
+)
 from src.synthesis.synthesizer import (
     SYNTHESIS_PROMPT,
+    _convert_synthesis_to_dict,
     _format_extractions_for_prompt,
     _format_slack_items_for_prompt,
-    _parse_synthesis_response,
 )
 
 
@@ -77,78 +84,242 @@ def test_format_extractions_empty_list():
     assert text == ""
 
 
-# --- Parsing tests ---
+# --- Output model tests ---
 
 
-FULL_SYNTHESIS_RESPONSE = """## Substance
-- **Item:** Q2 pipeline has 3 deals over $100k, strongest quarter in 2 years (Team Sync -- Tom, Sarah)
-- **Item:** New compliance requirement from legal must be addressed before any product launch (Team Sync -- Sarah, Legal)
-
-## Decisions
-- **Decision:** Delay product launch to Q3 | **Who:** Sarah, Mike | **Rationale:** API dependency from vendor not ready (Team Sync -- Sarah, Mike)
-- **Decision:** Switch internal API from REST to GraphQL | **Who:** Tom, Sarah | **Rationale:** Not stated (Team Sync -- Tom, Sarah)
-
-## Commitments
-- **Commitment:** Write API migration spec | **Owner:** Mike | **Deadline:** Friday April 10 | **Status:** created (Team Sync -- Mike)
-- **Commitment:** Schedule vendor call | **Owner:** Sarah | **Deadline:** Not stated | **Status:** created (Team Sync -- Sarah)
-"""
-
-SYNTHESIS_WITH_EXEC_SUMMARY = """## Executive Summary
-Today was dominated by the Q3 launch delay decision and the API migration to GraphQL. Mike committed to writing the migration spec by Friday, and Sarah will coordinate with the vendor on revised timelines. The legal compliance requirement adds a new blocker that needs resolution before any launch can proceed.
-
-## Substance
-- **Item:** Q2 pipeline review showed strong numbers (Team Sync -- Tom)
-
-## Decisions
-- **Decision:** Delay launch to Q3 (Team Sync -- Sarah, Mike)
-
-## Commitments
-- **Commitment:** Write spec by Friday (Team Sync -- Mike)
-"""
-
-EMPTY_SYNTHESIS = """## Substance
-No items for this day.
-
-## Decisions
-No items for this day.
-
-## Commitments
-No items for this day.
-"""
+def test_daily_synthesis_output_model():
+    """Validate DailySynthesisOutput creation with all fields."""
+    output = DailySynthesisOutput(
+        reasoning="Cross-source analysis...",
+        executive_summary="Big day today.",
+        substance=[SynthesisItem(content="Pipeline review showed strong Q2 -- Team Sync")],
+        decisions=[SynthesisItem(content="Delay launch to Q3 -- Sarah, Mike -- Team Sync")],
+        commitments=[
+            CommitmentRow(
+                who="Mike",
+                what="Write API migration spec",
+                by_when="2026-04-10",
+                source="Team Sync",
+            )
+        ],
+    )
+    assert output.reasoning == "Cross-source analysis..."
+    assert output.executive_summary == "Big day today."
+    assert len(output.substance) == 1
+    assert len(output.decisions) == 1
+    assert len(output.commitments) == 1
+    assert output.commitments[0].who == "Mike"
 
 
-def test_parse_synthesis_response_full():
-    """Test parsing a complete synthesis response with all three sections."""
-    result = _parse_synthesis_response(FULL_SYNTHESIS_RESPONSE)
+def test_daily_synthesis_output_schema():
+    """Validate DailySynthesisOutput.model_json_schema() produces valid schema."""
+    schema = DailySynthesisOutput.model_json_schema()
+    assert "properties" in schema
+    assert "reasoning" in schema["properties"]
+    assert "executive_summary" in schema["properties"]
+    assert "substance" in schema["properties"]
+    assert "decisions" in schema["properties"]
+    assert "commitments" in schema["properties"]
+
+
+def test_daily_synthesis_output_from_json():
+    """Validate parsing a JSON dict into DailySynthesisOutput."""
+    data = {
+        "reasoning": "Analyzing cross-source data...",
+        "executive_summary": "Key decisions on launch timing and API migration.",
+        "substance": [
+            {"content": "Q2 pipeline has 3 deals over $100k -- Team Sync"},
+        ],
+        "decisions": [
+            {"content": "Delay product launch to Q3 -- Sarah, Mike -- Team Sync"},
+        ],
+        "commitments": [
+            {
+                "who": "Mike",
+                "what": "Write API migration spec",
+                "by_when": "2026-04-10",
+                "source": "Team Sync",
+            },
+            {
+                "who": "Sarah",
+                "what": "Schedule vendor call",
+                "by_when": "unspecified",
+                "source": "Team Sync, Slack #proj-alpha",
+            },
+        ],
+    }
+    output = DailySynthesisOutput.model_validate(data)
+    assert output.executive_summary == "Key decisions on launch timing and API migration."
+    assert len(output.substance) == 1
+    assert len(output.decisions) == 1
+    assert len(output.commitments) == 2
+    assert output.commitments[0].who == "Mike"
+    assert output.commitments[1].by_when == "unspecified"
+
+
+def test_daily_synthesis_output_empty():
+    """Validate DailySynthesisOutput with all empty categories."""
+    data = {
+        "reasoning": "No content today.",
+        "executive_summary": None,
+        "substance": [],
+        "decisions": [],
+        "commitments": [],
+    }
+    output = DailySynthesisOutput.model_validate(data)
+    assert output.executive_summary is None
+    assert len(output.substance) == 0
+    assert len(output.decisions) == 0
+    assert len(output.commitments) == 0
+
+
+# --- Conversion tests ---
+
+
+def test_convert_synthesis_to_dict():
+    """Verify _convert_synthesis_to_dict produces backward-compatible format."""
+    output = DailySynthesisOutput(
+        reasoning="Analysis...",
+        executive_summary="Summary text.",
+        substance=[
+            SynthesisItem(content="Pipeline review -- Team Sync"),
+            SynthesisItem(content="New compliance requirement -- Team Sync"),
+        ],
+        decisions=[
+            SynthesisItem(content="Delay launch to Q3 -- Sarah, Mike -- Team Sync"),
+        ],
+        commitments=[
+            CommitmentRow(
+                who="Mike",
+                what="Write spec",
+                by_when="2026-04-10",
+                source="Team Sync",
+            ),
+        ],
+    )
+    result = _convert_synthesis_to_dict(output)
+
+    assert result["executive_summary"] == "Summary text."
+    assert len(result["substance"]) == 2
+    assert result["substance"][0] == "Pipeline review -- Team Sync"
+    assert len(result["decisions"]) == 1
+    assert len(result["commitments"]) == 1
+    # Commitment should be pipe-delimited table row
+    assert result["commitments"][0] == "| Mike | Write spec | 2026-04-10 | Team Sync |"
+
+
+def test_convert_synthesis_to_dict_empty():
+    """Verify empty output produces empty dict."""
+    output = DailySynthesisOutput(reasoning="Nothing.")
+    result = _convert_synthesis_to_dict(output)
+    assert result["executive_summary"] is None
+    assert result["substance"] == []
+    assert result["decisions"] == []
+    assert result["commitments"] == []
+
+
+# --- Integration tests with mocked API ---
+
+
+def _make_mock_response(data: dict) -> MagicMock:
+    """Create a mock API response containing JSON text."""
+    content_block = MagicMock()
+    content_block.text = json.dumps(data)
+    response = MagicMock()
+    response.content = [content_block]
+    return response
+
+
+STRUCTURED_SYNTHESIS_DATA = {
+    "reasoning": "Cross-source analysis: API redesign appears in both standup and Slack.",
+    "executive_summary": None,
+    "substance": [
+        {"content": "Q2 pipeline has 3 deals over $100k -- Team Sync"},
+        {"content": "New compliance requirement from legal -- Team Sync"},
+    ],
+    "decisions": [
+        {"content": "Delay product launch to Q3 -- Sarah, Mike -- Team Sync"},
+    ],
+    "commitments": [
+        {
+            "who": "Mike",
+            "what": "Write API migration spec",
+            "by_when": "2026-04-10",
+            "source": "Team Sync",
+        },
+        {
+            "who": "Sarah",
+            "what": "Schedule vendor call",
+            "by_when": "unspecified",
+            "source": "Team Sync",
+        },
+    ],
+}
+
+
+def test_synthesize_daily_structured_output():
+    """Verify synthesize_daily returns correct dict from structured JSON."""
+    from src.synthesis.synthesizer import synthesize_daily
+
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = _make_mock_response(
+        STRUCTURED_SYNTHESIS_DATA
+    )
+
+    extractions = [
+        MeetingExtraction(
+            meeting_title="Team Sync",
+            meeting_time="2026-04-03T10:00:00-04:00",
+            meeting_participants=["Sarah", "Mike"],
+            decisions=[
+                ExtractionItem(content="Delay launch", participants=["Sarah"]),
+            ],
+        ),
+    ]
+
+    result = synthesize_daily(
+        extractions, date(2026, 4, 3), make_test_config(), client=mock_client
+    )
 
     assert len(result["substance"]) == 2
     assert "Q2 pipeline" in result["substance"][0]
-    assert "Team Sync" in result["substance"][0]
-
-    assert len(result["decisions"]) == 2
-    assert "Delay product launch" in result["decisions"][0]
-
-    assert len(result["commitments"]) == 2
-    assert "API migration spec" in result["commitments"][0]
-
-    assert result["executive_summary"] is None  # No executive summary in this response
-
-
-def test_parse_synthesis_response_with_executive_summary():
-    """Test parsing when executive summary is present."""
-    result = _parse_synthesis_response(SYNTHESIS_WITH_EXEC_SUMMARY)
-
-    assert result["executive_summary"] is not None
-    assert "Q3 launch delay" in result["executive_summary"]
-
-    assert len(result["substance"]) == 1
     assert len(result["decisions"]) == 1
-    assert len(result["commitments"]) == 1
+    assert "Delay product launch" in result["decisions"][0]
+    assert len(result["commitments"]) == 2
+    assert "Mike" in result["commitments"][0]
+    assert result["executive_summary"] is None
+
+    # Verify API was called with output_config
+    call_kwargs = mock_client.messages.create.call_args
+    assert "output_config" in call_kwargs.kwargs
+    assert call_kwargs.kwargs["output_config"]["format"]["type"] == "json_schema"
 
 
-def test_parse_synthesis_response_empty_day():
-    """Test parsing when sections say 'No items for this day.'"""
-    result = _parse_synthesis_response(EMPTY_SYNTHESIS)
+def test_synthesize_daily_structured_empty():
+    """Verify empty result when all categories empty in structured response."""
+    from src.synthesis.synthesizer import synthesize_daily
+
+    empty_data = {
+        "reasoning": "No content today.",
+        "executive_summary": None,
+        "substance": [],
+        "decisions": [],
+        "commitments": [],
+    }
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = _make_mock_response(empty_data)
+
+    extractions = [
+        MeetingExtraction(
+            meeting_title="Meeting",
+            meeting_time="2026-04-03T10:00:00",
+            decisions=[ExtractionItem(content="Something", participants=[])],
+        ),
+    ]
+
+    result = synthesize_daily(
+        extractions, date(2026, 4, 3), make_test_config(), client=mock_client
+    )
 
     assert result["substance"] == []
     assert result["decisions"] == []
@@ -156,10 +327,81 @@ def test_parse_synthesis_response_empty_day():
     assert result["executive_summary"] is None
 
 
+def test_synthesize_daily_evidence_validation():
+    """Verify evidence-only validation runs on structured content fields."""
+    from src.synthesis.synthesizer import synthesize_daily
+
+    # Include evaluative language to trigger validation (pattern: "showed leadership")
+    eval_data = {
+        "reasoning": "Analysis...",
+        "executive_summary": None,
+        "substance": [
+            {"content": "Sarah showed strong leadership in the product launch -- Team Sync"},
+        ],
+        "decisions": [],
+        "commitments": [],
+    }
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = _make_mock_response(eval_data)
+
+    extractions = [
+        MeetingExtraction(
+            meeting_title="Meeting",
+            meeting_time="2026-04-03T10:00:00",
+            decisions=[ExtractionItem(content="Something", participants=[])],
+        ),
+    ]
+
+    # Should not raise, but should log warnings
+    import logging
+    with patch("src.synthesis.synthesizer.logger") as mock_logger:
+        result = synthesize_daily(
+            extractions, date(2026, 4, 3), make_test_config(), client=mock_client
+        )
+        # Check that a warning was logged about evaluative language
+        warning_calls = [
+            call for call in mock_logger.warning.call_args_list
+            if "evaluative language" in str(call)
+        ]
+        assert len(warning_calls) > 0
+
+    assert len(result["substance"]) == 1
+
+
+def test_synthesize_daily_structured_fallback():
+    """Verify fallback to beta header when output_config fails."""
+    from src.synthesis.synthesizer import synthesize_daily
+    import anthropic as _anthropic
+
+    mock_client = MagicMock()
+    # First call raises TypeError, second succeeds
+    mock_client.messages.create.side_effect = [
+        TypeError("unexpected keyword argument 'output_config'"),
+        _make_mock_response(STRUCTURED_SYNTHESIS_DATA),
+    ]
+
+    extractions = [
+        MeetingExtraction(
+            meeting_title="Meeting",
+            meeting_time="2026-04-03T10:00:00",
+            decisions=[ExtractionItem(content="Something", participants=[])],
+        ),
+    ]
+
+    result = synthesize_daily(
+        extractions, date(2026, 4, 3), make_test_config(), client=mock_client
+    )
+
+    assert len(result["substance"]) == 2
+    assert mock_client.messages.create.call_count == 2
+
+
+# --- No-extraction edge case tests ---
+
+
 def test_synthesize_daily_no_extractions():
     """Verify empty sections returned when no extractions provided."""
     from src.synthesis.synthesizer import synthesize_daily
-    from datetime import date
 
     result = synthesize_daily([], date(2026, 4, 3), make_test_config())
 
@@ -172,7 +414,6 @@ def test_synthesize_daily_no_extractions():
 def test_synthesize_daily_all_low_signal():
     """Verify empty sections when all extractions are low-signal."""
     from src.synthesis.synthesizer import synthesize_daily
-    from datetime import date
 
     extractions = [
         MeetingExtraction(
@@ -189,7 +430,7 @@ def test_synthesize_daily_all_low_signal():
     assert result["commitments"] == []
 
 
-# --- Slack items integration tests ---
+# --- Slack items formatting tests ---
 
 
 def _make_slack_item(**overrides) -> SourceItem:
@@ -261,27 +502,32 @@ def test_synthesize_daily_accepts_slack_items_none():
     assert result["substance"] == []
 
 
-@patch("src.synthesis.synthesizer.anthropic")
-def test_synthesize_daily_with_slack_only(mock_anthropic):
+def test_synthesize_daily_with_slack_only():
     """Verify synthesis runs with only Slack items (no meeting extractions)."""
     from src.synthesis.synthesizer import synthesize_daily
 
+    slack_data = {
+        "reasoning": "Slack-only day.",
+        "executive_summary": None,
+        "substance": [
+            {"content": "API redesign discussed -- (per Slack #design-team)"},
+        ],
+        "decisions": [],
+        "commitments": [],
+    }
     mock_client = MagicMock()
-    mock_anthropic.Anthropic.return_value = mock_client
-    mock_response = MagicMock()
-    mock_response.content = [
-        MagicMock(text="## Substance\n- API redesign discussed — (per Slack #design-team)\n\n## Decisions\nNo items for this day.\n\n## Commitments\nNo items for this day.\n")
-    ]
-    mock_client.messages.create.return_value = mock_response
+    mock_client.messages.create.return_value = _make_mock_response(slack_data)
 
     items = [_make_slack_item()]
-    result = synthesize_daily([], date(2026, 4, 3), make_test_config(), slack_items=items)
+    result = synthesize_daily(
+        [], date(2026, 4, 3), make_test_config(), slack_items=items, client=mock_client
+    )
 
     assert len(result["substance"]) == 1
     assert "API redesign" in result["substance"][0]
 
 
-# --- Cross-source dedup and table-format commitment tests ---
+# --- Prompt content tests ---
 
 
 class TestSynthesisPromptDedupRules:
@@ -296,108 +542,5 @@ class TestSynthesisPromptDedupRules:
     def test_prompt_has_uncertain_matches_rule(self):
         assert "UNCERTAIN matches" in SYNTHESIS_PROMPT
 
-    def test_prompt_has_commitment_table_headers(self):
-        assert "| Who | What | By When | Source |" in SYNTHESIS_PROMPT
-
     def test_prompt_has_dedup_commitments_rule(self):
-        assert "DEDUP COMMITMENTS" in SYNTHESIS_PROMPT
-
-    def test_prompt_has_date_normalization(self):
-        assert "Date normalization" in SYNTHESIS_PROMPT
-
-
-COMMITMENTS_TABLE_RESPONSE = """## Substance
-- Pipeline review showed strong Q2 numbers — Team Sync
-
-## Decisions
-No items for this day.
-
-## Commitments
-
-| Who | What | By When | Source |
-|-----|------|---------|--------|
-| John | Send deck to partners | 2026-04-10 | standup |
-| Sarah | Schedule vendor call | unspecified | standup, Slack #proj-alpha |
-"""
-
-COMMITMENTS_BULLET_RESPONSE = """## Substance
-- Pipeline review — Team Sync
-
-## Decisions
-No items for this day.
-
-## Commitments
-- **Commitment:** Send deck | **Owner:** John | **Deadline:** Friday April 10 | standup
-"""
-
-
-class TestParseCommitmentsTable:
-    """Verify _parse_synthesis_response handles table-format commitments."""
-
-    def test_parse_table_format_commitments(self):
-        result = _parse_synthesis_response(COMMITMENTS_TABLE_RESPONSE)
-        assert len(result["commitments"]) == 2
-        assert "John" in result["commitments"][0]
-        assert "Send deck" in result["commitments"][0]
-        assert "Sarah" in result["commitments"][1]
-
-    def test_parse_table_preserves_pipe_format(self):
-        result = _parse_synthesis_response(COMMITMENTS_TABLE_RESPONSE)
-        # Each commitment should be a pipe-delimited row
-        assert result["commitments"][0].startswith("|")
-        assert result["commitments"][0].endswith("|")
-
-    def test_parse_bullet_format_backward_compat(self):
-        """Bullet-list format commitments still parse correctly."""
-        result = _parse_synthesis_response(COMMITMENTS_BULLET_RESPONSE)
-        assert len(result["commitments"]) == 1
-        assert "Send deck" in result["commitments"][0]
-
-    def test_substance_still_parsed_with_table_commitments(self):
-        result = _parse_synthesis_response(COMMITMENTS_TABLE_RESPONSE)
-        assert len(result["substance"]) == 1
-        assert "Pipeline review" in result["substance"][0]
-
-
-class TestParseSynthesisEdgeCases:
-    """Edge case tests for _parse_synthesis_response handling unusual Claude outputs."""
-
-    def test_empty_response(self):
-        result = _parse_synthesis_response("")
-        assert result["executive_summary"] is None
-        assert result["substance"] == []
-        assert result["decisions"] == []
-        assert result["commitments"] == []
-
-    def test_no_sections_response(self):
-        result = _parse_synthesis_response("Random text no headers")
-        assert result["executive_summary"] is None
-        assert result["substance"] == []
-        assert result["decisions"] == []
-        assert result["commitments"] == []
-
-    def test_partial_sections(self):
-        response = "## Substance\n- Item one about pipeline review\n"
-        result = _parse_synthesis_response(response)
-        assert len(result["substance"]) == 1
-        assert "Item one" in result["substance"][0]
-        assert result["decisions"] == []
-        assert result["commitments"] == []
-
-    def test_no_items_text(self):
-        response = (
-            "## Substance\nNo items for this day.\n\n"
-            "## Decisions\nNo items for this day.\n\n"
-            "## Commitments\nNo items for this day.\n"
-        )
-        result = _parse_synthesis_response(response)
-        assert result["substance"] == []
-        assert result["decisions"] == []
-        assert result["commitments"] == []
-
-    def test_missing_executive_summary(self):
-        response = "## Substance\n- Something happened\n\n## Decisions\n- A decision\n"
-        result = _parse_synthesis_response(response)
-        assert result["executive_summary"] is None
-        assert len(result["substance"]) == 1
-        assert len(result["decisions"]) == 1
+        assert "DEDUPLICATE" in SYNTHESIS_PROMPT

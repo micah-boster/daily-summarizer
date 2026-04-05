@@ -52,3 +52,38 @@ class MeetingExtractionOutput(BaseModel):
     substance: list[ExtractionItemOutput] = Field(default_factory=list)
     open_questions: list[ExtractionItemOutput] = Field(default_factory=list)
     tensions: list[ExtractionItemOutput] = Field(default_factory=list)
+
+
+class SynthesisItem(BaseModel):
+    """A single substance or decision item in synthesis output."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    content: str  # Full text including attribution
+
+
+class CommitmentRow(BaseModel):
+    """A single commitment in synthesis output."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    who: str  # Person name or "TBD"
+    what: str  # Commitment description
+    by_when: str  # ISO date, "week of YYYY-MM-DD", or "unspecified"
+    source: str  # Attribution text
+
+
+class DailySynthesisOutput(BaseModel):
+    """Structured output model for Claude synthesis API response.
+
+    Used with json_schema constrained decoding. The reasoning field
+    is a scratchpad for cross-source analysis and is discarded downstream.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    reasoning: str = ""  # Cross-source analysis scratchpad (discarded)
+    executive_summary: str | None = None
+    substance: list[SynthesisItem] = Field(default_factory=list)
+    decisions: list[SynthesisItem] = Field(default_factory=list)
+    commitments: list[CommitmentRow] = Field(default_factory=list)
