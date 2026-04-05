@@ -334,7 +334,7 @@ Each phase builds on the stability of the prior phase. Phase 17 (async) goes las
 | 10. Cross-Source Synthesis + Commitments | v1.5 | 2/2 | Complete | 2026-04-04 |
 | 11. Pipeline Hardening | v1.5 | 2/2 | Complete | 2026-04-04 |
 | 12. Reliability & Test Coverage | v1.5 | 3/3 | Complete | 2026-04-05 |
-| 13. Typed Config Foundation | v1.5.1 | 0/2 | Planned | - |
+| 13. Typed Config Foundation | 1/2 | In Progress|  | - |
 | 14. Structured Output Migration | v1.5.1 | 0/0 | Not started | - |
 | 15. Notion Ingestion | v1.5.1 | 0/0 | Not started | - |
 | 16. Reliability Quick Wins | v1.5.1 | 0/0 | Not started | - |
