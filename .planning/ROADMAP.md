@@ -262,7 +262,11 @@ Plans:
   2. Running the pipeline with a misspelled or invalid config key produces a clear Pydantic ValidationError at startup -- not a KeyError mid-run
   3. All existing config.yaml files (including those with missing optional sections) load without error due to backward-compatible defaults
   4. Every ingest module and synthesis function accesses config via typed attributes (e.g., `config.slack.channels`) instead of `.get()` chains
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 13-01-PLAN.md -- Pydantic config model tree, load_config() returning PipelineConfig, error formatter with fuzzy matching, validation tests
+- [ ] 13-02-PLAN.md -- Migrate all 15 consumer files from .get() chains to typed attribute access, update PipelineContext and test fixtures
 
 ### Phase 14: Structured Output Migration
 **Goal**: Claude API responses are typed Pydantic models instead of parsed markdown, eliminating brittle regex extraction and enabling downstream schema validation
@@ -330,7 +334,7 @@ Each phase builds on the stability of the prior phase. Phase 17 (async) goes las
 | 10. Cross-Source Synthesis + Commitments | v1.5 | 2/2 | Complete | 2026-04-04 |
 | 11. Pipeline Hardening | v1.5 | 2/2 | Complete | 2026-04-04 |
 | 12. Reliability & Test Coverage | v1.5 | 3/3 | Complete | 2026-04-05 |
-| 13. Typed Config Foundation | v1.5.1 | 0/0 | Not started | - |
+| 13. Typed Config Foundation | v1.5.1 | 0/2 | Planned | - |
 | 14. Structured Output Migration | v1.5.1 | 0/0 | Not started | - |
 | 15. Notion Ingestion | v1.5.1 | 0/0 | Not started | - |
 | 16. Reliability Quick Wins | v1.5.1 | 0/0 | Not started | - |
