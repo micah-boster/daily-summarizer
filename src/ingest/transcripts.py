@@ -8,6 +8,7 @@ from datetime import date, datetime
 
 from dateutil.parser import parse as dateutil_parse
 
+from src.config import PipelineConfig
 from src.ingest.gmail import (
     build_transcript_query,
     extract_body_text,
@@ -73,7 +74,7 @@ def _extract_title_from_subject(subject: str) -> str:
     return title or subject.strip()
 
 
-def parse_gemini_transcript(message: dict, config: dict) -> dict | None:
+def parse_gemini_transcript(message: dict, config: PipelineConfig) -> dict | None:
     """Parse a Gmail message into a Gemini transcript dict.
 
     Extracts meeting title from subject, datetime from headers, and
@@ -107,8 +108,7 @@ def parse_gemini_transcript(message: dict, config: dict) -> dict | None:
             logger.warning("Could not parse date header: %s", date_str)
 
     # Apply filler stripping if configured
-    preprocessing = config.get("transcripts", {}).get("preprocessing", {})
-    if preprocessing.get("strip_filler", True):
+    if config.transcripts.preprocessing.strip_filler:
         body = strip_filler(body)
 
     return {
@@ -122,7 +122,7 @@ def parse_gemini_transcript(message: dict, config: dict) -> dict | None:
 
 
 def fetch_gemini_transcripts(
-    service, target_date: date, config: dict
+    service, target_date: date, config: PipelineConfig
 ) -> list[dict]:
     """Fetch and parse all Gemini transcript emails for a target date.
 
@@ -134,9 +134,8 @@ def fetch_gemini_transcripts(
     Returns:
         List of parsed transcript dicts.
     """
-    gemini_config = config.get("transcripts", {}).get("gemini", {})
-    sender_patterns = gemini_config.get("sender_patterns", [])
-    subject_patterns = gemini_config.get("subject_patterns", [])
+    sender_patterns = config.transcripts.gemini.sender_patterns
+    subject_patterns = config.transcripts.gemini.subject_patterns
 
     if not sender_patterns or not subject_patterns:
         logger.warning("No Gemini sender/subject patterns configured, skipping")
@@ -193,7 +192,7 @@ def _extract_gong_title_from_subject(subject: str) -> str:
     return title or subject.strip()
 
 
-def parse_gong_transcript(message: dict, config: dict) -> dict | None:
+def parse_gong_transcript(message: dict, config: PipelineConfig) -> dict | None:
     """Parse a Gong notification email into a transcript dict.
 
     Extracts call title from subject, datetime from headers, and
@@ -227,8 +226,7 @@ def parse_gong_transcript(message: dict, config: dict) -> dict | None:
             logger.warning("Could not parse Gong date header: %s", date_str)
 
     # Apply filler stripping if configured
-    preprocessing = config.get("transcripts", {}).get("preprocessing", {})
-    if preprocessing.get("strip_filler", True):
+    if config.transcripts.preprocessing.strip_filler:
         body = strip_filler(body)
 
     return {
@@ -242,7 +240,7 @@ def parse_gong_transcript(message: dict, config: dict) -> dict | None:
 
 
 def fetch_gong_transcripts(
-    service, target_date: date, config: dict
+    service, target_date: date, config: PipelineConfig
 ) -> list[dict]:
     """Fetch and parse all Gong transcript emails for a target date.
 
@@ -254,9 +252,8 @@ def fetch_gong_transcripts(
     Returns:
         List of parsed transcript dicts.
     """
-    gong_config = config.get("transcripts", {}).get("gong", {})
-    sender_patterns = gong_config.get("sender_patterns", [])
-    subject_patterns = gong_config.get("subject_patterns", [])
+    sender_patterns = config.transcripts.gong.sender_patterns
+    subject_patterns = config.transcripts.gong.subject_patterns
 
     if not sender_patterns or not subject_patterns:
         logger.warning("No Gong sender/subject patterns configured, skipping")
@@ -308,7 +305,7 @@ def _deduplicate_transcripts(transcripts: list[dict]) -> list[dict]:
 
 
 def fetch_all_transcripts(
-    service, target_date: date, config: dict, creds=None
+    service, target_date: date, config: PipelineConfig, creds=None
 ) -> list[dict]:
     """Fetch transcripts from all configured sources (Drive + Gemini email + Gong).
 

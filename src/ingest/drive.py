@@ -10,6 +10,7 @@ from dateutil.parser import parse as dateutil_parse
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
+from src.config import PipelineConfig
 from src.retry import retry_api_call
 
 logger = logging.getLogger(__name__)
@@ -119,7 +120,7 @@ def search_gemini_drive_docs(
 
 
 def parse_drive_transcript(
-    doc_meta: dict, doc_text: str, config: dict
+    doc_meta: dict, doc_text: str, config: PipelineConfig
 ) -> dict | None:
     """Parse a Drive doc into a transcript dict matching the pipeline format.
 
@@ -146,8 +147,7 @@ def parse_drive_transcript(
     # Apply filler stripping if configured (reuse existing function)
     from src.ingest.transcripts import strip_filler
 
-    preprocessing = config.get("transcripts", {}).get("preprocessing", {})
-    if preprocessing.get("strip_filler", True):
+    if config.transcripts.preprocessing.strip_filler:
         doc_text = strip_filler(doc_text)
 
     return {
@@ -161,11 +161,10 @@ def parse_drive_transcript(
 
 
 def fetch_gemini_drive_transcripts(
-    creds: Credentials, target_date: date, config: dict
+    creds: Credentials, target_date: date, config: PipelineConfig
 ) -> list[dict]:
     """Fetch and parse all 'Notes by Gemini' docs from Drive for a target date."""
-    drive_config = config.get("transcripts", {}).get("gemini_drive", {})
-    if drive_config.get("enabled") is False:
+    if not config.transcripts.gemini_drive.enabled:
         logger.info("Drive transcript fetching disabled in config")
         return []
 

@@ -15,6 +15,7 @@ import yaml
 from slack_sdk.errors import SlackApiError
 from slack_sdk.web import WebClient
 
+from src.config import PipelineConfig
 from src.ingest.slack import (
     build_slack_client,
     load_slack_state,
@@ -177,14 +178,14 @@ def compute_channel_stats(
 
 
 def discover_channels(
-    client: WebClient, state: dict, config: dict
+    client: WebClient, state: dict, config: PipelineConfig
 ) -> list[str]:
     """Interactive channel discovery flow.
 
     Shows already-configured channels, then proposes active unconfigured ones.
     Returns list of all confirmed channel IDs (existing + newly added).
     """
-    configured_ids = set(config.get("slack", {}).get("channels", []))
+    configured_ids = set(config.slack.channels)
     state_channel_ids = set(state.get("channels", {}).keys())
     all_configured = configured_ids | state_channel_ids
 
@@ -236,14 +237,14 @@ def discover_channels(
 
 
 def discover_dms(
-    client: WebClient, state: dict, config: dict
+    client: WebClient, state: dict, config: PipelineConfig
 ) -> list[str]:
     """Interactive DM discovery flow.
 
     Proposes active DMs for user to opt into.
     Returns list of confirmed DM channel IDs.
     """
-    configured_dm_ids = set(config.get("slack", {}).get("dms", []))
+    configured_dm_ids = set(config.slack.dms)
     confirmed: list[str] = list(configured_dm_ids)
 
     user_dms = get_user_dms(client)
@@ -274,14 +275,14 @@ def discover_dms(
 
 
 def check_new_channels(
-    client: WebClient, state: dict, config: dict
+    client: WebClient, state: dict, config: PipelineConfig
 ) -> list[str]:
     """Non-interactive check for active untracked channels.
 
     Returns list of channel NAMES that are active but not configured.
     Does not prompt -- used by pipeline for periodic auto-suggest logging.
     """
-    configured_ids = set(config.get("slack", {}).get("channels", []))
+    configured_ids = set(config.slack.channels)
     user_channels = get_user_channels(client)
 
     new_active: list[str] = []
@@ -310,7 +311,7 @@ def _update_config_yaml(config_path: Path, channels: list[str], dms: list[str]) 
         yaml.dump(raw, f, default_flow_style=False, sort_keys=False)
 
 
-def run_discovery(config: dict) -> None:
+def run_discovery(config: PipelineConfig) -> None:
     """Full discovery orchestrator.
 
     Builds client, runs channel and DM discovery, persists results.

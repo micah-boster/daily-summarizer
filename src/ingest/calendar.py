@@ -13,6 +13,7 @@ from dateutil.parser import isoparse
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
+from src.config import PipelineConfig
 from src.models.events import Attendee, NormalizedEvent, ResponseStatus
 from src.retry import retry_api_call
 
@@ -299,7 +300,7 @@ def cache_raw_response(
 def fetch_events_for_date(
     service,
     target_date: date,
-    config: dict,
+    config: PipelineConfig,
     user_email: str | None = None,
 ) -> tuple[dict, list[dict]]:
     """Orchestrate event fetching, normalization, and categorization for a date.
@@ -307,15 +308,15 @@ def fetch_events_for_date(
     Args:
         service: Google Calendar API service instance.
         target_date: The date to process.
-        config: Pipeline configuration dict.
+        config: Pipeline configuration.
         user_email: User's email for declined detection.
 
     Returns:
         Tuple of (categorized_dict, raw_events_list).
     """
-    calendar_ids = config.get("calendars", {}).get("ids", ["primary"])
-    timezone = config.get("pipeline", {}).get("timezone", "America/New_York")
-    exclude_patterns = config.get("calendars", {}).get("exclude_patterns", [])
+    calendar_ids = config.calendars.ids
+    timezone = config.pipeline.timezone
+    exclude_patterns = config.calendars.exclude_patterns
 
     # Fetch raw events
     raw_events = fetch_raw_events(service, target_date, calendar_ids, timezone)

@@ -17,6 +17,7 @@ from hubspot.crm.deals import PublicObjectSearchRequest as DealSearchRequest
 from hubspot.crm.contacts import PublicObjectSearchRequest as ContactSearchRequest
 from hubspot.crm.tickets import PublicObjectSearchRequest as TicketSearchRequest
 
+from src.config import PipelineConfig
 from src.models.sources import ContentType, SourceItem, SourceType
 from src.retry import retry_api_call
 
@@ -115,7 +116,7 @@ def _build_owner_map(client: HubSpot) -> dict[str, str]:
     return owner_map
 
 
-def _resolve_owner_id(client: HubSpot, config: dict, owner_map: dict[str, str]) -> str | None:
+def _resolve_owner_id(client: HubSpot, config: PipelineConfig, owner_map: dict[str, str]) -> str | None:
     """Determine the owner ID filter based on ownership scope config.
 
     Checks for explicit ``hubspot.owner_id`` first. If set, uses it directly
@@ -130,12 +131,11 @@ def _resolve_owner_id(client: HubSpot, config: dict, owner_map: dict[str, str]) 
         Owner ID string for filtering, or None for no filter (all scope).
     """
     # Prefer explicit owner_id from config (most reliable)
-    explicit_owner_id = config.get("hubspot", {}).get("owner_id")
-    if explicit_owner_id is not None:
-        logger.info("Using explicit hubspot.owner_id from config: %s", explicit_owner_id)
-        return str(explicit_owner_id)
+    if config.hubspot.owner_id is not None:
+        logger.info("Using explicit hubspot.owner_id from config: %s", config.hubspot.owner_id)
+        return str(config.hubspot.owner_id)
 
-    scope = config.get("hubspot", {}).get("ownership_scope", "mine")
+    scope = config.hubspot.ownership_scope
 
     if scope == "all":
         return None
@@ -194,16 +194,16 @@ def _build_search_filters(
     return filters
 
 
-def _get_portal_url(config: dict) -> str:
+def _get_portal_url(config: PipelineConfig) -> str:
     """Get HubSpot portal base URL from config."""
-    return config.get("hubspot", {}).get("portal_url", "")
+    return config.hubspot.portal_url
 
 
 def _fetch_deals(
     client: HubSpot,
     start_ms: int,
     end_ms: int,
-    config: dict,
+    config: PipelineConfig,
     stage_map: dict[str, str],
     owner_map: dict[str, str],
     owner_id: str | None = None,
@@ -216,7 +216,7 @@ def _fetch_deals(
         List of SourceItem objects for deals.
     """
     items: list[SourceItem] = []
-    max_deals = config.get("hubspot", {}).get("max_deals", 50)
+    max_deals = config.hubspot.max_deals
     portal_url = _get_portal_url(config)
 
     filters = _build_search_filters(start_ms, end_ms, owner_id)
@@ -307,7 +307,7 @@ def _fetch_contacts(
     client: HubSpot,
     start_ms: int,
     end_ms: int,
-    config: dict,
+    config: PipelineConfig,
     owner_map: dict[str, str],
     owner_id: str | None = None,
 ) -> list[SourceItem]:
@@ -316,7 +316,7 @@ def _fetch_contacts(
     Returns SourceItems for contact activity (notes, calls, emails, meetings).
     """
     items: list[SourceItem] = []
-    max_contacts = config.get("hubspot", {}).get("max_contacts", 50)
+    max_contacts = config.hubspot.max_contacts
     portal_url = _get_portal_url(config)
 
     filters = _build_search_filters(start_ms, end_ms, owner_id)
@@ -382,7 +382,7 @@ def _fetch_tickets(
     client: HubSpot,
     start_ms: int,
     end_ms: int,
-    config: dict,
+    config: PipelineConfig,
     owner_map: dict[str, str],
     stage_map: dict[str, str] | None = None,
     owner_id: str | None = None,
@@ -392,7 +392,7 @@ def _fetch_tickets(
     Returns SourceItems for ticket activity.
     """
     items: list[SourceItem] = []
-    max_tickets = config.get("hubspot", {}).get("max_tickets", 25)
+    max_tickets = config.hubspot.max_tickets
     portal_url = _get_portal_url(config)
     stage_map = stage_map or {}
 
@@ -452,7 +452,7 @@ def _fetch_engagements(
     client: HubSpot,
     start_ms: int,
     end_ms: int,
-    config: dict,
+    config: PipelineConfig,
     owner_map: dict[str, str],
     owner_id: str | None = None,
 ) -> list[SourceItem]:
@@ -464,7 +464,7 @@ def _fetch_engagements(
     Returns SourceItems for engagement activity.
     """
     items: list[SourceItem] = []
-    max_per_type = config.get("hubspot", {}).get("max_activities_per_type", 25)
+    max_per_type = config.hubspot.max_activities_per_type
     portal_url = _get_portal_url(config)
 
     engagement_types = [
@@ -533,7 +533,7 @@ def _fetch_engagements(
 
 
 def fetch_hubspot_items(
-    config: dict, target_date: date | None = None
+    config: PipelineConfig, target_date: date | None = None
 ) -> list[SourceItem]:
     """Main entry point: fetch all HubSpot CRM items for the target date.
 
@@ -547,14 +547,13 @@ def fetch_hubspot_items(
     Returns:
         Combined list of SourceItem objects from all HubSpot sources.
     """
-    hubspot_config = config.get("hubspot", {})
-    if not hubspot_config.get("enabled", False):
+    if not config.hubspot.enabled:
         return []
 
     if target_date is None:
         target_date = date.today()
 
-    tz_name = config.get("pipeline", {}).get("timezone", "America/New_York")
+    tz_name = config.pipeline.timezone
 
     try:
         client = build_hubspot_client()

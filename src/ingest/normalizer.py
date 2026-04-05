@@ -7,6 +7,7 @@ from datetime import datetime
 from difflib import SequenceMatcher
 from zoneinfo import ZoneInfo
 
+from src.config import PipelineConfig
 from src.models.events import NormalizedEvent
 
 logger = logging.getLogger(__name__)
@@ -83,7 +84,7 @@ def match_transcript_to_event(
 def match_transcripts_to_events(
     transcripts: list[dict],
     events: list[NormalizedEvent],
-    config: dict,
+    config: PipelineConfig,
 ) -> tuple[list[NormalizedEvent], list[dict]]:
     """Batch-match transcripts to calendar events.
 
@@ -97,9 +98,8 @@ def match_transcripts_to_events(
     Returns:
         Tuple of (updated_events, unmatched_transcripts).
     """
-    matching_config = config.get("transcripts", {}).get("matching", {})
-    time_window = matching_config.get("time_window_minutes", 30)
-    timezone = config.get("pipeline", {}).get("timezone", "America/New_York")
+    time_window = config.transcripts.matching.time_window_minutes
+    timezone = config.pipeline.timezone
 
     unmatched: list[dict] = []
     matched_count = 0
@@ -215,7 +215,7 @@ def _data_richness_score(event: NormalizedEvent) -> int:
 def build_normalized_output(
     categorized: dict,
     transcripts: list[dict],
-    config: dict,
+    config: PipelineConfig,
 ) -> tuple[dict, list[dict]]:
     """Top-level normalization: match transcripts, deduplicate, re-categorize.
 
@@ -223,7 +223,7 @@ def build_normalized_output(
         categorized: Dict from calendar categorize_events (all_day_events,
             timed_events, declined_events, cancelled_events).
         transcripts: List of transcript dicts from fetch_all_transcripts.
-        config: Pipeline configuration dict.
+        config: Pipeline configuration.
 
     Returns:
         Tuple of (updated_categorized_dict, unmatched_transcripts).

@@ -16,6 +16,7 @@ from slack_sdk.errors import SlackApiError
 from slack_sdk.http_retry.builtin_handlers import RateLimitErrorRetryHandler
 from slack_sdk.web import WebClient
 
+from src.config import PipelineConfig
 from src.ingest.slack_filter import should_keep_message
 from src.models.sources import ContentType, SourceItem, SourceType
 from src.retry import retry_api_call
@@ -224,7 +225,7 @@ def fetch_thread_replies(
     return replies
 
 
-def should_expand_thread(msg: dict, config: dict) -> bool:
+def should_expand_thread(msg: dict, config: PipelineConfig) -> bool:
     """Check if a thread should be fully expanded based on activity thresholds.
 
     Both conditions must be met (AND logic per user decision):
@@ -233,14 +234,13 @@ def should_expand_thread(msg: dict, config: dict) -> bool:
 
     Args:
         msg: Raw Slack message dict (must have reply_count, reply_users_count).
-        config: Full config dict with slack section.
+        config: Pipeline configuration.
 
     Returns:
         True if thread should be expanded.
     """
-    slack_config = config.get("slack", {})
-    min_replies = slack_config.get("thread_min_replies", 3)
-    min_participants = slack_config.get("thread_min_participants", 2)
+    min_replies = config.slack.thread_min_replies
+    min_participants = config.slack.thread_min_participants
 
     reply_count = msg.get("reply_count", 0)
     reply_users_count = msg.get("reply_users_count", 0)
@@ -409,7 +409,7 @@ def _resolve_dm_partner(
 
 
 def fetch_slack_items(
-    config: dict, target_date: date | None = None
+    config: PipelineConfig, target_date: date | None = None
 ) -> list[SourceItem]:
     """Main orchestrator: fetch all Slack items and return as SourceItems.
 
@@ -420,7 +420,7 @@ def fetch_slack_items(
     in the configured timezone (for backfill). Otherwise defaults to today.
 
     Args:
-        config: Full config dict with 'slack' section.
+        config: Pipeline configuration.
         target_date: Date to fetch messages for. Defaults to today.
 
     Returns:
@@ -429,8 +429,7 @@ def fetch_slack_items(
     from datetime import date as date_type
     from zoneinfo import ZoneInfo
 
-    slack_config = config.get("slack", {})
-    if not slack_config.get("enabled", False):
+    if not config.slack.enabled:
         return []
 
     if target_date is None:
@@ -439,21 +438,20 @@ def fetch_slack_items(
     client = build_slack_client()
     config_dir = Path("config")
     state = load_slack_state(config_dir)
-    bot_allowlist = slack_config.get("bot_allowlist", [])
-    max_per_channel = slack_config.get("max_messages_per_channel", 100)
+    bot_allowlist = config.slack.bot_allowlist
+    max_per_channel = config.slack.max_messages_per_channel
 
     all_items: list[SourceItem] = []
 
     # Compute time window from target_date boundaries in configured timezone
-    tz_name = config.get("pipeline", {}).get("timezone", "America/New_York")
-    tz = ZoneInfo(tz_name)
+    tz = ZoneInfo(config.pipeline.timezone)
     day_start = datetime(target_date.year, target_date.month, target_date.day, tzinfo=tz)
     day_end = day_start + timedelta(days=1)
     date_oldest_ts = str(day_start.timestamp())
     date_latest_ts = str(day_end.timestamp())
 
     # --- Channels ---
-    for channel_id in slack_config.get("channels", []):
+    for channel_id in config.slack.channels:
         try:
             # Use target_date boundaries for the time window
             oldest = date_oldest_ts
@@ -533,7 +531,7 @@ def fetch_slack_items(
             logger.warning("Unexpected error processing channel %s: %s", channel_id, e)
 
     # --- DMs ---
-    for dm_id in slack_config.get("dms", []):
+    for dm_id in config.slack.dms:
         try:
             # Use target_date boundaries for the time window
             oldest = date_oldest_ts

@@ -15,6 +15,7 @@ from typing import Any
 from dateutil.parser import parse as dateutil_parse
 from google.oauth2.credentials import Credentials
 
+from src.config import PipelineConfig
 from src.ingest.drive import build_docs_service, build_drive_service, _extract_doc_text
 from src.models.sources import ContentType, SourceItem, SourceType
 from src.retry import retry_api_call
@@ -52,7 +53,7 @@ def _get_user_email(drive_service: Any) -> str:
     return _user_email_cache
 
 
-def _should_exclude(doc_meta: dict, config: dict) -> bool:
+def _should_exclude(doc_meta: dict, config: PipelineConfig) -> bool:
     """Check if a document should be excluded based on config.
 
     Checks doc ID against exclude_ids list and doc title against
@@ -65,16 +66,13 @@ def _should_exclude(doc_meta: dict, config: dict) -> bool:
     Returns:
         True if the document should be excluded.
     """
-    docs_config = config.get("google_docs", {})
-
     # Check excluded IDs
-    exclude_ids = docs_config.get("exclude_ids", [])
-    if doc_meta.get("id") in exclude_ids:
+    if doc_meta.get("id") in config.google_docs.exclude_ids:
         logger.debug("Excluding doc %s (ID in exclude list)", doc_meta.get("id"))
         return True
 
     # Check excluded title patterns
-    exclude_patterns = docs_config.get("exclude_title_patterns", [])
+    exclude_patterns = config.google_docs.exclude_title_patterns
     doc_name = doc_meta.get("name", "")
     for pattern in exclude_patterns:
         try:
@@ -92,7 +90,7 @@ def _should_exclude(doc_meta: dict, config: dict) -> bool:
 
 
 def _find_edited_docs(
-    drive_service: Any, target_date: date, config: dict
+    drive_service: Any, target_date: date, config: PipelineConfig
 ) -> list[dict]:
     """Find all docs/sheets/slides the user modified on target_date.
 
@@ -183,7 +181,7 @@ def _build_doc_edit_items(
     drive_service: Any,
     docs_service: Any,
     edited_docs: list[dict],
-    config: dict,
+    config: PipelineConfig,
 ) -> list[SourceItem]:
     """Convert edited doc metadata to SourceItem objects.
 
@@ -194,14 +192,13 @@ def _build_doc_edit_items(
         drive_service: Authenticated Drive API v3 service.
         docs_service: Authenticated Docs API v1 service.
         edited_docs: List of file metadata dicts from _find_edited_docs.
-        config: Pipeline configuration dict.
+        config: Pipeline configuration.
 
     Returns:
         List of SourceItem objects for doc edits.
     """
-    docs_config = config.get("google_docs", {})
-    max_content = docs_config.get("content_max_chars", 2500)
-    max_docs = docs_config.get("max_docs_per_day", 50)
+    max_content = config.google_docs.content_max_chars
+    max_docs = config.google_docs.max_docs_per_day
 
     items: list[SourceItem] = []
 
@@ -254,7 +251,7 @@ def _build_comment_items(
     drive_service: Any,
     edited_docs: list[dict],
     target_date: date,
-    config: dict,
+    config: PipelineConfig,
 ) -> list[SourceItem]:
     """Fetch comments and suggestions on edited docs for the target date.
 
@@ -266,13 +263,12 @@ def _build_comment_items(
         drive_service: Authenticated Drive API v3 service.
         edited_docs: List of file metadata dicts.
         target_date: Date to filter comments by.
-        config: Pipeline configuration dict.
+        config: Pipeline configuration.
 
     Returns:
         List of SourceItem objects for comments.
     """
-    docs_config = config.get("google_docs", {})
-    comment_max_chars = docs_config.get("comment_max_chars", 500)
+    comment_max_chars = config.google_docs.comment_max_chars
 
     date_str = target_date.isoformat()
     next_date_str = (target_date + timedelta(days=1)).isoformat()
@@ -376,7 +372,7 @@ def _build_comment_items(
 
 
 def fetch_google_docs_items(
-    config: dict, creds: Credentials, target_date: date
+    config: PipelineConfig, creds: Credentials, target_date: date
 ) -> list[SourceItem]:
     """Fetch edited docs and comments for a target date.
 
@@ -384,15 +380,14 @@ def fetch_google_docs_items(
     google_docs.enabled is False in config.
 
     Args:
-        config: Pipeline configuration dict.
+        config: Pipeline configuration.
         creds: Authenticated Google OAuth credentials.
         target_date: Date to fetch activity for.
 
     Returns:
         List of SourceItem objects for doc edits and comments.
     """
-    docs_config = config.get("google_docs", {})
-    if not docs_config.get("enabled", False):
+    if not config.google_docs.enabled:
         logger.debug("Google Docs ingestion disabled in config")
         return []
 
