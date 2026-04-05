@@ -13,7 +13,15 @@ from pathlib import Path
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
+from src.retry import retry_api_call
+
 logger = logging.getLogger(__name__)
+
+
+@retry_api_call
+def _execute_with_retry(request):
+    """Execute a Google API request with retry on transient errors."""
+    return request.execute()
 
 
 def build_gmail_service(creds: Credentials):
@@ -53,7 +61,7 @@ def search_messages(service, query: str, max_results: int = 100) -> list[dict]:
             maxResults=batch_size,
             pageToken=page_token,
         )
-        response = request.execute()
+        response = _execute_with_retry(request)
 
         batch = response.get("messages", [])
         messages.extend(batch)
@@ -75,12 +83,12 @@ def get_message_content(service, msg_id: str) -> dict:
     Returns:
         Full message dict including payload with headers and body.
     """
-    return (
+    request = (
         service.users()
         .messages()
         .get(userId="me", id=msg_id, format="full")
-        .execute()
     )
+    return _execute_with_retry(request)
 
 
 def extract_headers(message: dict) -> dict[str, str]:

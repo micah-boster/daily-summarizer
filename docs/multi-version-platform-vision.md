@@ -1,6 +1,6 @@
 # Work Intelligence Platform: Multi-Version Roadmap
 
-**Updated:** April 3, 2026
+**Updated:** April 4, 2026
 
 ---
 
@@ -13,6 +13,7 @@
 | v2.0 | Entity Layer | Partners, people, initiatives — discovery, attribution, scoped views | Planned |
 | v3.0 | Action Layer | Draft responses, review queue, send via Slack/email | Planned |
 | v4.0 | Web Interface | Local-first UI for everything; hostable later | Planned |
+| v5.0 | Team Distribution | Multi-user hosted service; non-technical team onboarding | Planned |
 
 ---
 
@@ -144,6 +145,47 @@ What's built:
 
 ---
 
+## v5.0 — Team Distribution
+
+**Goal:** Non-technical teammates can use the system with zero CLI, YAML, or API key setup. They sign in and get daily summaries delivered to them.
+
+**Builds on:** v4.0 Phase 2 (hostable web interface with auth layer)
+
+### What Changes from v4.0
+
+v4.0 is a personal tool that happens to be hosted. v5.0 makes it a multi-user service:
+
+| Concern | v4.0 (Personal, Hosted) | v5.0 (Team) |
+|---------|------------------------|-------------|
+| **Auth** | Single user, simple auth | "Sign in with Google" per user, OAuth tokens stored server-side |
+| **Config** | One config.yaml | Per-user settings in database, managed via Settings UI |
+| **API keys** | User provides Anthropic key | Central API key, billed to team/company |
+| **Execution** | User triggers runs | Scheduled server-side runs per user (cron/task queue) |
+| **Delivery** | Browse in UI | Push to Slack DM, email, or Notion — user picks channel |
+| **Onboarding** | Deploy + configure | Sign in → pick calendars → pick Slack channels → done |
+
+### Onboarding Flow (Target UX)
+1. User clicks invite link
+2. "Sign in with Google" (grants calendar + Gmail + Drive read access)
+3. Settings wizard: pick which calendars to include, connect Slack, connect HubSpot (all OAuth — no tokens or keys)
+4. Choose delivery: Slack DM, email digest, or just browse in UI
+5. Next morning: first summary arrives
+
+### Key Technical Shifts
+- **Multi-tenant data isolation**: Each user's data (tokens, cache, summaries) is scoped and isolated
+- **Google OAuth app verification**: Move from "testing" (100-user cap) to verified app for broader access
+- **Server-side scheduling**: Per-user pipeline runs on a schedule (likely async task queue)
+- **Central billing**: One Anthropic API key with usage tracking per user for cost visibility
+- **Admin view**: See who's active, pipeline health, cost per user
+
+### Open Questions (for when we get here)
+- Self-hosted (company infra) vs. cloud-hosted (SaaS)?
+- Per-user cost model — is Anthropic API cost sustainable at team scale?
+- Which integrations need per-user OAuth vs. shared workspace tokens (Slack workspace token covers all users)?
+- Mobile experience — responsive web or native app?
+
+---
+
 ## Cross-Cutting Concerns
 
 ### Privacy & Security
@@ -162,6 +204,7 @@ What's built:
 - v1.5 → v2: add entity layer on top of existing synthesis
 - v2 → v3: add action layer consuming entity context
 - v3 → v4: wrap everything in a web UI via API layer
+- v4 → v5: multi-user auth, per-user config in DB, server-side scheduling, team onboarding flow
 
 ---
 
@@ -170,7 +213,7 @@ What's built:
 - Sentiment and energy tracking per interaction
 - Knowledge graph construction across entities
 - Counterfactual awareness ("what didn't happen that should have")
-- Team-facing version (not just personal)
+- ~~Team-facing version~~ → promoted to v5.0
 - Snowflake/BI correlation ("did my calls affect account health?")
 - Obsidian vault integration
 - Mobile app

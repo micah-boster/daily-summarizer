@@ -10,7 +10,15 @@ from dateutil.parser import parse as dateutil_parse
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
+from src.retry import retry_api_call
+
 logger = logging.getLogger(__name__)
+
+
+@retry_api_call
+def _execute_with_retry(request):
+    """Execute a Google API request with retry on transient errors."""
+    return request.execute()
 
 # Pattern: "Meeting Title - 2026/03/18 15:25 EDT - Notes by Gemini"
 DOC_NAME_PATTERN = re.compile(
@@ -63,7 +71,7 @@ def _extract_doc_text(docs_service, doc_id: str) -> str:
 
     Uses the Docs API to read structural elements and concatenate text runs.
     """
-    doc = docs_service.documents().get(documentId=doc_id).execute()
+    doc = _execute_with_retry(docs_service.documents().get(documentId=doc_id))
     text_parts = []
     for element in doc.get("body", {}).get("content", []):
         paragraph = element.get("paragraph")
@@ -95,12 +103,12 @@ def search_gemini_drive_docs(
     results = []
     page_token = None
     while True:
-        response = drive_service.files().list(
+        response = _execute_with_retry(drive_service.files().list(
             q=query,
             fields="nextPageToken, files(id, name, createdTime)",
             pageSize=100,
             pageToken=page_token,
-        ).execute()
+        ))
 
         results.extend(response.get("files", []))
         page_token = response.get("nextPageToken")

@@ -12,6 +12,13 @@ load_dotenv(override=True)
 from src.config import load_config
 from src.models.events import DailySynthesis, Section
 from src.output.writer import write_daily_summary
+from src.retry import retry_api_call
+
+
+@retry_api_call
+def _execute_with_retry(request):
+    """Execute a Google API request with retry on transient errors."""
+    return request.execute()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -162,7 +169,7 @@ def run_daily(args: argparse.Namespace) -> None:
             gmail_service = build_gmail_service(creds)
 
             try:
-                primary_cal = calendar_service.calendarList().get(calendarId="primary").execute()
+                primary_cal = _execute_with_retry(calendar_service.calendarList().get(calendarId="primary"))
                 user_email = primary_cal.get("id")
                 logger.info("Authenticated as: %s", user_email)
             except Exception as e:

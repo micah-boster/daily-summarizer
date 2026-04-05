@@ -18,8 +18,21 @@ from slack_sdk.web import WebClient
 
 from src.ingest.slack_filter import should_keep_message
 from src.models.sources import ContentType, SourceItem, SourceType
+from src.retry import retry_api_call
 
 logger = logging.getLogger(__name__)
+
+@retry_api_call
+def _slack_users_info_with_retry(client, uid):
+    """Call Slack users_info with retry on transient errors."""
+    return client.users_info(user=uid)
+
+
+@retry_api_call
+def _slack_conversations_history_with_retry(client, **kwargs):
+    """Call Slack conversations_history with retry on transient errors."""
+    return client.conversations_history(**kwargs)
+
 
 # Module-level cache for user ID -> display name resolution
 _user_cache: dict[str, str] = {}
@@ -71,7 +84,7 @@ def resolve_user_names(
             result[uid] = _user_cache[uid]
             continue
         try:
-            resp = client.users_info(user=uid)
+            resp = _slack_users_info_with_retry(client, uid)
             profile = resp["user"].get("profile", {})
             name = (
                 profile.get("display_name")
@@ -149,7 +162,7 @@ def fetch_channel_messages(
         if cursor:
             kwargs["cursor"] = cursor
         try:
-            resp = client.conversations_history(**kwargs)
+            resp = _slack_conversations_history_with_retry(client, **kwargs)
             messages.extend(resp.get("messages", []))
             cursor = resp.get("response_metadata", {}).get("next_cursor")
             if not cursor:

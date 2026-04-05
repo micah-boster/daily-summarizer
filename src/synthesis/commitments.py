@@ -12,9 +12,46 @@ from datetime import date
 import anthropic
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.retry import retry_api_call
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
+
+
+@retry_api_call
+def _call_claude_structured_with_retry(client, model, prompt, schema):
+    """Call Claude structured outputs API with retry on transient errors."""
+    return client.messages.create(
+        model=model,
+        max_tokens=4096,
+        messages=[{"role": "user", "content": prompt}],
+        output_config={
+            "format": {
+                "type": "json_schema",
+                "schema": schema,
+            }
+        },
+    )
+
+
+@retry_api_call
+def _call_claude_structured_fallback_with_retry(client, model, prompt, schema):
+    """Call Claude structured outputs (beta fallback) with retry on transient errors."""
+    return client.messages.create(
+        model=model,
+        max_tokens=4096,
+        messages=[{"role": "user", "content": prompt}],
+        extra_headers={
+            "anthropic-beta": "output-format-2025-01-24",
+        },
+        extra_body={
+            "output_format": {
+                "type": "json_schema",
+                "schema": schema,
+            }
+        },
+    )
 
 
 class ExtractedCommitment(BaseModel):
@@ -108,33 +145,14 @@ def extract_commitments(
 
         # Use output_config for structured outputs (GA)
         try:
-            response = client.messages.create(
-                model=model,
-                max_tokens=4096,
-                messages=[{"role": "user", "content": prompt}],
-                output_config={
-                    "format": {
-                        "type": "json_schema",
-                        "schema": schema,
-                    }
-                },
+            response = _call_claude_structured_with_retry(
+                client, model, prompt, schema
             )
         except (TypeError, anthropic.BadRequestError):
             # Fallback: older SDK or API version may use different parameter
             logger.info("output_config not supported, falling back to betas header")
-            response = client.messages.create(
-                model=model,
-                max_tokens=4096,
-                messages=[{"role": "user", "content": prompt}],
-                extra_headers={
-                    "anthropic-beta": "output-format-2025-01-24",
-                },
-                extra_body={
-                    "output_format": {
-                        "type": "json_schema",
-                        "schema": schema,
-                    }
-                },
+            response = _call_claude_structured_fallback_with_retry(
+                client, model, prompt, schema
             )
 
         data = json.loads(response.content[0].text)

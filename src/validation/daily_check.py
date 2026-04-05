@@ -17,9 +17,16 @@ from googleapiclient.discovery import build
 
 from src.auth.google_oauth import load_credentials
 from src.notifications.slack import notify_slack
+from src.retry import retry_api_call
 from src.validation.run_log import append_to_log, count_passes
 
 RETRY_DELAY_SECONDS = 15 * 60  # 15 minutes
+
+
+@retry_api_call
+def _execute_with_retry(request):
+    """Execute a Google API request with retry on transient errors."""
+    return request.execute()
 
 EASTERN = zoneinfo.ZoneInfo("America/New_York")
 OUTPUT_DIR = Path("output/validation")
@@ -36,13 +43,14 @@ def fetch_todays_events(creds) -> list[dict]:
     end_of_day = start_of_day + timedelta(days=1)
 
     service = build("calendar", "v3", credentials=creds)
-    events_result = service.events().list(
+    events_req = service.events().list(
         calendarId="primary",
         timeMin=start_of_day.isoformat(),
         timeMax=end_of_day.isoformat(),
         singleEvents=True,
         orderBy="startTime",
-    ).execute()
+    )
+    events_result = _execute_with_retry(events_req)
 
     raw_events = events_result.get("items", [])
     events = []

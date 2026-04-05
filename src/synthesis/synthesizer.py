@@ -14,12 +14,30 @@ import anthropic
 
 from src.models.sources import SourceItem, SourceType
 from src.synthesis.models import MeetingExtraction
+from src.retry import retry_api_call
 from src.synthesis.validator import validate_evidence_only
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
 DEFAULT_MAX_OUTPUT_TOKENS = 8192
+
+# Token budget constants
+TOKEN_BUDGET = 100_000
+CHARS_PER_TOKEN = 4
+CHAR_BUDGET = TOKEN_BUDGET * CHARS_PER_TOKEN  # 400,000 chars
+SAFETY_MARGIN = 0.8  # Use 80% of budget for safety
+EFFECTIVE_CHAR_BUDGET = int(CHAR_BUDGET * SAFETY_MARGIN)  # 320,000 chars
+
+
+@retry_api_call
+def _call_claude_with_retry(client, model, max_tokens, prompt):
+    """Call Claude API with retry on transient errors."""
+    return client.messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        messages=[{"role": "user", "content": prompt}],
+    )
 
 EXECUTIVE_SUMMARY_INSTRUCTION = """## Executive Summary
 [Provide 3-5 sentences summarizing the most significant items from today's meetings. Focus on decisions with broad impact, new commitments with tight deadlines, and substance that changes direction.]
@@ -514,13 +532,9 @@ def synthesize_daily(
     model = synthesis_config.get("model", DEFAULT_MODEL)
     max_tokens = synthesis_config.get("synthesis_max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
 
-    # Call Claude API
+    # Call Claude API with retry
     client = client or anthropic.Anthropic()
-    response = client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    response = _call_claude_with_retry(client, model, max_tokens, prompt)
     response_text = response.content[0].text
 
     # Validate evidence-only language

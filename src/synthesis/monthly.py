@@ -17,12 +17,23 @@ import anthropic
 
 from src.models.rollups import MonthlyMetrics, MonthlySynthesis, ThematicArc
 from src.synthesis.prompts import MONTHLY_NARRATIVE_PROMPT
+from src.retry import retry_api_call
 from src.synthesis.validator import validate_evidence_only
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
 DEFAULT_MAX_OUTPUT_TOKENS = 8192
+
+
+@retry_api_call
+def _call_claude_with_retry(client, model, max_tokens, prompt):
+    """Call Claude API with retry on transient errors."""
+    return client.messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        messages=[{"role": "user", "content": prompt}],
+    )
 
 
 def _get_weeks_in_month(year: int, month: int) -> list[int]:
@@ -394,11 +405,7 @@ def synthesize_monthly(
     max_tokens = synthesis_config.get("monthly_max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
 
     client = client or anthropic.Anthropic()
-    response = client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    response = _call_claude_with_retry(client, model, max_tokens, prompt)
     response_text = response.content[0].text
 
     # Validate evidence-only language

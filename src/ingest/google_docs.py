@@ -17,8 +17,16 @@ from google.oauth2.credentials import Credentials
 
 from src.ingest.drive import build_docs_service, build_drive_service, _extract_doc_text
 from src.models.sources import ContentType, SourceItem, SourceType
+from src.retry import retry_api_call
 
 logger = logging.getLogger(__name__)
+
+
+@retry_api_call
+def _execute_with_retry(request):
+    """Execute a Google API request with retry on transient errors."""
+    return request.execute()
+
 
 # Module-level cache for authenticated user email
 _user_email_cache: str | None = None
@@ -39,7 +47,7 @@ def _get_user_email(drive_service: Any) -> str:
     if _user_email_cache is not None:
         return _user_email_cache
 
-    about = drive_service.about().get(fields="user(emailAddress)").execute()
+    about = _execute_with_retry(drive_service.about().get(fields="user(emailAddress)"))
     _user_email_cache = about["user"]["emailAddress"]
     return _user_email_cache
 
@@ -120,7 +128,7 @@ def _find_edited_docs(
     results: list[dict] = []
     page_token = None
     while True:
-        response = (
+        response = _execute_with_retry(
             drive_service.files()
             .list(
                 q=query,
@@ -128,7 +136,6 @@ def _find_edited_docs(
                 pageSize=100,
                 pageToken=page_token,
             )
-            .execute()
         )
         results.extend(response.get("files", []))
         page_token = response.get("nextPageToken")
@@ -282,7 +289,7 @@ def _build_comment_items(
         try:
             page_token = None
             while True:
-                response = (
+                response = _execute_with_retry(
                     drive_service.comments()
                     .list(
                         fileId=file_id,
@@ -291,7 +298,6 @@ def _build_comment_items(
                         pageToken=page_token,
                         includeDeleted=False,
                     )
-                    .execute()
                 )
 
                 for comment in response.get("comments", []):

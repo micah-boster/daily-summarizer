@@ -18,6 +18,7 @@ from hubspot.crm.contacts import PublicObjectSearchRequest as ContactSearchReque
 from hubspot.crm.tickets import PublicObjectSearchRequest as TicketSearchRequest
 
 from src.models.sources import ContentType, SourceItem, SourceType
+from src.retry import retry_api_call
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,12 @@ def _date_to_ms_range(target_date: date, tz_name: str = "America/New_York") -> t
     return int(start.timestamp() * 1000), int(end.timestamp() * 1000)
 
 
+@retry_api_call
+def _hubspot_api_call(func, *args, **kwargs):
+    """Execute a HubSpot SDK call with retry on transient errors."""
+    return func(*args, **kwargs)
+
+
 def _build_stage_map(client: HubSpot) -> dict[str, str]:
     """Build mapping of deal pipeline stage ID -> human-readable label.
 
@@ -69,7 +76,7 @@ def _build_stage_map(client: HubSpot) -> dict[str, str]:
     """
     stage_map: dict[str, str] = {}
     try:
-        pipelines = client.crm.pipelines.pipelines_api.get_all("deals")
+        pipelines = _hubspot_api_call(client.crm.pipelines.pipelines_api.get_all, "deals")
         for pipeline in pipelines.results:
             for stage in pipeline.stages:
                 stage_map[stage.id] = stage.label
@@ -82,7 +89,7 @@ def _build_ticket_stage_map(client: HubSpot) -> dict[str, str]:
     """Build mapping of ticket pipeline stage ID -> human-readable label."""
     stage_map: dict[str, str] = {}
     try:
-        pipelines = client.crm.pipelines.pipelines_api.get_all("tickets")
+        pipelines = _hubspot_api_call(client.crm.pipelines.pipelines_api.get_all, "tickets")
         for pipeline in pipelines.results:
             for stage in pipeline.stages:
                 stage_map[stage.id] = stage.label

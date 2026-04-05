@@ -14,6 +14,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 from src.models.events import Attendee, NormalizedEvent, ResponseStatus
+from src.retry import retry_api_call
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,12 @@ logger = logging.getLogger(__name__)
 def build_calendar_service(creds: Credentials):
     """Create a Google Calendar API v3 service instance."""
     return build("calendar", "v3", credentials=creds)
+
+
+@retry_api_call
+def _execute_with_retry(request):
+    """Execute a Google API request with retry on transient errors."""
+    return request.execute()
 
 
 def fetch_raw_events(
@@ -60,7 +67,7 @@ def fetch_raw_events(
                 showDeleted=True,
                 pageToken=page_token,
             )
-            response = request.execute()
+            response = _execute_with_retry(request)
 
             for event in response.get("items", []):
                 event["_calendar_id"] = cal_id

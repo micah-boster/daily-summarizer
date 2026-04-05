@@ -14,9 +14,17 @@ from datetime import date
 
 import httpx
 
+from src.retry import retry_api_call
+
 logger = logging.getLogger(__name__)
 
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "")
+
+
+@retry_api_call
+def _post_with_retry(url: str, payload: dict):
+    """Post to a webhook URL with retry on transient errors."""
+    return httpx.post(url, json=payload, timeout=10.0)
 
 # Slack block text limit
 MAX_BLOCK_TEXT = 3000
@@ -40,11 +48,7 @@ def notify_slack(message: str) -> bool:
         return False
 
     try:
-        response = httpx.post(
-            SLACK_WEBHOOK_URL,
-            json={"text": message},
-            timeout=10.0,
-        )
+        response = _post_with_retry(SLACK_WEBHOOK_URL, {"text": message})
         return response.status_code == 200
     except httpx.HTTPError as exc:
         print(f"Slack notification failed: {exc}", file=sys.stderr)
@@ -288,7 +292,7 @@ def send_slack_summary(
     }
 
     try:
-        response = httpx.post(url, json=payload, timeout=10)
+        response = _post_with_retry(url, payload)
         if response.status_code == 200:
             logger.info("Slack notification sent for %s", target_date)
             return True

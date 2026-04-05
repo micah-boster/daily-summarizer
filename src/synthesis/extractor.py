@@ -13,6 +13,7 @@ import anthropic
 
 from src.models.events import NormalizedEvent
 from src.synthesis.models import ExtractionItem, MeetingExtraction
+from src.retry import retry_api_call
 from src.synthesis.prompts import EXTRACTION_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -193,6 +194,16 @@ def _parse_extraction_response(
     )
 
 
+@retry_api_call
+def _call_claude_with_retry(client, model, max_tokens, prompt):
+    """Call Claude API with retry on transient errors."""
+    return client.messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+
 def extract_meeting(
     event: NormalizedEvent,
     config: dict,
@@ -237,13 +248,9 @@ def extract_meeting(
     model = synthesis_config.get("model", DEFAULT_MODEL)
     max_tokens = synthesis_config.get("extraction_max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
 
-    # Call Claude API
+    # Call Claude API with retry
     client = client or anthropic.Anthropic()
-    response = client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    response = _call_claude_with_retry(client, model, max_tokens, prompt)
     response_text = response.content[0].text
 
     # Parse response into model
