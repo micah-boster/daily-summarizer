@@ -12,6 +12,7 @@ from datetime import date
 import anthropic
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.config import PipelineConfig
 from src.retry import retry_api_call
 
 logger = logging.getLogger(__name__)
@@ -110,7 +111,7 @@ Summary to extract from:
 def extract_commitments(
     synthesis_text: str,
     target_date: date,
-    config: dict,
+    config: PipelineConfig,
     client: anthropic.Anthropic | None = None,
 ) -> list[ExtractedCommitment]:
     """Extract structured commitments from synthesized daily summary text.
@@ -133,8 +134,7 @@ def extract_commitments(
 
     try:
         client = client or anthropic.Anthropic()
-        synthesis_config = config.get("synthesis", {})
-        model = synthesis_config.get("model", DEFAULT_MODEL)
+        model = config.synthesis.model
 
         prompt = COMMITMENT_EXTRACTION_PROMPT.format(
             target_date=target_date.isoformat(),

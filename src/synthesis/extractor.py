@@ -11,6 +11,7 @@ import re
 
 import anthropic
 
+from src.config import PipelineConfig
 from src.models.events import NormalizedEvent
 from src.synthesis.models import ExtractionItem, MeetingExtraction
 from src.retry import retry_api_call
@@ -223,7 +224,7 @@ def _call_claude_with_retry(client, model, max_tokens, prompt):
 
 def extract_meeting(
     event: NormalizedEvent,
-    config: dict,
+    config: PipelineConfig,
     client: anthropic.Anthropic | None = None,
 ) -> MeetingExtraction | None:
     """Extract structured information from a single meeting transcript.
@@ -261,9 +262,8 @@ def extract_meeting(
     )
 
     # Get model settings from config
-    synthesis_config = config.get("synthesis", {})
-    model = synthesis_config.get("model", DEFAULT_MODEL)
-    max_tokens = synthesis_config.get("extraction_max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
+    model = config.synthesis.model
+    max_tokens = config.synthesis.extraction_max_output_tokens
 
     # Call Claude API with retry
     client = client or anthropic.Anthropic()
@@ -299,7 +299,7 @@ def extract_meeting(
 
 def extract_all_meetings(
     events: list[NormalizedEvent],
-    config: dict,
+    config: PipelineConfig,
     client: anthropic.Anthropic | None = None,
 ) -> list[MeetingExtraction]:
     """Extract structured information from all meetings with transcripts.

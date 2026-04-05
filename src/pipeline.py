@@ -15,7 +15,7 @@ from pathlib import Path
 
 import anthropic
 
-from src.config import load_config
+from src.config import PipelineConfig, load_config
 from src.ingest.calendar import build_calendar_service, cache_raw_response, fetch_events_for_date
 from src.ingest.gmail import build_gmail_service, cache_raw_emails
 from src.ingest.google_docs import fetch_google_docs_items
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 class PipelineContext:
     """Shared state for a single pipeline run."""
 
-    config: dict
+    config: PipelineConfig
     target_date: date
     output_dir: Path
     template_dir: Path
@@ -67,8 +67,7 @@ class IngestResult:
 
 def _ingest_slack(ctx: PipelineContext) -> list[SourceItem]:
     """Fetch Slack items for the target date."""
-    slack_config = ctx.config.get("slack", {})
-    if not slack_config.get("enabled", False):
+    if not ctx.config.slack.enabled:
         return []
 
     try:
@@ -79,7 +78,7 @@ def _ingest_slack(ctx: PipelineContext) -> list[SourceItem]:
         try:
             state = load_slack_state(Path("config"))
             last_check = state.get("last_discovery_check")
-            check_interval = slack_config.get("discovery_check_days", 7)
+            check_interval = ctx.config.slack.discovery_check_days
             should_check = (
                 last_check is None
                 or datetime.fromisoformat(last_check)
@@ -106,8 +105,7 @@ def _ingest_slack(ctx: PipelineContext) -> list[SourceItem]:
 
 def _ingest_hubspot(ctx: PipelineContext) -> list[SourceItem]:
     """Fetch HubSpot CRM items for the target date."""
-    hubspot_config = ctx.config.get("hubspot", {})
-    if not hubspot_config.get("enabled", False):
+    if not ctx.config.hubspot.enabled:
         return []
 
     try:
@@ -121,8 +119,7 @@ def _ingest_hubspot(ctx: PipelineContext) -> list[SourceItem]:
 
 def _ingest_docs(ctx: PipelineContext) -> list[SourceItem]:
     """Fetch Google Docs items for the target date."""
-    docs_config = ctx.config.get("google_docs", {})
-    if not docs_config.get("enabled", False) or ctx.google_creds is None:
+    if not ctx.config.google_docs.enabled or ctx.google_creds is None:
         return []
 
     try:

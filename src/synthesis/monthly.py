@@ -15,6 +15,7 @@ from pathlib import Path
 
 import anthropic
 
+from src.config import PipelineConfig
 from src.models.rollups import MonthlyMetrics, MonthlySynthesis, ThematicArc
 from src.synthesis.prompts import MONTHLY_NARRATIVE_PROMPT
 from src.retry import retry_api_call
@@ -98,7 +99,7 @@ def read_weekly_summaries(
 
 
 def _aggregate_monthly_metrics(
-    output_dir: Path, year: int, month: int, config: dict
+    output_dir: Path, year: int, month: int, config: PipelineConfig
 ) -> MonthlyMetrics:
     """Aggregate meeting metrics from daily files for a month.
 
@@ -359,7 +360,7 @@ def _parse_bullet_list(text: str) -> list[str]:
 def synthesize_monthly(
     year: int,
     month: int,
-    config: dict,
+    config: PipelineConfig,
     output_dir: Path,
     client: anthropic.Anthropic | None = None,
 ) -> MonthlySynthesis:
@@ -400,9 +401,8 @@ def synthesize_monthly(
     # Build prompt and call Claude
     prompt = _build_monthly_narrative_prompt(weeklies, metrics, year, month)
 
-    synthesis_config = config.get("synthesis", {})
-    model = synthesis_config.get("model", DEFAULT_MODEL)
-    max_tokens = synthesis_config.get("monthly_max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
+    model = config.synthesis.model
+    max_tokens = config.synthesis.monthly_max_output_tokens
 
     client = client or anthropic.Anthropic()
     response = _call_claude_with_retry(client, model, max_tokens, prompt)

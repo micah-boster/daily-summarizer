@@ -14,6 +14,7 @@ from pathlib import Path
 
 import anthropic
 
+from src.config import PipelineConfig
 from src.models.rollups import ThreadEntry, WeeklySynthesis, WeeklyThread
 from src.synthesis.prompts import WEEKLY_THREAD_DETECTION_PROMPT
 from src.retry import retry_api_call
@@ -414,7 +415,7 @@ def _parse_still_open(section_text: str) -> list[dict]:
 
 def synthesize_weekly(
     target_date: date,
-    config: dict,
+    config: PipelineConfig,
     output_dir: Path,
     client: anthropic.Anthropic | None = None,
 ) -> WeeklySynthesis:
@@ -475,9 +476,8 @@ def synthesize_weekly(
     # Build prompt and call Claude
     prompt = _build_thread_detection_prompt(summaries)
 
-    synthesis_config = config.get("synthesis", {})
-    model = synthesis_config.get("model", DEFAULT_MODEL)
-    max_tokens = synthesis_config.get("weekly_max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
+    model = config.synthesis.model
+    max_tokens = config.synthesis.weekly_max_output_tokens
 
     client = client or anthropic.Anthropic()
     response = _call_claude_with_retry(client, model, max_tokens, prompt)

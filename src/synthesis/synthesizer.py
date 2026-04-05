@@ -12,6 +12,7 @@ from datetime import date
 
 import anthropic
 
+from src.config import PipelineConfig
 from src.models.sources import SourceItem, SourceType
 from src.synthesis.models import MeetingExtraction
 from src.retry import retry_api_call
@@ -511,7 +512,7 @@ def _parse_synthesis_response(response_text: str) -> dict:
 def synthesize_daily(
     extractions: list[MeetingExtraction],
     target_date: date,
-    config: dict,
+    config: PipelineConfig,
     slack_items: list[SourceItem] | None = None,
     docs_items: list[SourceItem] | None = None,
     hubspot_items: list[SourceItem] | None = None,
@@ -603,9 +604,8 @@ def synthesize_daily(
     )
 
     # Get model settings from config
-    synthesis_config = config.get("synthesis", {})
-    model = synthesis_config.get("model", DEFAULT_MODEL)
-    max_tokens = synthesis_config.get("synthesis_max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
+    model = config.synthesis.model
+    max_tokens = config.synthesis.synthesis_max_output_tokens
 
     # Call Claude API with retry
     client = client or anthropic.Anthropic()

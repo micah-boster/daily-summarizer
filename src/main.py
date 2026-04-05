@@ -139,7 +139,7 @@ def run_daily(args: argparse.Namespace) -> None:
     from_date = args.from_date
     to_date = args.to_date or from_date
 
-    output_dir = Path(config.get("pipeline", {}).get("output_dir", "output"))
+    output_dir = Path(config.pipeline.output_dir)
     template_dir = Path("templates")
 
     # Try to load OAuth credentials for calendar + gmail ingestion
@@ -208,7 +208,7 @@ def run_weekly(args: argparse.Namespace) -> None:
     from src.synthesis.weekly import synthesize_weekly
 
     config = load_config(Path(args.config))
-    output_dir = Path(config.get("pipeline", {}).get("output_dir", "output"))
+    output_dir = Path(config.pipeline.output_dir)
     template_dir = Path("templates")
 
     target_date = args.target_date
@@ -241,7 +241,7 @@ def run_monthly(args: argparse.Namespace) -> None:
     from src.synthesis.monthly import synthesize_monthly
 
     config = load_config(Path(args.config))
-    output_dir = Path(config.get("pipeline", {}).get("output_dir", "output"))
+    output_dir = Path(config.pipeline.output_dir)
     template_dir = Path("templates")
 
     # Parse target month
