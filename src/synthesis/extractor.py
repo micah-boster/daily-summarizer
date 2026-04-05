@@ -42,6 +42,23 @@ def _parse_section_items(section_text: str, section_type: str) -> list[Extractio
 
     items: list[ExtractionItem] = []
 
+    # Secondary labels that indicate multi-line block format (not standalone items)
+    _secondary_labels = {
+        "participants", "owner", "rationale", "deadline", "raised by",
+        "status", "context", "by",
+    }
+
+    # Detect if section uses multi-line block format by checking for secondary labels
+    has_secondary_labels = any(
+        re.match(r"-\s+\*\*(" + "|".join(re.escape(l) for l in _secondary_labels) + r"):\*\*", line.strip(), re.IGNORECASE)
+        for line in section_text.split("\n")
+        if line.strip().startswith("- ")
+    )
+
+    # If multi-line block format detected, use legacy parser directly
+    if has_secondary_labels:
+        return _parse_legacy_blocks(section_text, section_type)
+
     # Try pipe-delimited format first (new concise format)
     for line in section_text.split("\n"):
         line = line.strip()
@@ -65,7 +82,7 @@ def _parse_section_items(section_text: str, section_type: str) -> list[Extractio
                 items.append(ExtractionItem(content=content, participants=participants, rationale=rationale))
             continue
 
-        # Check for bold-label format (legacy): - **Decision:** content
+        # Check for bold-label format: - **Decision:** content (single-line, no secondary labels)
         bold_match = re.match(r"\*\*\w[\w\s]*:\*\*\s*(.*)", line)
         if bold_match:
             content = bold_match.group(1).strip()

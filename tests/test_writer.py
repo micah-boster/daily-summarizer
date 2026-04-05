@@ -97,7 +97,7 @@ class TestWriteDailySummary:
         assert "5 meetings" in content
         assert "3.5 hours" in content
 
-    def test_template_renders_timed_events_narrative(self, tmp_path: Path):
+    def test_template_renders_timed_events_in_table(self, tmp_path: Path):
         events = _sample_timed_events()
         synthesis = _make_synthesis(
             timed_events=events,
@@ -106,26 +106,19 @@ class TestWriteDailySummary:
         )
         path = write_daily_summary(synthesis, tmp_path, TEMPLATE_DIR)
         content = path.read_text()
-        assert "**Team Standup**" in content
-        assert "[Recurring]" in content
+        assert "## Calendar" in content
+        assert "Team Standup" in content
+        assert "↻" in content  # Recurring marker
         assert "Sarah Chen" in content
-        assert "**Q3 Planning**" in content
-        assert "meet.google.com" in content
+        assert "Q3 Planning" in content
 
-    def test_template_renders_all_day_events(self, tmp_path: Path):
-        all_day = [
-            NormalizedEvent(
-                id="ad1",
-                title="Company Holiday",
-                all_day=True,
-                date="2026-04-01",
-            )
-        ]
-        synthesis = _make_synthesis(all_day_events=all_day)
+    def test_template_renders_calendar_section(self, tmp_path: Path):
+        """Calendar section always renders with table header, even without events."""
+        synthesis = _make_synthesis()
         path = write_daily_summary(synthesis, tmp_path, TEMPLATE_DIR)
         content = path.read_text()
-        assert "## All-Day Events" in content
-        assert "**Company Holiday**" in content
+        assert "## Calendar" in content
+        assert "| Time | Meeting | With |" in content
 
     def test_template_omits_declined_section_when_empty(self, tmp_path: Path):
         synthesis = _make_synthesis()
@@ -133,14 +126,16 @@ class TestWriteDailySummary:
         content = path.read_text()
         assert "## Declined" not in content
 
-    def test_stub_sections_have_placeholder_text(self, tmp_path: Path):
+    def test_empty_sections_omitted(self, tmp_path: Path):
+        """Sections with no data are omitted, not shown with placeholders."""
         synthesis = _make_synthesis()
         path = write_daily_summary(synthesis, tmp_path, TEMPLATE_DIR)
         content = path.read_text()
-        assert "## Substance" in content
-        assert "## Decisions" in content
-        assert "## Commitments" in content
-        assert "No transcript data available yet." in content
+        # Empty sections should NOT appear (template conditionals)
+        assert "## Substance" not in content
+        assert "## Decisions" not in content
+        # Commitments only appears if there are items
+        assert content.count("## Commitments") == 0
 
     def test_generated_timestamp_in_footer(self, tmp_path: Path):
         synthesis = _make_synthesis()

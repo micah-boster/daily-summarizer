@@ -356,3 +356,47 @@ class TestParseCommitmentsTable:
         result = _parse_synthesis_response(COMMITMENTS_TABLE_RESPONSE)
         assert len(result["substance"]) == 1
         assert "Pipeline review" in result["substance"][0]
+
+
+class TestParseSynthesisEdgeCases:
+    """Edge case tests for _parse_synthesis_response handling unusual Claude outputs."""
+
+    def test_empty_response(self):
+        result = _parse_synthesis_response("")
+        assert result["executive_summary"] is None
+        assert result["substance"] == []
+        assert result["decisions"] == []
+        assert result["commitments"] == []
+
+    def test_no_sections_response(self):
+        result = _parse_synthesis_response("Random text no headers")
+        assert result["executive_summary"] is None
+        assert result["substance"] == []
+        assert result["decisions"] == []
+        assert result["commitments"] == []
+
+    def test_partial_sections(self):
+        response = "## Substance\n- Item one about pipeline review\n"
+        result = _parse_synthesis_response(response)
+        assert len(result["substance"]) == 1
+        assert "Item one" in result["substance"][0]
+        assert result["decisions"] == []
+        assert result["commitments"] == []
+
+    def test_no_items_text(self):
+        response = (
+            "## Substance\nNo items for this day.\n\n"
+            "## Decisions\nNo items for this day.\n\n"
+            "## Commitments\nNo items for this day.\n"
+        )
+        result = _parse_synthesis_response(response)
+        assert result["substance"] == []
+        assert result["decisions"] == []
+        assert result["commitments"] == []
+
+    def test_missing_executive_summary(self):
+        response = "## Substance\n- Something happened\n\n## Decisions\n- A decision\n"
+        result = _parse_synthesis_response(response)
+        assert result["executive_summary"] is None
+        assert len(result["substance"]) == 1
+        assert len(result["decisions"]) == 1

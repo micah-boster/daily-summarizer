@@ -221,6 +221,59 @@ def test_parse_section_items_empty():
     assert items == []
 
 
+# --- Edge case tests for response parser ---
+
+
+class TestParseExtractionEdgeCases:
+    """Edge case tests for _parse_extraction_response handling unusual Claude outputs."""
+
+    def test_empty_response(self):
+        result = _parse_extraction_response(
+            "", meeting_title="Test", meeting_time="2026-04-03T10:00:00", participants=[]
+        )
+        assert len(result.decisions) == 0
+        assert len(result.commitments) == 0
+        assert len(result.substance) == 0
+        assert result.low_signal is True
+
+    def test_no_sections_response(self):
+        result = _parse_extraction_response(
+            "Just some random text without any ## headers",
+            meeting_title="Test", meeting_time="2026-04-03T10:00:00", participants=[]
+        )
+        assert len(result.decisions) == 0
+        assert len(result.commitments) == 0
+        assert result.low_signal is True
+
+    def test_partial_sections(self):
+        response = "## Decisions\n- Approved budget increase | Finance | Revenue growth\n\n## Commitments\nNone\n"
+        result = _parse_extraction_response(
+            response, meeting_title="Test", meeting_time="2026-04-03T10:00:00", participants=[]
+        )
+        assert len(result.decisions) == 1
+        assert result.decisions[0].content == "Approved budget increase"
+        assert len(result.commitments) == 0
+        assert result.low_signal is False
+
+    def test_none_values_in_sections(self):
+        response = "## Decisions\nNone.\n\n## Substance\nNone\n"
+        result = _parse_extraction_response(
+            response, meeting_title="Test", meeting_time="2026-04-03T10:00:00", participants=[]
+        )
+        assert len(result.decisions) == 0
+        assert len(result.substance) == 0
+        assert result.low_signal is True
+
+    def test_malformed_pipe_delimited(self):
+        response = "## Decisions\n- Missing pipes here no delimiter\n"
+        result = _parse_extraction_response(
+            response, meeting_title="Test", meeting_time="2026-04-03T10:00:00", participants=[]
+        )
+        assert len(result.decisions) == 1
+        assert result.decisions[0].content == "Missing pipes here no delimiter"
+        assert result.decisions[0].participants == []
+
+
 def test_extract_meeting_no_transcript():
     """Verify extract_meeting returns None when event has no transcript_text."""
     from src.synthesis.extractor import extract_meeting
