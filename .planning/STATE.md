@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.0
+milestone: v1.0
 milestone_name: Entity Layer
-status: ready_to_plan
-last_updated: "2026-04-05T00:00:00.000Z"
+status: unknown
+last_updated: "2026-04-05T21:52:47.761Z"
 progress:
-  total_phases: 5
-  completed_phases: 0
-  total_plans: 11
-  completed_plans: 0
+  total_phases: 20
+  completed_phases: 19
+  total_plans: 45
+  completed_plans: 42
 ---
 
 # Project State
