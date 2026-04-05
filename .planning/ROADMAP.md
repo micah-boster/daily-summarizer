@@ -245,7 +245,7 @@ Plans:
 
 **Milestone Goal:** Complete the ingest surface with Notion, parallelize the pipeline for speed, harden configuration and caching, and migrate Claude API calls to structured outputs.
 
-- [ ] **Phase 13: Typed Config Foundation** - Pydantic config model replacing raw dict access with validated, typed configuration
+- [x] **Phase 13: Typed Config Foundation** - Pydantic config model replacing raw dict access with validated, typed configuration (completed 2026-04-05)
 - [ ] **Phase 14: Structured Output Migration** - Claude API calls migrated from markdown parsing to json_schema structured outputs
 - [ ] **Phase 15: Notion Ingestion** - Notion page and database ingestion completing the work source surface
 - [ ] **Phase 16: Reliability Quick Wins** - Slack batch resolution, cache retention policy, and algorithmic dedup pre-filter
@@ -334,7 +334,7 @@ Each phase builds on the stability of the prior phase. Phase 17 (async) goes las
 | 10. Cross-Source Synthesis + Commitments | v1.5 | 2/2 | Complete | 2026-04-04 |
 | 11. Pipeline Hardening | v1.5 | 2/2 | Complete | 2026-04-04 |
 | 12. Reliability & Test Coverage | v1.5 | 3/3 | Complete | 2026-04-05 |
-| 13. Typed Config Foundation | 1/2 | In Progress|  | - |
+| 13. Typed Config Foundation | 2/2 | Complete   | 2026-04-05 | - |
 | 14. Structured Output Migration | v1.5.1 | 0/0 | Not started | - |
 | 15. Notion Ingestion | v1.5.1 | 0/0 | Not started | - |
 | 16. Reliability Quick Wins | v1.5.1 | 0/0 | Not started | - |
