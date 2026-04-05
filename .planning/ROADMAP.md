@@ -324,7 +324,11 @@ Plans:
   3. A single source failure during parallel ingest does not crash the entire pipeline -- other sources complete and partial results are synthesized
   4. The public API (`run_pipeline()`) remains synchronous; asyncio is an internal implementation detail
   5. Pipeline wall-clock time for a typical day (5-8 meetings, 4-6 sources) is measurably faster than sequential execution
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 17-01-PLAN.md -- Async extraction functions with AsyncAnthropic, semaphore rate limiting, config field
+- [ ] 17-02-PLAN.md -- Async pipeline orchestrator with parallel ingest via asyncio.gather, timing instrumentation
 
 ## Progress
 
@@ -350,5 +354,5 @@ Each phase builds on the stability of the prior phase. Phase 17 (async) goes las
 | 13. Typed Config Foundation | 2/2 | Complete    | 2026-04-05 | - |
 | 14. Structured Output Migration | 2/2 | Complete    | 2026-04-05 | - |
 | 15. Notion Ingestion | 3/3 | Complete    | 2026-04-05 | - |
-| 16. Reliability Quick Wins | 3/3 | Complete    | 2026-04-05 | - |
-| 17. Asyncio Parallelization | v1.5.1 | 0/0 | Not started | - |
+| 16. Reliability Quick Wins | v1.5.1 | 0/3 | Not started | - |
+| 17. Asyncio Parallelization | v1.5.1 | 0/2 | Not started | - |
