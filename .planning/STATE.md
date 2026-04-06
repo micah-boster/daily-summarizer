@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 20 of 23 (Entity Discovery & Backfill)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-04-06 -- Completed 20-01 entity extraction foundation
+Last activity: 2026-04-06 -- Completed 20-02 backfill pipeline and ongoing discovery
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -48,6 +48,7 @@ Progress: [░░░░░░░░░░] 0%
 
 *Updated after each plan completion*
 | Phase 20 P01 | 3min | 2 tasks | 6 files |
+| Phase 20 P02 | 5min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,8 @@ Recent decisions affecting current work:
 - [Phase 20]: Used compiled regex for suffix stripping rather than iterative string replacement
 - [Phase 20]: Person name matching uses prefix-based last name comparison for abbreviation support
 - [Phase 20]: Entity extraction uses separate retry-decorated function following synthesizer.py pattern
+- [Phase 20]: Backfill uses weekly batching with per-batch checkpoint for resilience
+- [Phase 20]: Pipeline entity discovery is synchronous fire-and-forget (SQLite writes are lightweight)
 
 ### Pending Todos
 
@@ -82,5 +85,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-04-06
-Stopped at: Completed 20-01-PLAN.md (entity extraction foundation)
+Stopped at: Completed 20-02-PLAN.md (backfill pipeline and ongoing discovery)
 Resume file: None
