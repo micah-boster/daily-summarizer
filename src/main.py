@@ -110,6 +110,11 @@ def parse_args() -> argparse.Namespace:
         help="Path to config YAML file.",
     )
 
+    # Entity management subcommand
+    from src.entity.cli import register_entity_parser
+
+    register_entity_parser(subparsers)
+
     # For backward compatibility: add --from and --to at top level
     parser.add_argument(
         "--from",
@@ -310,6 +315,10 @@ def main() -> None:
         run_discover_slack(args)
     elif args.command == "discover-notion":
         run_discover_notion(args)
+    elif args.command == "entity":
+        from src.entity.cli import handle_entity_command
+
+        handle_entity_command(args)
     else:
         # Default: daily pipeline (backward compatible)
         run_daily(args)

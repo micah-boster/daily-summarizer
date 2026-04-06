@@ -13,5 +13,9 @@ __pycache__/
 
 # UV
 
+# Entity database
+data/
+*.db
+
 # OS
 .DS_Store
