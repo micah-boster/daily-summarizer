@@ -98,17 +98,31 @@ def _discover_and_register_entities(
                         and len(parts) <= 4
                     )
                     entity_type = "person" if is_person else "partner"
-                    repo.add_entity(raw_name.strip(), entity_type)
+                    entity = repo.add_entity(raw_name.strip(), entity_type)
                     registered += 1
                     # Add normalized form as alias if different
                     try:
                         canonical = normalize_company_name(raw_name.strip())
                         if canonical != raw_name.strip():
-                            entity = repo.get_by_name(raw_name.strip())
-                            if entity:
-                                repo.add_alias(entity.id, canonical)
+                            repo.add_alias(entity.id, canonical)
                     except Exception:
                         pass  # Alias is best-effort
+                    # Cross-reference with HubSpot
+                    try:
+                        from src.entity.hubspot_xref import cross_reference_entity
+
+                        match = cross_reference_entity(raw_name.strip(), entity_type, config)
+                        if match and entity:
+                            repo.update_hubspot_id(entity.id, match["hubspot_id"], metadata_updates={
+                                "hubspot_type": match.get("hubspot_type"),
+                                "email": match.get("email"),
+                                "deal_stage": match.get("deal_stage"),
+                                "xref_confidence": match.get("confidence"),
+                            })
+                        elif match is None and entity and getattr(config.hubspot, "access_token", ""):
+                            repo.update_hubspot_id(entity.id, "", metadata_updates={"pending_enrichment": True})
+                    except Exception:
+                        pass  # Cross-reference is best-effort
 
             if registered:
                 logger.info("Entity discovery: registered %d new entities", registered)

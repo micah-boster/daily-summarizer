@@ -182,9 +182,15 @@ def run_backfill(
     threshold = config.entity.auto_register_threshold
     review_threshold = config.entity.review_threshold
 
+    # Check HubSpot availability once for the entire backfill run
+    hubspot_available = bool(getattr(config.hubspot, "access_token", ""))
+    if not hubspot_available:
+        logger.info("HubSpot cross-reference skipped: no access_token configured")
+
     with EntityRepository(config.entity.db_path) as repo:
         for batch_idx, batch in enumerate(batches):
             batch_entities = 0
+            new_entities_in_batch: list[tuple[str, str, str]] = []  # (entity_id, name, type)
 
             for day in batch:
                 date_str = day.isoformat()
@@ -211,10 +217,13 @@ def run_backfill(
                         if existing is None:
                             existing = repo.resolve_name(entity.name)
                         if existing is None:
-                            repo.add_entity(
+                            new_entity = repo.add_entity(
                                 entity.name.strip(), entity.entity_type
                             )
                             day_count += 1
+                            new_entities_in_batch.append(
+                                (new_entity.id, entity.name.strip(), entity.entity_type)
+                            )
                             # Add normalized form as alias if different
                             raw = entity.name.strip()
                             from src.entity.normalizer import normalize_company_name
@@ -222,9 +231,9 @@ def run_backfill(
                             canonical = normalize_company_name(raw)
                             if canonical != raw:
                                 try:
-                                    new_entity = repo.get_by_name(raw)
-                                    if new_entity:
-                                        repo.add_alias(new_entity.id, canonical)
+                                    found = repo.get_by_name(raw)
+                                    if found:
+                                        repo.add_alias(found.id, canonical)
                                 except Exception:
                                     pass  # Alias is best-effort
                     elif entity.confidence >= review_threshold:
@@ -248,6 +257,32 @@ def run_backfill(
                     f"{total_entities + batch_entities} entities found"
                 )
                 sys.stdout.flush()
+
+            # Cross-reference new entities with HubSpot (batch level)
+            if new_entities_in_batch and hubspot_available:
+                try:
+                    from src.entity.hubspot_xref import cross_reference_entity
+
+                    hubspot_api_failed = False
+                    for eid, ename, etype in new_entities_in_batch:
+                        if hubspot_api_failed:
+                            repo.update_hubspot_id(eid, "", metadata_updates={"pending_enrichment": True})
+                            continue
+                        try:
+                            match = cross_reference_entity(ename, etype, config)
+                            if match:
+                                repo.update_hubspot_id(eid, match["hubspot_id"], metadata_updates={
+                                    "hubspot_type": match.get("hubspot_type"),
+                                    "email": match.get("email"),
+                                    "deal_stage": match.get("deal_stage"),
+                                    "xref_confidence": match.get("confidence"),
+                                })
+                        except Exception:
+                            hubspot_api_failed = True
+                            logger.warning("HubSpot API unavailable, flagging remaining entities as pending_enrichment")
+                            repo.update_hubspot_id(eid, "", metadata_updates={"pending_enrichment": True})
+                except Exception as e:
+                    logger.warning("HubSpot cross-reference import failed: %s", e)
 
             # Commit checkpoint after each batch
             conn.commit()
