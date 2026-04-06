@@ -487,7 +487,7 @@ Phases 19-23 execute sequentially: 19 -> 20 -> 21 -> 22 -> 23.
 | 18. Structured Output Completion | v1.5.1 | 2/2 | Complete | 2026-04-05 |
 | 18.1. Milestone Audit Gap Closure | v1.5.1 | 2/2 | Complete | 2026-04-05 |
 | 19. Entity Registry Foundation | v2.0 | 0/2 | Not started | - |
-| 20. Entity Discovery + Backfill | v2.0 | 0/3 | Not started | - |
+| 20. Entity Discovery + Backfill | 1/3 | In Progress|  | - |
 | 21. Entity Attribution | v2.0 | 0/2 | Not started | - |
 | 22. Merge + Split Review | v2.0 | 0/2 | Not started | - |
 | 23. Scoped Views + Reports | v2.0 | 0/2 | Not started | - |

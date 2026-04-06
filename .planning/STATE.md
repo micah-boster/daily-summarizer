@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Entity Layer
 status: unknown
-last_updated: "2026-04-05T22:00:37.254Z"
+last_updated: "2026-04-06T17:56:49.425Z"
 progress:
-  total_phases: 20
-  completed_phases: 19
-  total_plans: 45
-  completed_plans: 42
+  total_phases: 15
+  completed_phases: 12
+  total_plans: 34
+  completed_plans: 27
 ---
 
 # Project State
@@ -22,10 +22,10 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 
 ## Current Position
 
-Phase: 19 of 23 (Entity Registry Foundation)
-Plan: 0 of 2 in current phase
-Status: Ready to plan
-Last activity: 2026-04-05 -- Roadmap created for v2.0 Entity Layer (5 phases, 11 plans)
+Phase: 20 of 23 (Entity Discovery & Backfill)
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-04-06 -- Completed 20-01 entity extraction foundation
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -47,6 +47,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: Stable
 
 *Updated after each plan completion*
+| Phase 20 P01 | 3min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -63,6 +64,9 @@ Recent decisions affecting current work:
 - [18.1-01]: Followed Phase 17 VERIFICATION.md format for consistency across phases
 - [18.1-02]: Removed entire src.ingest.calendar import line from pipeline.py (all 3 names unused; pipeline_async imports directly)
 - [18.1-02]: Kept SourceItem but removed SourceType from pipeline.py imports (only SourceItem used by _ingest_* returns)
+- [Phase 20]: Used compiled regex for suffix stripping rather than iterative string replacement
+- [Phase 20]: Person name matching uses prefix-based last name comparison for abbreviation support
+- [Phase 20]: Entity extraction uses separate retry-decorated function following synthesizer.py pattern
 
 ### Pending Todos
 
@@ -77,6 +81,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-05
-Stopped at: Completed 18.1-01-PLAN.md (Phase 16 verification + notion discovery fix)
+Last session: 2026-04-06
+Stopped at: Completed 20-01-PLAN.md (entity extraction foundation)
 Resume file: None
