@@ -372,7 +372,7 @@ Plans:
 
 **Milestone Goal:** Make every synthesis item traceable to partners, people, and initiatives -- so you can ask "what's happening with Affirm?" or "what does Colin owe me?" and get a sourced answer.
 
-- [ ] **Phase 19: Entity Registry Foundation** - SQLite entity storage with schema migrations, alias management, and confidence scoring models
+- [x] **Phase 19: Entity Registry Foundation** - SQLite entity storage with schema migrations, alias management, and confidence scoring models
 - [ ] **Phase 20: Entity Discovery + Backfill** - Populate the registry from historical summaries and wire ongoing discovery into the pipeline
 - [ ] **Phase 21: Entity Attribution** - Tag synthesis items with entity references and persist mentions to SQLite and JSON sidecar
 - [ ] **Phase 22: Merge + Split Review** - Entity merge proposals with CLI confirmation and split/undo capability
@@ -393,8 +393,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 19-01-PLAN.md -- SQLite schema, Pydantic entity models, migration infrastructure, EntityConfig, db connection management
-- [ ] 19-02-PLAN.md -- EntityRepository CRUD, alias management, CLI commands (entity add/list/show/remove/alias), .gitignore update
+- [x] 19-01-PLAN.md -- SQLite schema, Pydantic entity models, migration infrastructure, EntityConfig, db connection management
+- [x] 19-02-PLAN.md -- EntityRepository CRUD, alias management, CLI commands (entity add/list/show/remove/alias), .gitignore update
 
 ### Phase 20: Entity Discovery + Backfill
 **Goal**: The entity registry is populated -- both from 6+ months of historical summaries and automatically on each new pipeline run -- with HubSpot cross-referencing for enrichment
