@@ -40,6 +40,84 @@ from src.ingest.transcripts import fetch_all_transcripts
 logger = logging.getLogger(__name__)
 
 
+def _discover_and_register_entities(
+    synthesis_result: dict,
+    target_date,
+    config: PipelineConfig,
+) -> None:
+    """Post-synthesis entity discovery. Fire-and-forget with graceful degradation."""
+    if not config.entity.enabled:
+        return
+
+    try:
+        from src.entity.db import get_connection_from_config
+        from src.entity.normalizer import normalize_company_name, normalize_for_matching
+        from src.entity.repository import EntityRepository
+
+        conn = get_connection_from_config(config.entity)
+        if conn is None:
+            return
+
+        # Collect entity names from synthesis items
+        all_entity_names: set[str] = set()
+        for section_key in ("substance", "decisions"):
+            for item in synthesis_result.get(section_key, []):
+                if hasattr(item, "entity_names"):
+                    all_entity_names.update(item.entity_names)
+                elif isinstance(item, dict) and "entity_names" in item:
+                    all_entity_names.update(item["entity_names"])
+        for commitment in synthesis_result.get("commitments", []):
+            if hasattr(commitment, "entity_names"):
+                all_entity_names.update(commitment.entity_names)
+            elif isinstance(commitment, dict) and "entity_names" in commitment:
+                all_entity_names.update(commitment["entity_names"])
+
+        if not all_entity_names:
+            logger.debug("No entity names in synthesis output")
+            conn.close()
+            return
+
+        repo = EntityRepository(config.entity.db_path)
+        with repo:
+            registered = 0
+            for raw_name in all_entity_names:
+                if not raw_name or not raw_name.strip():
+                    continue
+                normalized = normalize_for_matching(raw_name)
+                existing = repo.resolve_name(normalized)
+                if existing is None:
+                    existing = repo.resolve_name(raw_name)
+                if existing is None:
+                    # Determine type heuristic: names with 2+ capitalized words
+                    # and short parts are likely people
+                    parts = raw_name.strip().split()
+                    is_person = (
+                        len(parts) >= 2
+                        and all(p[0].isupper() for p in parts if p)
+                        and all(len(p) <= 20 for p in parts)
+                        and len(parts) <= 4
+                    )
+                    entity_type = "person" if is_person else "partner"
+                    repo.add_entity(raw_name.strip(), entity_type)
+                    registered += 1
+                    # Add normalized form as alias if different
+                    try:
+                        canonical = normalize_company_name(raw_name.strip())
+                        if canonical != raw_name.strip():
+                            entity = repo.get_by_name(raw_name.strip())
+                            if entity:
+                                repo.add_alias(entity.id, canonical)
+                    except Exception:
+                        pass  # Alias is best-effort
+
+            if registered:
+                logger.info("Entity discovery: registered %d new entities", registered)
+        conn.close()
+
+    except Exception as e:
+        logger.warning("Entity discovery failed: %s. Daily summary unaffected.", e)
+
+
 def _fetch_calendar_and_transcripts(
     ctx: PipelineContext,
 ) -> tuple[dict | None, list, list, list]:
@@ -412,6 +490,9 @@ async def async_pipeline(ctx: PipelineContext) -> None:
         logger.info("Wrote JSON sidecar -> %s", sidecar_path)
     except Exception as e:
         logger.warning("Sidecar generation failed: %s. Daily summary still written.", e)
+
+    # Entity discovery (post-synthesis, optional)
+    _discover_and_register_entities(synthesis_result, current, ctx.config)
 
     # Slack notification
     try:
