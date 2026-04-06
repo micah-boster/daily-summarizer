@@ -154,6 +154,30 @@ class EntityRepository:
             deleted_at=row["deleted_at"],
         )
 
+    def update_hubspot_id(self, entity_id: str, hubspot_id: str, metadata_updates: dict | None = None) -> bool:
+        """Update HubSpot ID and optional metadata for an entity."""
+        if metadata_updates:
+            row = self._conn.execute(
+                "SELECT metadata FROM entities WHERE id = ? AND deleted_at IS NULL",
+                (entity_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            current_meta = json.loads(row["metadata"]) if row["metadata"] else {}
+            current_meta.update(metadata_updates)
+            meta_json = json.dumps(current_meta)
+            self._conn.execute(
+                "UPDATE entities SET hubspot_id = ?, metadata = ?, updated_at = ? WHERE id = ?",
+                (hubspot_id, meta_json, _now_utc(), entity_id),
+            )
+        else:
+            self._conn.execute(
+                "UPDATE entities SET hubspot_id = ?, updated_at = ? WHERE id = ?",
+                (hubspot_id, _now_utc(), entity_id),
+            )
+        self._conn.commit()
+        return True
+
     # ------------------------------------------------------------------
     # Alias management
     # ------------------------------------------------------------------

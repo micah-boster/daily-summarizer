@@ -190,6 +190,7 @@ class HubSpotConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = False
+    access_token: str = ""
     ownership_scope: str = "mine"
     owner_id: str | None = None
     max_deals: int = Field(default=50, ge=0)
