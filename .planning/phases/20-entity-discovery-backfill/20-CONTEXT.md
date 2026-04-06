@@ -57,7 +57,7 @@ Populate the entity registry from 6+ months of historical summaries and wire ong
 <deferred>
 ## Deferred Ideas
 
-None — discussion stayed within phase scope
+- **Low-confidence merge proposals:** CONTEXT decisions say "low-confidence matches create merge proposals for review." Merge proposal infrastructure (table, review UI, resolution logic) is Phase 22's domain. Phase 20 registers high-confidence entities only; low-confidence matches are logged but not written to a merge_proposals table. Phase 22 will implement the merge proposal workflow.
 
 </deferred>
 
