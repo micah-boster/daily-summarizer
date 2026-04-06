@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import date
 from pathlib import Path
 
 from src.config import load_config
@@ -63,6 +64,21 @@ def register_entity_parser(subparsers: argparse._SubParsersAction) -> None:
     alias_remove_p = alias_sub.add_parser("remove", help="Remove an alias")
     alias_remove_p.add_argument("alias", help="Alias to remove")
 
+    # entity backfill --from YYYY-MM-DD --to YYYY-MM-DD [--force]
+    backfill_p = entity_sub.add_parser("backfill", help="Backfill entity registry from historical data")
+    backfill_p.add_argument(
+        "--from", dest="from_date", type=date.fromisoformat, required=True,
+        help="Start date (YYYY-MM-DD)",
+    )
+    backfill_p.add_argument(
+        "--to", dest="to_date", type=date.fromisoformat, required=True,
+        help="End date (YYYY-MM-DD)",
+    )
+    backfill_p.add_argument(
+        "--force", action="store_true", default=False,
+        help="Re-process already-scanned days",
+    )
+
 
 def handle_entity_command(args: argparse.Namespace) -> None:
     """Dispatch entity subcommands."""
@@ -72,9 +88,15 @@ def handle_entity_command(args: argparse.Namespace) -> None:
         print("Entity subsystem is disabled in config.", file=sys.stderr)
         sys.exit(1)
 
+    cmd = getattr(args, "entity_command", None)
+
+    # Backfill manages its own connections
+    if cmd == "backfill":
+        _cmd_backfill(config, args)
+        return
+
     try:
         with EntityRepository(config.entity.db_path) as repo:
-            cmd = getattr(args, "entity_command", None)
             if cmd == "add":
                 _cmd_add(repo, args)
             elif cmd == "list":
@@ -86,7 +108,7 @@ def handle_entity_command(args: argparse.Namespace) -> None:
             elif cmd == "alias":
                 _cmd_alias(repo, args)
             else:
-                print("Usage: entity {add|list|show|remove|alias}", file=sys.stderr)
+                print("Usage: entity {add|list|show|remove|alias|backfill}", file=sys.stderr)
                 sys.exit(1)
     except Exception as e:
         print("Entity database unavailable: %s" % e, file=sys.stderr)
@@ -202,3 +224,18 @@ def _cmd_alias(repo: EntityRepository, args: argparse.Namespace) -> None:
     else:
         print("Usage: entity alias {add|list|remove}", file=sys.stderr)
         sys.exit(1)
+
+
+def _cmd_backfill(config, args: argparse.Namespace) -> None:
+    from src.entity.backfill import run_backfill
+
+    result = run_backfill(
+        from_date=args.from_date,
+        to_date=args.to_date,
+        config=config,
+        force=args.force,
+    )
+    print(
+        "Summary: %d processed, %d skipped, %d entities registered"
+        % (result["days_processed"], result["days_skipped"], result["entities_registered"])
+    )

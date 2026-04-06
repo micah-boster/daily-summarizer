@@ -31,15 +31,18 @@ class TestMigrations:
                 "SELECT name FROM sqlite_master WHERE type='table'"
             ).fetchall()
         }
-        expected = {"entities", "aliases", "entity_mentions", "merge_proposals", "relationships"}
+        expected = {
+            "entities", "aliases", "entity_mentions", "merge_proposals",
+            "relationships", "backfill_progress",
+        }
         assert expected.issubset(tables)
         conn.close()
 
-    def test_pragma_user_version_is_1(self, tmp_path: object) -> None:
+    def test_pragma_user_version_matches_schema(self, tmp_path: object) -> None:
         db_path = str(tmp_path / "test.db")
         conn = get_connection(db_path)
         version = conn.execute("PRAGMA user_version").fetchone()[0]
-        assert version == 1
+        assert version == SCHEMA_VERSION
         conn.close()
 
     def test_idempotent_migration(self, tmp_path: object) -> None:
@@ -49,7 +52,7 @@ class TestMigrations:
         # Re-open — migrations should be a no-op
         conn2 = get_connection(db_path)
         version = conn2.execute("PRAGMA user_version").fetchone()[0]
-        assert version == 1
+        assert version == SCHEMA_VERSION
         conn2.close()
 
     def test_wal_mode_enabled(self, tmp_path: object) -> None:

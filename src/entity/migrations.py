@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def _get_version(conn: sqlite3.Connection) -> int:
@@ -93,9 +93,30 @@ def _migrate_v0_to_v1(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_v1_to_v2(conn: sqlite3.Connection) -> None:
+    """Add backfill_progress table for tracking backfill state."""
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS backfill_progress (
+            id TEXT PRIMARY KEY,
+            source_date TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL DEFAULT 'completed'
+                CHECK(status IN ('completed', 'failed', 'skipped')),
+            entities_found INTEGER DEFAULT 0,
+            processed_at TEXT NOT NULL
+                DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_backfill_date
+            ON backfill_progress(source_date);
+        """
+    )
+
+
 # Ordered list of migration functions. Index + 1 = target version.
 MIGRATIONS: list = [
     _migrate_v0_to_v1,
+    _migrate_v1_to_v2,
 ]
 
 # Safety check: migration count must match declared schema version.

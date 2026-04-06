@@ -240,6 +240,8 @@ class EntityConfig(BaseModel):
     enabled: bool = True
     db_path: str = "data/entities.db"
     auto_create: bool = True
+    auto_register_threshold: float = 0.7
+    review_threshold: float = 0.4
 
 
 class PipelineConfig(BaseModel):
@@ -279,7 +281,7 @@ SECTION_EXAMPLES: dict[str, str] = {
     "notion": 'notion:\n  enabled: false\n  token: ""\n  watched_databases: []',
     "cache": 'cache:\n  raw_ttl_days: 14\n  dedup_log_ttl_days: 30',
     "dedup": 'dedup:\n  enabled: true\n  similarity_threshold: 0.85\n  log_dir: "output/dedup_logs"',
-    "entity": 'entity:\n  enabled: true\n  db_path: "data/entities.db"\n  auto_create: true',
+    "entity": 'entity:\n  enabled: true\n  db_path: "data/entities.db"\n  auto_create: true\n  auto_register_threshold: 0.7\n  review_threshold: 0.4',
 }
 
 
