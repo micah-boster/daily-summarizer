@@ -406,12 +406,12 @@ Plans:
   3. Discovered entities are cross-referenced with HubSpot contacts and deals by name match, enriching the registry with external identifiers
   4. Entity extraction from synthesis output uses structured output fields (extending existing Pydantic models with optional entity_names) and does not break the pipeline if entity processing fails
   5. Name normalization handles common variants (stripping Inc/LLC, standardizing casing) so "Affirm Inc" and "Affirm" resolve to the same entity
-**Plans**: 2 plans
+**Plans**: 3 plans
 
 Plans:
-- [ ] 20-01: Entity extraction prompt engineering, SynthesisItem/CommitmentRow model extension, name normalization layer, validation against 20+ real summaries
-- [ ] 20-02: Backfill CLI command with weekly batching, ongoing discovery wired into async_pipeline as optional post-synthesis step
-- [ ] 20-03: HubSpot contact/deal cross-reference by name match, entity enrichment with external IDs
+- [ ] 20-01-PLAN.md -- Name normalization module (TDD), entity extraction via Claude structured outputs, SynthesisItem/CommitmentRow model extension with entity_names
+- [ ] 20-02-PLAN.md -- Backfill CLI with weekly batching and checkpoint/resume, schema v2 migration, ongoing discovery wired into async_pipeline post-synthesis
+- [ ] 20-03-PLAN.md -- HubSpot contact/deal cross-reference with rapidfuzz fuzzy matching, entity enrichment in both backfill and pipeline paths
 
 ### Phase 21: Entity Attribution
 **Goal**: Every synthesis item carries entity references that are persisted to both SQLite (for querying) and JSON sidecar (for portability), making entity-scoped filtering possible
