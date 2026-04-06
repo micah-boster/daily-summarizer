@@ -60,6 +60,7 @@ class SynthesisItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     content: str  # Full text including attribution
+    entity_names: list[str] = Field(default_factory=list)  # Partners/people mentioned
 
 
 class CommitmentRow(BaseModel):
@@ -71,6 +72,7 @@ class CommitmentRow(BaseModel):
     what: str  # Commitment description
     by_when: str  # ISO date, "week of YYYY-MM-DD", or "unspecified"
     source: str  # Attribution text
+    entity_names: list[str] = Field(default_factory=list)  # Partners/people mentioned
 
 
 class DailySynthesisOutput(BaseModel):

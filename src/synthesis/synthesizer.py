@@ -97,6 +97,9 @@ commitments: Extract ONLY explicit commitments (someone clearly said they will d
 
 executive_summary: Provide 3-5 sentences summarizing the most significant items ONLY if there are 5+ meetings with transcripts. Otherwise set to null.
 
+ENTITY EXTRACTION:
+For each substance item, decision, and commitment, include an "entity_names" list containing the names of any companies, organizations, or individual people mentioned in that item. Use full formal names (e.g., "Affirm Inc", "Colin Roberts"). If no entities are mentioned, leave the list empty.
+
 CRITICAL RULES:
 - CONCISE: Each item should be 1-2 short sentences max. No filler words.
 - CONTEXT: Every item must be understandable on its own. Include enough specifics.
