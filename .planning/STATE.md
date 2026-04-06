@@ -23,11 +23,11 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 20 of 23 (Entity Discovery & Backfill)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-04-06 -- Completed 20-02 backfill pipeline and ongoing discovery
+Plan: 3 of 3 in current phase (COMPLETE)
+Status: Phase complete
+Last activity: 2026-04-06 -- Completed 20-03 HubSpot cross-reference
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [████████░░] 79%
 
 ## Performance Metrics
 
@@ -49,6 +49,7 @@ Progress: [░░░░░░░░░░] 0%
 *Updated after each plan completion*
 | Phase 20 P01 | 3min | 2 tasks | 6 files |
 | Phase 20 P02 | 5min | 2 tasks | 7 files |
+| Phase 20 P03 | 3min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -70,6 +71,9 @@ Recent decisions affecting current work:
 - [Phase 20]: Entity extraction uses separate retry-decorated function following synthesizer.py pattern
 - [Phase 20]: Backfill uses weekly batching with per-batch checkpoint for resilience
 - [Phase 20]: Pipeline entity discovery is synchronous fire-and-forget (SQLite writes are lightweight)
+- [Phase 20]: HubSpot cross-reference uses FUZZY_THRESHOLD=80 for token_sort_ratio matching
+- [Phase 20]: Backfill cross-references in batch (not per-day) to reduce HubSpot API calls
+- [Phase 20]: Added access_token to HubSpotConfig for cross-reference auth check
 
 ### Pending Todos
 
@@ -85,5 +89,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-04-06
-Stopped at: Completed 20-02-PLAN.md (backfill pipeline and ongoing discovery)
+Stopped at: Completed 20-03-PLAN.md (HubSpot cross-reference -- Phase 20 complete)
 Resume file: None

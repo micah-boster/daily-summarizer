@@ -373,7 +373,7 @@ Plans:
 **Milestone Goal:** Make every synthesis item traceable to partners, people, and initiatives -- so you can ask "what's happening with Affirm?" or "what does Colin owe me?" and get a sourced answer.
 
 - [x] **Phase 19: Entity Registry Foundation** - SQLite entity storage with schema migrations, alias management, and confidence scoring models
-- [ ] **Phase 20: Entity Discovery + Backfill** - Populate the registry from historical summaries and wire ongoing discovery into the pipeline
+- [x] **Phase 20: Entity Discovery + Backfill** - Populate the registry from historical summaries and wire ongoing discovery into the pipeline (completed 2026-04-06)
 - [ ] **Phase 21: Entity Attribution** - Tag synthesis items with entity references and persist mentions to SQLite and JSON sidecar
 - [ ] **Phase 22: Merge + Split Review** - Entity merge proposals with CLI confirmation and split/undo capability
 - [ ] **Phase 23: Scoped Views + Reports** - CLI entity queries and generated per-entity markdown reports
@@ -487,7 +487,7 @@ Phases 19-23 execute sequentially: 19 -> 20 -> 21 -> 22 -> 23.
 | 18. Structured Output Completion | v1.5.1 | 2/2 | Complete | 2026-04-05 |
 | 18.1. Milestone Audit Gap Closure | v1.5.1 | 2/2 | Complete | 2026-04-05 |
 | 19. Entity Registry Foundation | v2.0 | 0/2 | Not started | - |
-| 20. Entity Discovery + Backfill | 2/3 | In Progress|  | - |
+| 20. Entity Discovery + Backfill | 3/3 | Complete   | 2026-04-06 | - |
 | 21. Entity Attribution | v2.0 | 0/2 | Not started | - |
 | 22. Merge + Split Review | v2.0 | 0/2 | Not started | - |
 | 23. Scoped Views + Reports | v2.0 | 0/2 | Not started | - |
