@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: Entity Layer
-status: unknown
-last_updated: "2026-04-08T18:37:42.484Z"
+milestone: v3.0
+milestone_name: Web Interface
+status: ready_to_plan
+last_updated: "2026-04-08"
 progress:
-  total_phases: 19
+  total_phases: 25
   completed_phases: 19
   total_plans: 41
   completed_plans: 41
@@ -18,63 +18,38 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-08)
 
 **Core value:** Every morning I open a structured daily summary of yesterday's work and find it accurate, useful, and worth 5 minutes of my time -- without having produced it manually.
-**Current focus:** v3.0 Web Interface -- Defining requirements
+**Current focus:** v3.0 Web Interface -- Phase 24 ready to plan
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-04-08 -- Milestone v3.0 started
+Phase: 24 (FastAPI Skeleton + Summary API) -- first of 6 v3.0 phases (24-29)
+Plan: --
+Status: Ready to plan
+Last activity: 2026-04-08 -- v3.0 roadmap created (6 phases, 27 requirements mapped)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [####################..........] 41/41 prior plans complete, 0/6 v3.0 phases started
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 37 (v1.0: 14, v1.5: 7, v1.5.1: 12, v2.0 gap: 4)
+- Total plans completed: 41 (v1.0: 14, v1.5: 7, v1.5.1: 12, v2.0: 8)
 - Average duration: ~15 min
-- Total execution time: ~8.8 hours
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| Prior milestones | 35 | ~8.8h | ~15 min |
+- Total execution time: ~10 hours
 
 **Recent Trend:**
-- Last 5 plans: Phase 17-02, 18-01, 18-02, 18.1-01, 18.1-02 (all fast)
+- Last 5 plans: Phase 22-01, 22-02, 23-01, 23-02, 23.1-01 (all fast)
 - Trend: Stable
-
-*Updated after each plan completion*
-| Phase 20 P01 | 3min | 2 tasks | 6 files |
-| Phase 20 P02 | 5min | 2 tasks | 7 files |
-| Phase 20 P03 | 3min | 2 tasks | 7 files |
-| Phase 21 P01 | 5min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- [v2.0 roadmap]: 5 phases (19-23) following strict dependency chain: Registry -> Discovery -> Attribution -> Merge -> Views
-- [v2.0 roadmap]: Initiatives deferred to v2.1 -- people/partners must stabilize first
-- [v2.0 roadmap]: Split ships WITH merge (Phase 22) -- never merge without undo capability
-- [v2.0 roadmap]: Backfill + ongoing discovery in same phase (20) -- both populate the registry
-- [v2.0 roadmap]: HubSpot cross-reference in Phase 20 alongside discovery (enrichment during registration)
-- [18.1-01]: Followed Phase 17 VERIFICATION.md format for consistency across phases
-- [18.1-02]: Removed entire src.ingest.calendar import line from pipeline.py (all 3 names unused; pipeline_async imports directly)
-- [18.1-02]: Kept SourceItem but removed SourceType from pipeline.py imports (only SourceItem used by _ingest_* returns)
-- [Phase 20]: Used compiled regex for suffix stripping rather than iterative string replacement
-- [Phase 20]: Person name matching uses prefix-based last name comparison for abbreviation support
-- [Phase 20]: Entity extraction uses separate retry-decorated function following synthesizer.py pattern
-- [Phase 20]: Backfill uses weekly batching with per-batch checkpoint for resilience
-- [Phase 20]: Pipeline entity discovery is synchronous fire-and-forget (SQLite writes are lightweight)
-- [Phase 20]: HubSpot cross-reference uses FUZZY_THRESHOLD=80 for token_sort_ratio matching
-- [Phase 20]: Backfill cross-references in batch (not per-day) to reduce HubSpot API calls
-- [Phase 20]: Added access_token to HubSpotConfig for cross-reference auth check
+- [v3.0 roadmap]: 6 phases (24-29) following read-first dependency chain: API -> Summary UI -> Entity reads -> Entity writes -> Pipeline -> Config+Polish
+- [v3.0 roadmap]: FastAPI as thin facade over existing src.* modules -- zero business logic in API layer
+- [v3.0 roadmap]: SQLite busy_timeout + connection-per-request as Phase 24 foundation (prevents locked DB under concurrent web requests)
+- [v3.0 roadmap]: Pipeline runs via subprocess isolation (never in-process) -- Phase 28
+- [v3.0 roadmap]: Client components for all interactive panels; RSC only for layout shell
+- [v3.0 stack]: FastAPI 0.135+ / Next.js 15 / shadcn-ui / TanStack Query / Zustand / raw sqlite3 (no ORM)
 
 ### Pending Todos
 
@@ -82,13 +57,12 @@ None yet.
 
 ### Blockers/Concerns
 
-- SQLite introduces new dependency and storage paradigm -- schema design is critical (Phase 19)
-- Entity extraction prompt needs validation on 20+ real summaries before full backfill (Phase 20)
-- Backfill cost estimate ($2-5 for 180 days) needs pilot verification (Phase 20)
-- False merges are catastrophic -- zero auto-merge on fuzzy signals, only deterministic IDs (Phase 22)
+- Event loop conflict: async_pipeline() uses asyncio.run() internally -- must refactor entry point before pipeline endpoints (Phase 28)
+- Pipeline subprocess isolation mechanism needs prototyping (subprocess.Popen vs thread pool) during Phase 28
+- Older summaries (pre-sidecar) may lack JSON files -- summary API needs graceful markdown-only fallback
 
 ## Session Continuity
 
-Last session: 2026-04-06
-Stopped at: Completed 20-03-PLAN.md (HubSpot cross-reference -- Phase 20 complete)
+Last session: 2026-04-08
+Stopped at: v3.0 roadmap created, ready to plan Phase 24
 Resume file: None

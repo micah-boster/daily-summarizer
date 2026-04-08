@@ -1,254 +1,203 @@
-# Stack Research: Entity Layer Additions (v2.0)
+# Technology Stack
 
-**Domain:** Entity registry, discovery, merge/resolution, scoped views for work intelligence pipeline
-**Researched:** 2026-04-05
-**Confidence:** HIGH
+**Project:** Work Intelligence System v3.0 Web Interface
+**Researched:** 2026-04-08
 
-## Existing Stack (Validated, Not Changing)
+## Recommended Stack
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| Python | >=3.12 | Runtime |
-| anthropic | >=0.45.0 (0.88.0 installed) | Claude API (Sonnet/Opus) with structured outputs |
-| pydantic | >=2.12.5 | Config models, structured output schemas |
-| httpx | >=0.28.1 | Async HTTP client |
-| tenacity | >=9.1.4 | Retry logic |
-| jinja2 | >=3.1.6 | Output template rendering |
-| argparse | stdlib | CLI subcommands |
-| asyncio | stdlib | Concurrent pipeline execution |
-| rapidfuzz | >=3.12.0 (already added in v1.5.1) | Fuzzy string matching |
+### Frontend Core
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| Next.js | 15.2.x (latest stable) | React framework, routing, SSR-capable | Stable LTS line; App Router mature; project specifies Next.js; avoid v16 (too new, breaking changes likely) |
+| React | 19.x | UI library | Ships with Next.js 15; required for shadcn/ui compatibility |
+| TypeScript | 5.x | Type safety | Non-negotiable for any non-trivial frontend; catches API contract drift early |
 
-## New Dependencies: Only ONE Package
+### Frontend UI
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| shadcn/ui | latest (CLI-installed) | Component library | Copy-paste components, no runtime dependency, Tailwind-native, excellent for dashboards. Not an npm package -- CLI copies source into your project. Beats MUI (too heavy for personal tool) and Ant Design (opinionated styling). |
+| Tailwind CSS | 4.x | Utility CSS | Ships with shadcn/ui; zero-config with Next.js 15; three-column layout trivial with grid utilities |
+| Radix UI | (via shadcn/ui) | Accessible primitives | shadcn/ui is built on Radix; you get keyboard nav, ARIA, focus management for free |
 
-### Core: SQLite Entity Registry
+### Frontend Data & State
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| TanStack Query | 5.96.x | Server state / data fetching | Caching, background refetch, mutation handling, devtools. 12M+ weekly downloads. The standard for REST API consumption in React 2026. |
+| Zustand | 5.0.x | Client-side UI state | Lightweight (1.2KB), hook-based, no boilerplate. Perfect for: selected entity, active panel, sidebar state. Do NOT use Redux -- massive overkill for a personal tool. |
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| sqlite3 | stdlib (SQLite 3.51.0 on system) | Entity registry storage | Zero new dependencies. Python 3.12 bundles it. JSON1 extension built-in for flexible metadata columns. WAL mode for concurrent reads during pipeline runs. This is a single-user personal tool -- SQLite is the correct database. |
-| aiosqlite | >=0.22.0,<1.0 | Async SQLite access from pipeline | The pipeline is already async (pipeline_async.py). Entity backfill and discovery run alongside ingestion. aiosqlite wraps stdlib sqlite3 with async context managers -- same API surface, non-blocking. Thin wrapper, no ORM overhead. |
+### Backend
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| FastAPI | 0.135.x | JSON API layer | Already in the Python ecosystem; Pydantic v2 native (matches existing models); auto-generates OpenAPI spec; async-capable |
+| Uvicorn | 0.34.x | ASGI server | Standard FastAPI server; auto-reload in dev |
 
-**Why aiosqlite and not just sqlite3 with asyncio.to_thread():**
-- `to_thread()` works but requires manual connection management per call
-- aiosqlite provides async context managers (`async with aiosqlite.connect() as db:`) matching the project's existing async patterns
-- Connection pooling through a single shared thread per connection -- safe for SQLite's single-writer model
-- The project already uses async patterns extensively in pipeline_async.py; aiosqlite fits naturally
+### Backend Database Access
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| sqlite3 (stdlib) | N/A | SQLite access from API | **Keep the existing sync `sqlite3` module.** Do NOT add SQLAlchemy or aiosqlite. Rationale below. |
 
-**Schema approach:** Hand-written SQL with a `schema_version` table. Migration functions in `src/entity/migrations.py` run on startup, check current version, apply incremental changes. Pydantic models for Python-side representations (consistent with existing config.py and synthesis/models.py patterns). No ORM.
+### Dev Tooling
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| pnpm | 9.x | JS package manager | Faster installs, strict dependency resolution, handles React 19 peer deps without --legacy-peer-deps hack |
+| @tanstack/react-query-devtools | 5.x | Query debugging | Invaluable during development; tree-shaken in production |
 
-### Entity Discovery: Claude Structured Outputs (Already in Stack)
+## Key Decision: SQLite Access Strategy
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| anthropic (existing) | >=0.45.0 | NER / entity extraction from text | The project already uses Claude structured outputs for meeting extraction (ExtractionItemOutput) and synthesis (DailySynthesisOutput). Entity discovery is the same pattern: send text, get structured JSON with entity mentions. Zero new dependencies. |
+The existing codebase uses raw `sqlite3` with WAL mode, `sqlite3.Row` factory, and a clean `EntityRepository` class. The API layer should **wrap the existing repository, not replace it**.
 
-**Why NOT spaCy / GLiNER / dedicated NER libraries:**
-- The project already sends all source text through Claude for extraction. Entity discovery is a prompt change plus a schema extension, not a new library.
-- spaCy adds approximately 500MB of model downloads for marginal accuracy gain over Claude Sonnet on business-domain text (partner names, people, initiatives are not standard NER categories).
-- Claude already sees participant lists, meeting titles, Slack usernames, HubSpot deal/company names -- it has rich context for entity recognition that a standalone NER model would lack.
-- Adding a separate NER pipeline creates a second extraction pass over the same text. Instead, extend the existing structured output schemas with entity reference fields. One pass, zero new dependencies.
+**Use sync sqlite3 in FastAPI thread pool, NOT async aiosqlite. Here is why:**
 
-**Implementation approach:** Add `entity_mentions: list[EntityMention]` fields to existing ExtractionItemOutput and DailySynthesisOutput Pydantic models. EntityMention is a new Pydantic model with `name`, `type` (partner/person/initiative), and `confidence` fields. Claude extracts entities during its existing synthesis pass. For backfill over historical summaries, a dedicated discovery prompt reads stored markdown and outputs entity mentions.
+1. **Existing code works.** `EntityRepository` is battle-tested. Rewriting it for async gains nothing -- SQLite is local disk I/O, not network I/O.
+2. **WAL mode already enables concurrent reads.** Multiple API requests can read simultaneously.
+3. **FastAPI handles sync gracefully.** Sync `def` endpoints (not `async def`) automatically run in a thread pool. No blocking.
+4. **Adding SQLAlchemy/aiosqlite is over-engineering.** This is a personal tool with one concurrent user. The abstraction cost exceeds the benefit.
 
-### Entity Merge/Resolution: RapidFuzz (Already in Stack)
+**Pattern:** Import `EntityRepository` directly in FastAPI dependency injection:
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| rapidfuzz (existing) | >=3.12.0 | Fuzzy string matching for entity merge proposals | Already added in v1.5.1 for cross-source dedup. Reuse for matching "Colin" = "Colin R." = "Colin Richardson". Token sort ratio and partial ratio algorithms handle name variations. No new dependency. |
+```python
+from fastapi import Depends
+from src.entity.repository import EntityRepository
 
-**Merge strategy (algorithmic + LLM hybrid):**
-1. Normalize names: lowercase, strip suffixes (Inc, LLC), collapse whitespace
-2. Compute rapidfuzz.fuzz.token_sort_ratio for all entity name pairs within same type
-3. Above 95: auto-merge (high confidence)
-4. Between 85-95: propose merge, optionally confirm with Claude (reuse existing client)
-5. Below 85: separate entities
-6. Store aliases in entity registry so merged entities retain all known name variants
+def get_entity_repo() -> EntityRepository:
+    repo = EntityRepository(db_path=settings.entity_db_path)
+    repo.connect()
+    try:
+        yield repo
+    finally:
+        repo.close()
 
-**Why NOT a full entity resolution framework (dedupe, entity-resolution, zingg):**
-- Those frameworks handle millions of records across messy datasets with active learning
-- This system has hundreds to low thousands of entity mentions
-- The existing SequenceMatcher pattern in src/dedup.py proves lightweight fuzzy matching works for this project's scale
-- rapidfuzz is already a dependency -- zero incremental cost
+@app.get("/api/entities")
+def list_entities(repo: EntityRepository = Depends(get_entity_repo)):
+    return repo.list_entities()
+```
 
-### Scoped Views: No New Dependencies
+## Key Decision: CORS Strategy
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| argparse (existing) | stdlib | New `entity` subcommand for CLI queries | Already used in main.py with subparsers. Add `entity` subcommand with filters. Consistent with existing CLI patterns. |
-| jinja2 (existing) | >=3.1.6 | Scoped markdown report generation | Already in dependencies for daily/weekly output. Entity-scoped reports are the same pattern: query data, render template, write markdown file. |
+Use FastAPI's `CORSMiddleware` for development. Next.js rewrites are an alternative but add config complexity for no gain at localhost scale.
+
+```python
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Next.js dev server
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type"],
+    allow_credentials=False,  # No auth needed for personal tool
+)
+```
+
+**Production note:** When deploying, switch to explicit origin or use Next.js rewrites to proxy API calls (same-origin, no CORS needed).
+
+## Key Decision: Three-Column Layout
+
+Use CSS Grid via Tailwind, not a layout library. Three columns with responsive collapse:
+
+```tsx
+<div className="grid grid-cols-[280px_1fr_320px] h-screen">
+  <aside>  {/* Entity/people nav */} </aside>
+  <main>   {/* Content panel */}     </main>
+  <aside>  {/* Context sidebar */}   </aside>
+</div>
+```
+
+shadcn/ui provides `ScrollArea`, `ResizablePanelGroup` (via `react-resizable-panels`), `Sidebar` components that slot directly into this layout. No additional layout library needed.
+
+## Alternatives Considered
+
+| Category | Recommended | Alternative | Why Not |
+|----------|-------------|-------------|---------|
+| Component lib | shadcn/ui | MUI | MUI ships 300KB+ runtime; opinionated Material theme; overkill for personal tool |
+| Component lib | shadcn/ui | Ant Design | Heavy bundle, CJK-first docs, enterprise-grade complexity unnecessary |
+| Component lib | shadcn/ui | Tremor | Good for charts but too narrow; shadcn/ui covers full component needs |
+| State (server) | TanStack Query | SWR | SWR is simpler but lacks mutation handling, devtools, and cache control needed for entity CRUD |
+| State (client) | Zustand | Redux Toolkit | Redux ceremony (slices, reducers, dispatch) is absurd for UI state in a personal tool |
+| State (client) | Zustand | Jotai | Jotai's atomic model is elegant but Zustand's single-store is simpler for the handful of UI states needed |
+| DB access | Raw sqlite3 | SQLAlchemy + aiosqlite | Existing repo works; SQLAlchemy adds ORM complexity with no benefit for a 5-table SQLite DB |
+| DB access | Raw sqlite3 | SQLModel | Tiangolo's SQLModel is FastAPI-native but requires model rewrite; existing Pydantic models + raw SQL is fine |
+| Package manager | pnpm | npm | npm requires --legacy-peer-deps for React 19; pnpm handles it cleanly |
+| CSS | Tailwind | CSS Modules | shadcn/ui requires Tailwind; fighting it adds friction |
+
+## What NOT to Add (Over-Engineering Warnings)
+
+| Temptation | Why to Resist |
+|------------|---------------|
+| **PostgreSQL** | SQLite is perfect for single-user. WAL mode handles concurrent API reads. Do not migrate. |
+| **Redis / caching layer** | One user, local SQLite. Browser-side TanStack Query cache is sufficient. |
+| **GraphQL** | REST is simpler for this use case. Entity relationships are shallow (no deep nesting). FastAPI auto-generates OpenAPI docs. |
+| **Docker for dev** | Python + Node on localhost is fine. Docker adds startup time and debugging friction for a personal tool. |
+| **Authentication** | Localhost-first personal tool. Add auth only if/when hosting remotely (v5.0+). |
+| **WebSockets for real-time** | Pipeline runs are infrequent batch jobs. Polling or SSE for run status is sufficient. |
+| **Prisma / Drizzle** | Frontend should not talk to the database. FastAPI is the data layer. |
+| **tRPC** | Requires full-stack TypeScript. Backend is Python. Use REST + OpenAPI. |
+| **Monorepo tooling (Turborepo, Nx)** | Two packages (frontend + existing Python). A simple directory structure suffices. |
+
+## Project Structure (New Additions)
+
+```
+daily-summarizer/
+  src/                    # Existing Python pipeline
+    entity/               # Existing entity module
+    api/                  # NEW: FastAPI application
+      __init__.py
+      main.py             # FastAPI app, CORS, lifespan
+      routers/
+        summaries.py      # Daily/weekly/monthly summary endpoints
+        entities.py       # Entity CRUD, merge proposals
+        pipeline.py       # Run triggers, history, config
+      dependencies.py     # Shared deps (DB connection, config)
+  web/                    # NEW: Next.js frontend
+    src/
+      app/                # App Router pages
+      components/
+        layout/           # Three-column shell
+        entities/         # Entity browser, CRUD forms
+        summaries/        # Summary viewer, temporal nav
+        sidebar/          # Context panel
+      lib/
+        api.ts            # TanStack Query hooks + fetch wrappers
+        store.ts          # Zustand store(s)
+    package.json
+    next.config.ts
+    tailwind.config.ts
+```
 
 ## Installation
 
 ```bash
-# Single new dependency
-pip install "aiosqlite>=0.22.0,<1.0"
+# Backend (add to existing pyproject.toml dependencies)
+pip install fastapi uvicorn
+
+# Frontend (new web/ directory)
+pnpm create next-app@latest web --typescript --tailwind --eslint --app --src-dir
+cd web
+pnpm dlx shadcn@latest init
+pnpm add @tanstack/react-query zustand
+pnpm add -D @tanstack/react-query-devtools
 ```
 
-**pyproject.toml change:**
-```toml
-dependencies = [
-    # ... all existing dependencies unchanged ...
-    "aiosqlite>=0.22.0,<1.0",           # NEW: async SQLite for entity registry
-]
-```
+## Confidence Assessment
 
-That is it. One new package. Everything else leverages the existing stack.
-
-## Integration Points with Existing Code
-
-### Pydantic Models (src/synthesis/models.py)
-
-Extend existing structured output models with entity fields:
-
-```python
-class EntityMention(BaseModel):
-    """Entity reference extracted during synthesis."""
-    model_config = ConfigDict(extra="forbid")
-
-    name: str           # As mentioned in text ("Affirm", "Colin", "Q2 launch")
-    entity_type: str    # "partner" | "person" | "initiative"
-
-class ExtractionItemOutput(BaseModel):
-    """Extended: each extraction item now carries entity mentions."""
-    model_config = ConfigDict(extra="forbid")
-
-    content: str
-    participants: list[str] = Field(default_factory=list)
-    rationale: str | None = None
-    entity_mentions: list[EntityMention] = Field(default_factory=list)  # NEW
-```
-
-This is backward-compatible: the `entity_mentions` field defaults to an empty list, so existing extraction results remain valid.
-
-### Async Pipeline (src/pipeline_async.py)
-
-Entity processing slots into the existing async pipeline:
-
-```
-Ingest (existing)
-  -> Extract with entity mentions (extended schema)
-  -> Dedup (existing)
-  -> Synthesize with entity attribution (extended schema)
-  -> Persist entities to SQLite registry
-  -> Write Output (existing + entity-tagged)
-```
-
-Entity persistence is a new step after synthesis. It runs sequentially after synthesis completes (needs the synthesis results) but uses aiosqlite for non-blocking DB writes.
-
-### Config (src/config.py)
-
-Add entity config section to existing Pydantic config model:
-
-```python
-class EntityConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    db_path: str = "data/entities.db"
-    merge_threshold: float = 0.85
-    auto_merge_threshold: float = 0.95
-    discovery_model: str = "claude-sonnet-4-20250514"
-```
-
-### CLI (src/main.py)
-
-New argparse subcommands alongside existing daily/weekly/monthly/discover-slack/discover-notion:
-
-```
-python -m src.main entity list [--type partner|person|initiative]
-python -m src.main entity show <name> [--from DATE] [--to DATE]
-python -m src.main entity merge <id1> <id2>
-python -m src.main entity merge-proposals [--auto-apply]
-python -m src.main entity report <name> [--format md|terminal]
-```
-
-### Existing Dedup (src/dedup.py)
-
-The dedup module already uses difflib.SequenceMatcher for title similarity. Entity merge uses the same conceptual pattern but operates on entity names via rapidfuzz (already in deps). No changes to existing dedup code needed.
-
-## Alternatives Considered
-
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| sqlite3 + aiosqlite | SQLAlchemy + Alembic | If the schema grew to 15+ tables with complex relationships and multiple developers. Not this project. |
-| sqlite3 + aiosqlite | PostgreSQL | If multi-user, concurrent writes, or full-text search at scale were needed. Not a personal tool. |
-| Claude structured outputs for NER | spaCy + en_core_web_lg | If you needed offline NER without API costs. But we already pay for Claude calls during extraction -- entity fields are free marginal cost. |
-| Claude structured outputs for NER | GLiNER (zero-shot NER) | If you needed NER without any API and wanted custom entity types. Good library, but redundant when Claude is already in the loop. |
-| rapidfuzz for merge | dedupe library | If you had 100K+ entities with training data. Overkill for hundreds of entities. |
-| Hand-written SQL migrations | Alembic | If using SQLAlchemy. Alembic requires SQLAlchemy -- circular dependency on a decision we already rejected. |
-| argparse | click / typer | If building a standalone CLI tool. But main.py already uses argparse -- switching frameworks for one subcommand creates inconsistency. |
-
-## What NOT to Add
-
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| SQLAlchemy | 3-4 simple tables. ORM adds session management, migration tooling, and abstraction for no benefit at this scale. Raw SQL is more readable for simple entity CRUD. | sqlite3/aiosqlite + Pydantic models |
-| Alembic | Requires SQLAlchemy. A `schema_version` table with Python migration functions is simpler and sufficient for a personal tool with one developer. | Hand-written migrations |
-| spaCy | 500MB+ model downloads. Separate extraction pass duplicates work Claude already does. Business entity types (partners, initiatives) are not standard NER categories -- would need custom training. | Claude structured output extension |
-| Neo4j / graph DB | Entity relationships are simple (person belongs to partner, initiative involves people). These are foreign keys, not graph traversals. | SQLite junction tables |
-| FTS5 (SQLite full-text search) | Premature optimization. Entity queries filter by entity ID + date range, which indexed columns handle. | Standard SQL with indexes on entity_id and date |
-| instructor | Wraps anthropic SDK for structured outputs. Unnecessary -- the project already uses native structured outputs via output_config. | Direct anthropic SDK |
-| langchain | Massive dependency tree. The project makes direct Claude API calls which are simpler and more maintainable. | Direct anthropic SDK |
-
-## Stack Patterns by Feature
-
-**Entity discovery (new pipeline runs):**
-- Extend existing Claude structured output schema with EntityMention fields
-- No new libraries, no new API calls -- piggyback on existing extraction
-
-**Entity discovery (historical backfill):**
-- Read stored markdown summaries from output/ directory
-- Send through dedicated Claude prompt with EntityMention output schema
-- Use AsyncAnthropic for concurrent processing of multiple days
-- Persist discovered entities to SQLite via aiosqlite
-
-**Entity merge proposals:**
-- Query all entities from SQLite grouped by type
-- Compute pairwise rapidfuzz.fuzz.token_sort_ratio within each type
-- Above auto_merge_threshold (0.95): merge automatically, log action
-- Between merge_threshold (0.85) and auto_merge_threshold: present to user via CLI
-- Store merge decisions (alias table) so rejected merges are not re-proposed
-
-**Scoped views:**
-- SQL query: join entity mentions to synthesis items by date range
-- Render with existing Jinja2 templates
-- Output as markdown (consistent with daily/weekly reports) or terminal display
-
-## Version Compatibility
-
-| Package | Compatible With | Notes |
-|---------|-----------------|-------|
-| aiosqlite 0.22.x | Python >=3.9 | Well within our >=3.12 requirement |
-| aiosqlite 0.22.x | sqlite3 stdlib | Uses stdlib sqlite3 under the hood, no version conflicts |
-| rapidfuzz 3.14.x (existing) | aiosqlite 0.22.x | No interaction -- different domains |
-
-## Capability-to-Library Mapping
-
-Quick reference for plan authors -- which library addresses which v2.0 feature.
-
-| Feature | Library | Key API / Pattern |
-|---------|---------|-------------------|
-| Entity registry storage | sqlite3 + aiosqlite | `aiosqlite.connect()`, hand-written SQL, Pydantic hydration |
-| Entity discovery (new runs) | anthropic (existing) | Extended structured output schema with EntityMention |
-| Entity discovery (backfill) | anthropic (existing) | Dedicated prompt + AsyncAnthropic for concurrent processing |
-| Entity merge proposals | rapidfuzz (existing) | `fuzz.token_sort_ratio()`, threshold-based merge/propose |
-| Entity merge confirmation | anthropic (existing) | Optional LLM confirmation for ambiguous pairs |
-| Entity merge CLI | argparse (existing) | New `entity merge-proposals` subcommand |
-| Scoped view queries | sqlite3 + aiosqlite | SQL joins: entity -> mentions -> synthesis items |
-| Scoped view rendering | jinja2 (existing) | Markdown templates for entity reports |
-| Scoped view CLI | argparse (existing) | New `entity show` and `entity report` subcommands |
-| Entity config | pydantic (existing) | New EntityConfig model in config.py |
+| Decision | Confidence | Basis |
+|----------|------------|-------|
+| Next.js 15.2.x | HIGH | Official docs, stable release, LTS |
+| shadcn/ui + Tailwind | HIGH | Ecosystem consensus, official Next.js integration |
+| TanStack Query v5 | HIGH | npm downloads, community standard |
+| Zustand v5 | HIGH | npm data, appropriate for scope |
+| FastAPI 0.135.x | HIGH | PyPI, Pydantic v2 compatibility confirmed |
+| Raw sqlite3 over aiosqlite | HIGH | Based on reading actual codebase; WAL + thread pool is correct pattern |
+| CORS over Next.js rewrites | MEDIUM | Both work; CORS is more explicit and debuggable |
 
 ## Sources
 
-- [aiosqlite PyPI](https://pypi.org/project/aiosqlite/) -- version 0.22.1, released 2025-12-23 (HIGH confidence)
-- [aiosqlite docs](https://aiosqlite.omnilib.dev/) -- API reference, async context managers (HIGH confidence)
-- [aiosqlite GitHub](https://github.com/omnilib/aiosqlite) -- threading model, sqlite3 compatibility (HIGH confidence)
-- [RapidFuzz PyPI](https://pypi.org/project/RapidFuzz/) -- version 3.14.3 (HIGH confidence, already in project deps)
-- [RapidFuzz GitHub](https://github.com/rapidfuzz/RapidFuzz) -- benchmarks vs thefuzz, algorithm documentation (HIGH confidence)
-- [Python sqlite3 docs](https://docs.python.org/3/library/sqlite3.html) -- WAL mode, JSON1 support (HIGH confidence)
-- System SQLite version verified: `python3 -c "import sqlite3; print(sqlite3.sqlite_version)"` returned 3.51.0 (HIGH confidence)
-- LLM-based NER approaches validated via [AWS Bedrock NER patterns](https://aws.amazon.com/blogs/machine-learning/use-zero-shot-large-language-models-on-amazon-bedrock-for-custom-named-entity-recognition/) and [GPT-NER research](https://arxiv.org/abs/2304.10428) (MEDIUM confidence -- approach is sound, prompt design needs iteration)
-- Existing project code reviewed: src/synthesis/models.py, src/dedup.py, src/pipeline_async.py, src/config.py, src/main.py (HIGH confidence)
-
----
-*Stack research for: Entity layer additions (v2.0) to Work Intelligence System*
-*Researched: 2026-04-05*
+- [Next.js 15 stable](https://nextjs.org/blog/next-15) -- official blog
+- [Next.js releases](https://github.com/vercel/next.js/releases) -- GitHub
+- [FastAPI on PyPI](https://pypi.org/project/fastapi/) -- v0.135.x confirmed
+- [FastAPI CORS docs](https://fastapi.tiangolo.com/tutorial/cors/) -- official tutorial
+- [shadcn/ui Next.js installation](https://ui.shadcn.com/docs/installation/next) -- official docs
+- [TanStack Query releases](https://github.com/tanstack/query/releases) -- v5.96.x confirmed
+- [Zustand on npm](https://www.npmjs.com/package/zustand) -- v5.0.12 confirmed
+- [React component libraries 2026](https://www.builder.io/blog/react-component-libraries-2026) -- ecosystem survey
+- [TanStack Query vs SWR comparison](https://www.pkgpulse.com/blog/tanstack-query-vs-swr-vs-apollo-2026) -- feature comparison
+- [React state management 2026](https://www.c-sharpcorner.com/article/state-management-in-react-2026-best-practices-tools-real-world-patterns/) -- patterns overview

@@ -6,6 +6,7 @@
 - ✅ **v1.5 Expanded Ingest** - Phases 6-12 (shipped 2026-04-05)
 - ✅ **v1.5.1 Notion + Performance + Reliability** - Phases 13-18.1 (shipped 2026-04-05)
 - ✅ **v2.0 Entity Layer** - Phases 19-23.1 (shipped 2026-04-08)
+- [ ] **v3.0 Web Interface** - Phases 24-29
 
 ## Phases
 
@@ -351,7 +352,7 @@ Plans:
 - [x] 18-02-PLAN.md -- Remove deprecated beta header fallback from extractor/synthesizer/commitments, remove dead dedup import from pipeline.py
 
 ### Phase 18.1: Milestone Audit Gap Closure
-**Goal**: Close remaining v1.5.1 audit gaps -- verify Phase 16 requirements (PERF-03, OPS-01, DEDUP-01), fix notion_discovery.py str→Path crash, remove dead sync pipeline code
+**Goal**: Close remaining v1.5.1 audit gaps -- verify Phase 16 requirements (PERF-03, OPS-01, DEDUP-01), fix notion_discovery.py str->Path crash, remove dead sync pipeline code
 **Depends on**: Phase 18
 **Requirements**: PERF-03, OPS-01, DEDUP-01, NOTION-01
 **Gap Closure**: Closes gaps from v1.5.1 re-audit
@@ -363,7 +364,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [x] 18.1-01-PLAN.md -- Verify Phase 16 and fix notion_discovery.py str→Path bug
+- [x] 18.1-01-PLAN.md -- Verify Phase 16 and fix notion_discovery.py str->Path bug
 - [x] 18.1-02-PLAN.md -- Remove dead sync pipeline code from pipeline.py
 
 </details>
@@ -460,7 +461,7 @@ Plans:
 - [x] 23-02-PLAN.md -- Jinja2 entity report template, entity report CLI command, output/entities/ generation
 
 ### Phase 23.1: Milestone Audit Gap Closure
-**Goal**: Close v2.0 audit gaps — fix pipeline attribution/discovery ordering, fix relative template path, write missing VERIFICATION.md for phases 19 and 23
+**Goal**: Close v2.0 audit gaps -- fix pipeline attribution/discovery ordering, fix relative template path, write missing VERIFICATION.md for phases 19 and 23
 **Depends on**: Phase 23
 **Requirements**: ENTY-01, ENTY-02, ENTY-03, VIEW-01, VIEW-02, VIEW-03, ATTR-01
 **Gap Closure**: Closes gaps from v2.0 audit
@@ -477,10 +478,100 @@ Plans:
 
 </details>
 
+## v3.0 Web Interface (Phases 24-29)
+
+**Milestone Goal:** A polished, demo-quality web UI that replaces the CLI as the daily interface -- browse summaries, manage entities, configure the pipeline, and trigger runs from the browser.
+
+- [ ] **Phase 24: FastAPI Skeleton + Summary API** - App factory, CORS, dependency injection, summary read endpoints, SQLite busy_timeout hardening
+- [ ] **Phase 25: Next.js Scaffold + Summary View** - Three-column layout shell, daily summary rendering, date navigation, roll-up browsing
+- [ ] **Phase 26: Entity API + Entity Browser** - Entity list/scoped view endpoints, nav sidebar with activity indicators, context sidebar
+- [ ] **Phase 27: Entity Management UI** - Entity CRUD forms, merge proposal review, alias management, command palette
+- [ ] **Phase 28: Pipeline Run Management** - Pipeline trigger endpoint, SSE status streaming, subprocess isolation, run history
+- [ ] **Phase 29: Config Management + Polish** - Config viewer/editor, dark mode, keyboard navigation, design polish
+
+## Phase Details
+
+### Phase 24: FastAPI Skeleton + Summary API
+**Goal**: The API foundation is proven -- FastAPI serves real summary data from existing files with safe SQLite access, validating the core integration pattern before any UI is built
+**Depends on**: Phase 23.1 (v2.0 complete)
+**Requirements**: API-01, API-02, API-03, SUM-03
+**Success Criteria** (what must be TRUE):
+  1. `uvicorn api.app:app` starts on localhost:8000 and responds to health check with CORS headers allowing localhost:3000
+  2. `GET /api/summaries/{date}` returns structured JSON (from sidecar) plus rendered markdown for a real historical date
+  3. `GET /api/summaries` returns a list of available dates so the frontend can build navigation without guessing
+  4. All API endpoints import from `src.*` modules -- zero business logic in the `api/` directory (grep for `sqlite3` in api/ returns nothing)
+  5. SQLite connections use `busy_timeout=5000` and connection-per-request via FastAPI dependency injection
+**Pitfall Warnings**: Event loop conflict (#3) -- refactor async_pipeline entry point before building endpoints. CORS (#6) -- CORSMiddleware must be first middleware. SQLite busy_timeout (#1) -- add pragma to connection factory.
+**Plans**: TBD
+
+### Phase 25: Next.js Scaffold + Summary View
+**Goal**: The daily use case works in the browser -- user opens localhost:3000 and sees yesterday's summary in a three-column layout, can navigate between dates, and sees roll-ups
+**Depends on**: Phase 24
+**Requirements**: NAV-01, SUM-01, SUM-02, SUM-04, UX-03
+**Success Criteria** (what must be TRUE):
+  1. Opening localhost:3000 shows a three-column layout with left nav, center content panel, and right context sidebar
+  2. The center panel renders the daily summary for the most recent available date with structured data (decisions, commitments, substance) and markdown content
+  3. User can navigate between dates via prev/next arrows and a date picker, with graceful "no summary" messaging for missing dates
+  4. Weekly and monthly roll-up summaries are browsable from the same navigation as daily summaries
+  5. Each panel has loading skeletons, error boundaries prevent one panel's failure from crashing the entire page, and action results show toast notifications
+**Pitfall Warnings**: RSC misuse (#9) -- use client components for all interactive panels, server components only for layout shell. Two build systems (#15) -- create unified Makefile with `make dev` running both servers.
+**Plans**: TBD
+
+### Phase 26: Entity API + Entity Browser
+**Goal**: The entity navigation experience works end-to-end -- user sees entities in the left nav, clicks one, and sees its scoped view in the center panel with contextual details in the right sidebar
+**Depends on**: Phase 25
+**Requirements**: NAV-02, NAV-03, NAV-04, ENT-01, ENT-02, ENT-05
+**Success Criteria** (what must be TRUE):
+  1. Left nav shows entities grouped by type (partners, people, initiatives) with activity indicator dots on entities active in the last 7 days
+  2. User can filter the entity list by type and sort by activity or name
+  3. Clicking an entity in the left nav loads its scoped view in the center panel showing highlights, open commitments, and activity timeline with significance scoring
+  4. The right sidebar adapts to the current selection -- for entities it shows aliases, metadata, organization linkage, and related entities
+  5. Clicking a mention in the activity timeline expands the source evidence snippet showing source type, date, and confidence score
+**Pitfall Warnings**: Logic duplication (#4) -- entity endpoints must import from `src.entity.repository` and `src.entity.views`, no direct SQL. Concurrent reads (#1) -- connection-per-request pattern from Phase 24 handles this.
+**Plans**: TBD
+
+### Phase 27: Entity Management UI
+**Goal**: Users can manage the entity registry entirely from the browser -- create, edit, delete entities, review merge proposals, manage aliases, and navigate anywhere via keyboard
+**Depends on**: Phase 26
+**Requirements**: ENT-03, ENT-04, NAV-05
+**Success Criteria** (what must be TRUE):
+  1. User can create a new entity (partner, person, or initiative) from a form in the browser with immediate feedback on success or validation errors
+  2. User can edit an entity's name, type, and metadata, and delete entities with a confirmation step
+  3. Merge proposal review UI shows side-by-side entity comparison with similarity score, mention counts, and one-click approve/reject
+  4. User can add and remove aliases for any entity from the entity detail view
+  5. Command palette (Cmd+K) enables keyboard-first search for entities by name/alias, jump to any date, and trigger actions without touching the mouse
+**Pitfall Warnings**: Concurrent write locks (#1) -- use `BEGIN IMMEDIATE` for entity writes. Thread safety (#8) -- never share PipelineContext or mutable state across requests.
+**Plans**: TBD
+
+### Phase 28: Pipeline Run Management
+**Goal**: Users can trigger and monitor pipeline runs from the browser -- fire-and-forget with real-time status updates, never blocking the API server
+**Depends on**: Phase 27
+**Requirements**: PIPE-01, PIPE-02, PIPE-03
+**Success Criteria** (what must be TRUE):
+  1. User can trigger a pipeline run from the browser and see real-time stage-by-stage progress via SSE (calendar_ingest running... complete... synthesis running...)
+  2. Pipeline runs execute in a subprocess or thread pool -- triggering a run does not degrade API responsiveness for other requests
+  3. Run history page shows past runs with status (success/failed/running), duration, target date, and error details for failed runs
+  4. If the SSE connection drops mid-run, reconnecting shows current status (not lost state)
+**Pitfall Warnings**: Server blocking (#2) -- pipeline MUST run in subprocess, never in-process. Event loop conflict (#3) -- use `await async_pipeline()` directly or subprocess, never nested `asyncio.run()`. Lost state (#12) -- persist run status to survive server restarts.
+**Plans**: TBD
+
+### Phase 29: Config Management + Polish
+**Goal**: The v3.0 feature set is complete and demo-quality -- config is manageable from the browser, the UI is dark-mode ready, keyboard-navigable, and visually polished
+**Depends on**: Phase 28
+**Requirements**: CFG-01, CFG-02, CFG-03, UX-01, UX-02, UX-04
+**Success Criteria** (what must be TRUE):
+  1. User can view the current pipeline config (sources, channels, priorities) in a structured, readable format in the browser
+  2. User can edit config fields with Pydantic validation -- invalid values show structured error messages, valid changes are saved atomically (temp file + rename) with backup of previous version
+  3. Dark mode works with system preference detection and a manual toggle, persisted across sessions
+  4. Keyboard navigation works across all three columns: j/k for list traversal, h/l for column focus, Enter to select, Esc to deselect
+  5. The overall design is demo-presentable with consistent typography, spacing, color palette, and visual hierarchy across all views
+**Pitfall Warnings**: Write safety (#7) -- build config read-only view first, validate all writes through PipelineConfig before disk write. Config mutation (#7) -- atomic write with backup, reject writes during active pipeline runs.
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:**
-Phases 19-23.1 execute sequentially: 19 -> 20 -> 21 -> 22 -> 23 -> 23.1.
+Phases 24-29 execute sequentially: 24 -> 25 -> 26 -> 27 -> 28 -> 29.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -510,3 +601,9 @@ Phases 19-23.1 execute sequentially: 19 -> 20 -> 21 -> 22 -> 23 -> 23.1.
 | 22. Merge + Split Review | v2.0 | 2/2 | Complete | 2026-04-08 |
 | 23. Scoped Views + Reports | v2.0 | 2/2 | Complete | 2026-04-08 |
 | 23.1. Milestone Audit Gap Closure | v2.0 | 1/1 | Complete | 2026-04-08 |
+| 24. FastAPI Skeleton + Summary API | v3.0 | 0/TBD | Not started | - |
+| 25. Next.js Scaffold + Summary View | v3.0 | 0/TBD | Not started | - |
+| 26. Entity API + Entity Browser | v3.0 | 0/TBD | Not started | - |
+| 27. Entity Management UI | v3.0 | 0/TBD | Not started | - |
+| 28. Pipeline Run Management | v3.0 | 0/TBD | Not started | - |
+| 29. Config Management + Polish | v3.0 | 0/TBD | Not started | - |
