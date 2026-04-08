@@ -15,6 +15,7 @@ from src.entity.views import (
     ActivityItem,
     EnrichedEntity,
     EntityScopedView,
+    generate_entity_report,
     get_enriched_entity_list,
     get_entity_scoped_view,
     score_significance,
@@ -286,3 +287,101 @@ class TestGetEnrichedEntityList:
         assert entities[0].mention_count == 0
         assert entities[0].commitment_count == 0
         assert entities[0].last_active_date is None
+
+
+# ---------------------------------------------------------------------------
+# generate_entity_report tests
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateEntityReport:
+    def test_generates_report_file(self, repo, tmp_path):
+        entity = repo.add_entity("Affirm", "partner")
+        _add_mention(repo._conn, entity.id, "substance", "2026-04-01", "Affirm sync")
+        _add_mention(repo._conn, entity.id, "decision", "2026-04-02", "Affirm strategy shift")
+
+        template_dir = str(tmp_path / "templates")
+        import shutil, os
+        os.makedirs(template_dir, exist_ok=True)
+        shutil.copy(
+            os.path.join(os.path.dirname(__file__), "..", "templates", "entity_report.md.j2"),
+            os.path.join(template_dir, "entity_report.md.j2"),
+        )
+
+        output_dir = str(tmp_path / "output" / "entities")
+        path = generate_entity_report(
+            repo, "Affirm",
+            from_date=date(2026, 4, 1), to_date=date(2026, 4, 30),
+            output_dir=output_dir, template_dir=template_dir,
+        )
+
+        assert path.exists()
+        content = path.read_text()
+        assert "Entity Report: Affirm" in content
+        assert "partner" in content
+        assert "Affirm sync" in content
+        assert "Affirm strategy shift" in content
+
+    def test_report_contains_commitments_section(self, repo, tmp_path):
+        entity = repo.add_entity("Colin", "person")
+        _add_mention(repo._conn, entity.id, "commitment", "2026-04-01", "Colin owes report")
+
+        template_dir = str(tmp_path / "templates")
+        import shutil, os
+        os.makedirs(template_dir, exist_ok=True)
+        shutil.copy(
+            os.path.join(os.path.dirname(__file__), "..", "templates", "entity_report.md.j2"),
+            os.path.join(template_dir, "entity_report.md.j2"),
+        )
+
+        output_dir = str(tmp_path / "output")
+        path = generate_entity_report(
+            repo, "Colin",
+            from_date=date(2026, 4, 1), to_date=date(2026, 4, 30),
+            output_dir=output_dir, template_dir=template_dir,
+        )
+
+        content = path.read_text()
+        assert "Open Commitments" in content
+        assert "Colin owes report" in content
+
+    def test_report_handles_zero_mentions(self, repo, tmp_path):
+        repo.add_entity("Empty Corp", "partner")
+
+        template_dir = str(tmp_path / "templates")
+        import shutil, os
+        os.makedirs(template_dir, exist_ok=True)
+        shutil.copy(
+            os.path.join(os.path.dirname(__file__), "..", "templates", "entity_report.md.j2"),
+            os.path.join(template_dir, "entity_report.md.j2"),
+        )
+
+        output_dir = str(tmp_path / "output")
+        path = generate_entity_report(
+            repo, "Empty Corp",
+            from_date=date(2026, 4, 1), to_date=date(2026, 4, 30),
+            output_dir=output_dir, template_dir=template_dir,
+        )
+
+        content = path.read_text()
+        assert "No activity found" in content
+
+    def test_report_slug_filename(self, repo, tmp_path):
+        repo.add_entity("Affirm Inc", "partner")
+
+        template_dir = str(tmp_path / "templates")
+        import shutil, os
+        os.makedirs(template_dir, exist_ok=True)
+        shutil.copy(
+            os.path.join(os.path.dirname(__file__), "..", "templates", "entity_report.md.j2"),
+            os.path.join(template_dir, "entity_report.md.j2"),
+        )
+
+        output_dir = str(tmp_path / "output")
+        path = generate_entity_report(
+            repo, "Affirm Inc",
+            from_date=date(2026, 4, 1), to_date=date(2026, 4, 30),
+            output_dir=output_dir, template_dir=template_dir,
+        )
+
+        assert path.name == "affirm-inc.md"

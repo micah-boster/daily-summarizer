@@ -1,0 +1,49 @@
+# Entity Report: {{ entity_name }}
+
+**Type:** {{ entity_type }}
+**Period:** {{ from_date or "all time" }} to {{ to_date or "today" }}
+**Total mentions:** {{ total_mentions }}
+**Generated:** {{ generated_date }}
+{% if aliases %}
+
+**Aliases:** {{ aliases | join(", ") }}
+{% endif %}
+
+{% if open_commitments %}
+## Open Commitments
+
+| Date | Details |
+|------|---------|
+{% for c in open_commitments %}
+| {{ c.source_date }} | {{ c.context_snippet or "(no details)" }} |
+{% endfor %}
+
+{% endif %}
+{% if highlights %}
+## Highlights
+
+Top {{ highlights | length }} most significant items:
+
+{% for h in highlights %}
+- **[{{ h.source_type | upper }}]** {{ h.source_date }}: {{ h.context_snippet or "(no snippet)" }}
+{% endfor %}
+
+{% endif %}
+## Activity by Date
+
+{% if activity_by_date %}
+{% for group in activity_by_date %}
+### {{ group["date"] }}
+
+{% for item in group["items"] %}
+- [{{ item.source_type | upper }}] {{ item.context_snippet or "(no snippet)" }}
+{% endfor %}
+
+{% endfor %}
+{% else %}
+No activity found in this period.
+{% endif %}
+
+---
+
+*Report generated for {{ entity_name }} ({{ entity_type }}) on {{ generated_date }}*

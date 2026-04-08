@@ -55,6 +55,16 @@ def register_entity_parser(subparsers: argparse._SubParsersAction) -> None:
     show_p.add_argument("--json", dest="json_output", action="store_true",
                         help="Output as JSON")
 
+    # entity report <name> [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--output-dir DIR]
+    report_p = entity_sub.add_parser("report", help="Generate per-entity markdown report")
+    report_p.add_argument("name", help="Entity name")
+    report_p.add_argument("--from", dest="from_date", type=date.fromisoformat, default=None,
+                          help="Start date (YYYY-MM-DD)")
+    report_p.add_argument("--to", dest="to_date", type=date.fromisoformat, default=None,
+                          help="End date (YYYY-MM-DD)")
+    report_p.add_argument("--output-dir", dest="output_dir", default=None,
+                          help="Output directory (default: output/entities)")
+
     # entity remove <name>
     remove_p = entity_sub.add_parser("remove", help="Soft-delete an entity")
     remove_p.add_argument("name", help="Entity name")
@@ -123,6 +133,8 @@ def handle_entity_command(args: argparse.Namespace) -> None:
                 _cmd_list(repo, args)
             elif cmd == "show":
                 _cmd_show(repo, args)
+            elif cmd == "report":
+                _cmd_report(repo, args, config)
             elif cmd == "remove":
                 _cmd_remove(repo, args)
             elif cmd == "alias":
@@ -132,7 +144,7 @@ def handle_entity_command(args: argparse.Namespace) -> None:
             elif cmd == "split":
                 _cmd_split(repo, args)
             else:
-                print("Usage: entity {add|list|show|remove|alias|review|split|backfill}", file=sys.stderr)
+                print("Usage: entity {add|list|show|report|remove|alias|review|split|backfill}", file=sys.stderr)
                 sys.exit(1)
     except Exception as e:
         print("Entity database unavailable: %s" % e, file=sys.stderr)
@@ -238,6 +250,27 @@ def _cmd_show(repo: EntityRepository, args: argparse.Namespace) -> None:
     elif not view.open_commitments and not view.highlights:
         print("No activity found for %s in this period." % view.entity_name)
         print("Try: entity show %s --all" % args.name)
+
+
+def _cmd_report(repo: EntityRepository, args: argparse.Namespace, config) -> None:
+    from src.entity.views import generate_entity_report
+
+    output_dir = getattr(args, "output_dir", None)
+    if output_dir is None:
+        output_dir = str(Path(config.pipeline.output_dir) / "entities")
+
+    try:
+        path = generate_entity_report(
+            repo=repo,
+            entity_name=args.name,
+            from_date=getattr(args, "from_date", None),
+            to_date=getattr(args, "to_date", None),
+            output_dir=output_dir,
+        )
+        print("Report generated: %s" % path)
+    except ValueError as e:
+        print("Error: %s" % e, file=sys.stderr)
+        sys.exit(1)
 
 
 def _cmd_remove(repo: EntityRepository, args: argparse.Namespace) -> None:
