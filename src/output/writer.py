@@ -184,6 +184,7 @@ def write_daily_sidecar(
     extractions: list,
     output_dir: Path,
     extracted_commitments: list | None = None,
+    entity_attribution=None,
 ) -> Path:
     """Write a JSON sidecar file alongside the daily markdown summary.
 
@@ -195,13 +196,18 @@ def write_daily_sidecar(
         extractions: List of MeetingExtraction objects from Stage 1.
         output_dir: Base output directory.
         extracted_commitments: Optional list of ExtractedCommitment objects.
+        entity_attribution: Optional AttributionResult from entity attribution.
 
     Returns:
         Path to the written JSON sidecar file.
     """
     from src.sidecar import build_daily_sidecar
 
-    sidecar = build_daily_sidecar(synthesis, extractions, extracted_commitments=extracted_commitments)
+    sidecar = build_daily_sidecar(
+        synthesis, extractions,
+        extracted_commitments=extracted_commitments,
+        entity_attribution=entity_attribution,
+    )
 
     d = synthesis.date
     file_dir = output_dir / "daily" / str(d.year) / f"{d.month:02d}"

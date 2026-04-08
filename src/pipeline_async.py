@@ -132,6 +132,53 @@ def _discover_and_register_entities(
         logger.warning("Entity discovery failed: %s. Daily summary unaffected.", e)
 
 
+def _attribute_entities(
+    synthesis_result: dict,
+    target_date,
+    config: PipelineConfig,
+):
+    """Post-synthesis entity attribution. Returns AttributionResult or None."""
+    if not config.entity.enabled:
+        return None
+
+    try:
+        from src.entity.attributor import attribute_synthesis_items, persist_mentions
+        from src.entity.db import get_connection_from_config
+        from src.entity.repository import EntityRepository
+        from src.synthesis.models import DailySynthesisOutput
+
+        conn = get_connection_from_config(config.entity)
+        if conn is None:
+            return None
+
+        # Reconstruct DailySynthesisOutput from synthesis_result dict
+        # (synthesis_result values are now full SynthesisItem/CommitmentRow objects)
+        output = DailySynthesisOutput(
+            executive_summary=synthesis_result.get("executive_summary"),
+            substance=synthesis_result.get("substance", []),
+            decisions=synthesis_result.get("decisions", []),
+            commitments=synthesis_result.get("commitments", []),
+        )
+
+        repo = EntityRepository(config.entity.db_path)
+        with repo:
+            date_str = target_date.isoformat() if hasattr(target_date, "isoformat") else str(target_date)
+            result = attribute_synthesis_items(output, repo, date_str)
+
+            if result.mentions:
+                count = persist_mentions(conn, result.mentions, date_str)
+                logger.info("Entity attribution: persisted %d mentions", count)
+            else:
+                logger.debug("Entity attribution: no mentions to persist")
+
+        conn.close()
+        return result
+
+    except Exception as e:
+        logger.warning("Entity attribution failed: %s. Daily summary unaffected.", e)
+        return None
+
+
 def _fetch_calendar_and_transcripts(
     ctx: PipelineContext,
 ) -> tuple[dict | None, list, list, list]:
@@ -501,6 +548,9 @@ async def async_pipeline(ctx: PipelineContext) -> None:
     except Exception as e:
         logger.warning("Quality tracking (save) failed: %s", e)
 
+    # Entity attribution (post-synthesis, optional)
+    attribution_result = _attribute_entities(synthesis_result, current, ctx.config)
+
     # JSON sidecar
     try:
         sidecar_path = write_daily_sidecar(
@@ -508,6 +558,7 @@ async def async_pipeline(ctx: PipelineContext) -> None:
             extractions,
             ctx.output_dir,
             extracted_commitments=extracted_commitments,
+            entity_attribution=attribution_result,
         )
         logger.info("Wrote JSON sidecar -> %s", sidecar_path)
     except Exception as e:
