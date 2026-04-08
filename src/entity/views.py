@@ -260,7 +260,7 @@ def generate_entity_report(
     from_date: date | None = None,
     to_date: date | None = None,
     output_dir: str = "output/entities",
-    template_dir: str = "templates",
+    template_dir: str = str(Path(__file__).parents[2] / "templates"),
 ) -> Path:
     """Generate a per-entity markdown report using Jinja2 template.
 

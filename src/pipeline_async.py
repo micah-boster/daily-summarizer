@@ -548,6 +548,10 @@ async def async_pipeline(ctx: PipelineContext) -> None:
     except Exception as e:
         logger.warning("Quality tracking (save) failed: %s", e)
 
+    # Entity discovery (post-synthesis, optional) — must run BEFORE attribution
+    # so first-mention entities are in the registry when attribution looks them up
+    _discover_and_register_entities(synthesis_result, current, ctx.config)
+
     # Entity attribution (post-synthesis, optional)
     attribution_result = _attribute_entities(synthesis_result, current, ctx.config)
 
@@ -563,9 +567,6 @@ async def async_pipeline(ctx: PipelineContext) -> None:
         logger.info("Wrote JSON sidecar -> %s", sidecar_path)
     except Exception as e:
         logger.warning("Sidecar generation failed: %s. Daily summary still written.", e)
-
-    # Entity discovery (post-synthesis, optional)
-    _discover_and_register_entities(synthesis_result, current, ctx.config)
 
     # Slack notification
     try:
