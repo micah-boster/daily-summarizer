@@ -519,7 +519,13 @@ Plans:
   4. Weekly and monthly roll-up summaries are browsable from the same navigation as daily summaries
   5. Each panel has loading skeletons, error boundaries prevent one panel's failure from crashing the entire page, and action results show toast notifications
 **Pitfall Warnings**: RSC misuse (#9) -- use client components for all interactive panels, server components only for layout shell. Two build systems (#15) -- create unified Makefile with `make dev` running both servers.
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 25-01-PLAN.md -- Install frontend deps, create data layer (API client, types, hooks, Zustand store, providers), add roll-up API endpoints
+- [ ] 25-02-PLAN.md -- Three-column layout shell with collapsible sidebars and icon rails
+- [ ] 25-03-PLAN.md -- Summary view with structured cards, markdown renderer, error boundaries, loading skeletons, metadata sidebar
+- [ ] 25-04-PLAN.md -- Date navigation: grouped date list (Daily/Weekly/Monthly), prev/next arrows, calendar date picker
 
 ### Phase 26: Entity API + Entity Browser
 **Goal**: The entity navigation experience works end-to-end -- user sees entities in the left nav, clicks one, and sees its scoped view in the center panel with contextual details in the right sidebar
