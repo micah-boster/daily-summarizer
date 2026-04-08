@@ -7,6 +7,7 @@ started: 2026-04-08
 completed: 2026-04-08
 tasks_completed: 2
 tasks_total: 2
+requirements: [VIEW-01, VIEW-03]
 ---
 
 # Plan 23-01 Summary: Entity Views + Enriched CLI

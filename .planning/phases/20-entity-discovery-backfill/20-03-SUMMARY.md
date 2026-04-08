@@ -3,6 +3,7 @@ phase: 20-entity-discovery-backfill
 plan: 03
 subsystem: entity
 tags: [hubspot, rapidfuzz, fuzzy-matching, cross-reference, crm-enrichment]
+requirements: [DISC-05]
 
 # Dependency graph
 requires:

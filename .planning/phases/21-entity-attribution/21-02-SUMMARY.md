@@ -3,6 +3,7 @@ phase: 21-entity-attribution
 plan: 02
 subsystem: entity
 tags: [attribution, pipeline, integration-test, sidecar, graceful-degradation]
+requirements: [ATTR-01, ATTR-02]
 
 requires:
   - phase: 21-entity-attribution

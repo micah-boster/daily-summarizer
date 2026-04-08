@@ -3,6 +3,7 @@ phase: 19-entity-registry-foundation
 plan: 02
 subsystem: database
 tags: [sqlite, entity-registry, cli, repository-pattern]
+requirements: [ENTY-01, ENTY-02, ENTY-03]
 
 requires:
   - phase: 19-01

@@ -3,6 +3,7 @@ phase: 20-entity-discovery-backfill
 plan: 01
 subsystem: entity
 tags: [pydantic, claude-structured-outputs, name-normalization, entity-extraction, regex]
+requirements: [DISC-01, DISC-02]
 
 # Dependency graph
 requires:

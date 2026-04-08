@@ -3,6 +3,7 @@ phase: 20-entity-discovery-backfill
 plan: 02
 subsystem: entity
 tags: [sqlite, backfill, cli, entity-discovery, pipeline-integration, weekly-batching]
+requirements: [DISC-01, DISC-02]
 
 # Dependency graph
 requires:

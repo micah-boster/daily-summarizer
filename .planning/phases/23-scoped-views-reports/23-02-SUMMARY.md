@@ -7,6 +7,7 @@ started: 2026-04-08
 completed: 2026-04-08
 tasks_completed: 2
 tasks_total: 2
+requirements: [VIEW-02, VIEW-03]
 ---
 
 # Plan 23-02 Summary: Entity Report Generation

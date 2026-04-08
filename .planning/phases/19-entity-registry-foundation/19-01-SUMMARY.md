@@ -3,6 +3,7 @@ phase: 19-entity-registry-foundation
 plan: 01
 subsystem: database
 tags: [sqlite, pydantic, entity-registry, migrations]
+requirements: [ENTY-01]
 
 requires:
   - phase: 11-pipeline-hardening

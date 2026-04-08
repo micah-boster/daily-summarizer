@@ -3,6 +3,7 @@ phase: 21-entity-attribution
 plan: 01
 subsystem: entity
 tags: [attribution, sqlite, pydantic, tdd, sidecar]
+requirements: [ATTR-01, ATTR-02]
 
 requires:
   - phase: 19-entity-registry

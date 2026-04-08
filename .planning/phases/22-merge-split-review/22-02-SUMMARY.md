@@ -5,6 +5,7 @@ status: complete
 duration: 5min
 tasks_completed: 2
 tasks_total: 2
+requirements: [DISC-03, DISC-04]
 ---
 
 # Plan 22-02 Summary: Merge Execution + Split/Undo
