@@ -71,6 +71,10 @@ def register_entity_parser(subparsers: argparse._SubParsersAction) -> None:
     review_p.add_argument("--type", dest="entity_type", default=None,
                           choices=["partner", "person"], help="Filter by entity type")
 
+    # entity split <name>
+    split_p = entity_sub.add_parser("split", help="Reverse a merge and restore an entity")
+    split_p.add_argument("name", help="Name of the entity to split/restore")
+
     # entity backfill --from YYYY-MM-DD --to YYYY-MM-DD [--force]
     backfill_p = entity_sub.add_parser("backfill", help="Backfill entity registry from historical data")
     backfill_p.add_argument(
@@ -116,8 +120,10 @@ def handle_entity_command(args: argparse.Namespace) -> None:
                 _cmd_alias(repo, args)
             elif cmd == "review":
                 _cmd_review(repo, args)
+            elif cmd == "split":
+                _cmd_split(repo, args)
             else:
-                print("Usage: entity {add|list|show|remove|alias|review|backfill}", file=sys.stderr)
+                print("Usage: entity {add|list|show|remove|alias|review|split|backfill}", file=sys.stderr)
                 sys.exit(1)
     except Exception as e:
         print("Entity database unavailable: %s" % e, file=sys.stderr)
@@ -236,7 +242,7 @@ def _cmd_alias(repo: EntityRepository, args: argparse.Namespace) -> None:
 
 
 def _cmd_review(repo: EntityRepository, args: argparse.Namespace) -> None:
-    from src.entity.merger import generate_proposals
+    from src.entity.merger import execute_merge, generate_proposals
 
     proposals = generate_proposals(
         repo,
@@ -280,13 +286,9 @@ def _cmd_review(repo: EntityRepository, args: argparse.Namespace) -> None:
                 choice = "q"
 
             if choice in ("a", "accept"):
-                repo.save_proposal(
-                    source.id, target.id,
-                    reason="similarity score %.0f" % score,
-                    status="approved",
-                )
+                execute_merge(repo, source.id, target.id, score=score)
                 accepted += 1
-                print("  -> Accepted\n")
+                print("  -> Merged '%s' into '%s'\n" % (source.name, target.name))
                 break
             elif choice in ("r", "reject"):
                 repo.save_proposal(
@@ -309,9 +311,28 @@ def _cmd_review(repo: EntityRepository, args: argparse.Namespace) -> None:
         if choice in ("q", "quit"):
             break
 
-    print("Review complete: %d accepted, %d rejected, %d skipped" % (accepted, rejected, skipped))
-    if accepted > 0:
-        print("Run merge execution to apply accepted proposals.")
+    print("Review complete: %d merged, %d rejected, %d skipped" % (accepted, rejected, skipped))
+
+
+def _cmd_split(repo: EntityRepository, args: argparse.Namespace) -> None:
+    from src.entity.merger import execute_split
+
+    # Need to find entity including deleted ones
+    entity = repo.get_by_name_including_deleted(args.name)
+    if entity is None:
+        print("Entity not found: %s" % args.name, file=sys.stderr)
+        sys.exit(1)
+
+    if entity.deleted_at is None:
+        print("Entity '%s' is not merged. Nothing to split." % entity.name)
+        return
+
+    try:
+        execute_split(repo, entity.id)
+        print("Split complete: '%s' restored as independent entity" % entity.name)
+    except ValueError as e:
+        print("Error: %s" % e, file=sys.stderr)
+        sys.exit(1)
 
 
 def _cmd_backfill(config, args: argparse.Namespace) -> None:

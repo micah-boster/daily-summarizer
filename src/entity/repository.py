@@ -101,6 +101,14 @@ class EntityRepository:
         ).fetchone()
         return self._row_to_entity(row) if row else None
 
+    def get_by_name_including_deleted(self, name: str) -> Entity | None:
+        """Case-insensitive lookup by canonical name (includes soft-deleted)."""
+        row = self._conn.execute(
+            "SELECT * FROM entities WHERE LOWER(name) = LOWER(?)",
+            (name,),
+        ).fetchone()
+        return self._row_to_entity(row) if row else None
+
     def list_entities(
         self,
         entity_type: str | None = None,
