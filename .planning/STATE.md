@@ -1,33 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: Entity Layer
-status: unknown
-last_updated: "2026-04-08T16:29:41.176Z"
+milestone: v3.0
+milestone_name: Web Interface
+status: defining_requirements
+last_updated: "2026-04-08"
 progress:
-  total_phases: 17
-  completed_phases: 17
-  total_plans: 38
-  completed_plans: 38
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-05)
+See: .planning/PROJECT.md (updated 2026-04-08)
 
 **Core value:** Every morning I open a structured daily summary of yesterday's work and find it accurate, useful, and worth 5 minutes of my time -- without having produced it manually.
-**Current focus:** v2.0 Entity Layer -- Phase 19 Entity Registry Foundation
+**Current focus:** v3.0 Web Interface -- Defining requirements
 
 ## Current Position
 
-Phase: 20 of 23 (Entity Discovery & Backfill)
-Plan: 3 of 3 in current phase (COMPLETE)
-Status: Phase complete
-Last activity: 2026-04-06 -- Completed 20-03 HubSpot cross-reference
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-08 -- Milestone v3.0 started
 
-Progress: [████████░░] 79%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 

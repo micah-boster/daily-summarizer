@@ -8,17 +8,20 @@ A personal work intelligence system that ingests data from multiple work sources
 
 Every morning I open a structured daily summary of yesterday's work and find it accurate, useful, and worth 5 minutes of my time — without having produced it manually.
 
-## Current Milestone: v2.0 Entity Layer
+## Current Milestone: v3.0 Web Interface
 
-**Goal:** Make every synthesis item traceable to partners, people, and initiatives — so you can ask "what's happening with Affirm?" or "what does Colin owe me?" and get a sourced answer.
+**Goal:** A polished, demo-quality web UI that replaces the CLI as the daily interface — browse summaries, manage entities, configure the pipeline, and trigger runs from the browser.
 
 **Target features:**
-- Entity registry in SQLite (partners, people, then initiatives)
-- Semi-automated entity discovery from existing daily summaries (backfill) + ongoing discovery on new runs
-- Entity attribution during synthesis (structured output fields tag items with entity references)
-- Entity merge proposals (Colin = Colin R. = colin@partner.com) with user confirm/reject/merge
-- Scoped views via CLI command + generated markdown reports
-- Initiative tracking (Q2 launch, MSA renegotiation) as a third entity type after people/partners stabilize
+- Three-column layout: entity/people nav (left), content panel (center), context-aware sidebar (right)
+- Daily summary as default center view, entity scoped views on selection
+- Activity highlights in nav showing which entities/sections had recent activity
+- Context panel adapts per selection: related items, source evidence, timeline
+- Entity CRUD: create, edit, merge, delete, confirm merge proposals, manage aliases
+- Pipeline config management: source settings, channel curation, priorities
+- Pipeline run triggers: manual runs, run history, schedule management
+- FastAPI backend exposing existing Python pipeline/entity data as JSON API
+- Next.js (React) frontend, localhost-first, hostable later
 
 ## Requirements
 
@@ -49,22 +52,29 @@ Every morning I open a structured daily summary of yesterday's work and find it 
 - ✓ Algorithmic cross-source deduplication (v1.5.1)
 - ✓ Raw data cache retention policy (v1.5.1)
 - ✓ Async pipeline parallelization (v1.5.1)
+- ✓ Entity registry in SQLite — partners, people, initiatives (v2.0)
+- ✓ Semi-automated entity discovery from historical summaries (v2.0)
+- ✓ Ongoing entity discovery from new pipeline runs (v2.0)
+- ✓ Entity attribution during synthesis (v2.0)
+- ✓ Entity merge proposals with user confirmation (v2.0)
+- ✓ Scoped entity views — CLI and markdown reports (v2.0)
 
 ### Active
 
-- [ ] Entity registry (SQLite) for partners, people, initiatives
-- [ ] Semi-automated entity discovery from historical summaries
-- [ ] Ongoing entity discovery from new pipeline runs
-- [ ] Entity merge proposals with user confirmation
-- [ ] Entity attribution during synthesis (structured output fields)
-- [ ] Scoped entity views — CLI query command
-- [ ] Scoped entity views — generated markdown reports
-- [ ] Initiative tracking as third entity type
+- [ ] FastAPI backend — JSON API exposing pipeline data, entities, config
+- [ ] Next.js frontend — three-column layout, responsive, keyboard-navigable
+- [ ] Daily summary view — default center panel, temporal navigation
+- [ ] Entity browser — scoped views for partners, people, initiatives
+- [ ] Context sidebar — related items, source evidence, timeline (adapts to selection)
+- [ ] Activity highlights — nav indicators for recent entity/section activity
+- [ ] Entity management UI — CRUD, merge proposals, alias management
+- [ ] Config management UI — source settings, channels, priorities
+- [ ] Pipeline run management — trigger runs, view history, schedule
 
 ### Out of Scope
 
-- Response drafting and send queue — v3.0
-- Web interface — v4.0
+- Response drafting and send queue — v4.0
+- Multi-user / team distribution — v5.0+
 - Personnel evaluation or judgment — system surfaces evidence only
 - Team-facing dashboards or shared views — personal tool
 - Real-time / intraday processing — end-of-day batch sufficient
@@ -95,14 +105,21 @@ Every morning I open a structured daily summary of yesterday's work and find it 
 - Async parallelization stable — entity discovery backfill can leverage async patterns
 - SQLite will be first non-flat-file storage in the project
 
-**Platform vision:** v2.0 (entity layer) → v3.0 (action layer) → v4.0 (web UI) → v5.0 (team distribution). See docs/multi-version-platform-vision.md.
+**v2.0 learnings:**
+- SQLite entity registry works well — single file, no server, fast reads
+- Entity discovery prompt needs real-summary validation; backfill with weekly batching + checkpoints is resilient
+- HubSpot cross-reference enriches partner entities significantly (fuzzy match threshold 0.80)
+- Merge proposals need zero auto-merge on fuzzy signals — false merges are catastrophic
+- Entity-attributed synthesis adds real value to scoped views
+
+**Platform vision:** v3.0 (web UI) → v4.0 (action layer) → v5.0 (team distribution). See docs/multi-version-platform-vision.md.
 
 ## Constraints
 
 - **Language**: Python for all pipeline logic
 - **LLM**: Claude API (Sonnet for daily, Opus for roll-ups)
 - **Personnel framing**: Evidence only, never evaluative language
-- **Storage**: Flat markdown + JSON sidecar for now; DB layer deferred to v2.0
+- **Storage**: Flat markdown + JSON sidecar + SQLite entity registry
 - **Privacy**: Personal use only; data passes through Anthropic API
 - **Slack channels**: Discovery-based with manual curation, not all-channels
 - **HubSpot scope**: Activity logs, deal changes, notes — not full CRM dump
@@ -125,4 +142,4 @@ Every morning I open a structured daily summary of yesterday's work and find it 
 | Decimal phase numbering for gap closure | Phase 18.1 inserted without renumbering — clear audit trail | ✓ Good |
 
 ---
-*Last updated: 2026-04-05 after v1.5.1 milestone completion*
+*Last updated: 2026-04-08 after v3.0 milestone start*
