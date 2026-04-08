@@ -490,4 +490,4 @@ Phases 19-23 execute sequentially: 19 -> 20 -> 21 -> 22 -> 23.
 | 20. Entity Discovery + Backfill | 3/3 | Complete    | 2026-04-06 | - |
 | 21. Entity Attribution | 2/2 | Complete    | 2026-04-08 | - |
 | 22. Merge + Split Review | 2/2 | Complete    | 2026-04-08 | - |
-| 23. Scoped Views + Reports | v2.0 | 0/2 | Not started | - |
+| 23. Scoped Views + Reports | 1/2 | In Progress|  | - |
