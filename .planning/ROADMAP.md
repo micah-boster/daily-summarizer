@@ -425,8 +425,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 21-01: Attributor module (match synthesis entity_names against registry), mention persistence to SQLite, sidecar enrichment
-- [ ] 21-02: Pipeline integration as optional post-synthesis stage in async_pipeline with graceful degradation, end-to-end validation
+- [ ] 21-01-PLAN.md -- TDD attributor module (name matching, confidence scoring, content hashing), sidecar entity models, synthesizer entity_names preservation
+- [ ] 21-02-PLAN.md -- Pipeline integration as optional post-synthesis stage in async_pipeline with graceful degradation, sidecar wiring, integration tests
 
 ### Phase 22: Merge + Split Review
 **Goal**: Users can consolidate fragmented entity references ("Colin" / "Colin R." / "colin@partner.com") via merge proposals and undo incorrect merges via split -- so scoped views return clean, consolidated results
