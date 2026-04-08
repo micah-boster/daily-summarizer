@@ -24,8 +24,8 @@ def _seed_entities(repo: EntityRepository) -> dict[str, Entity]:
     affirm = repo.add_entity("Affirm", "partner")
     colin = repo.add_entity("Colin Roberts", "person")
     project_alpha = repo.add_entity("Project Alpha", "initiative")
-    # Add alias for Affirm
-    repo.add_alias(affirm.id, "Affirm Inc")
+    # Add alias for Affirm (use a name that won't normalize to "affirm")
+    repo.add_alias(affirm.id, "Affirm Financial")
     return {"Affirm": affirm, "Colin Roberts": colin, "Project Alpha": project_alpha}
 
 
@@ -86,7 +86,7 @@ class TestMatchNameToEntity:
 
         repo = _make_repo(tmp_path)
         entities = _seed_entities(repo)
-        result = match_name_to_entity("Affirm Inc", repo)
+        result = match_name_to_entity("Affirm Financial", repo)
         assert result is not None
         entity, confidence = result
         assert entity.id == entities["Affirm"].id

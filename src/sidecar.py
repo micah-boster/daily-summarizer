@@ -50,6 +50,23 @@ class SidecarCommitment(BaseModel):
     source: list[str]  # ["standup", "Slack #proj-alpha"]
 
 
+class SidecarEntityReference(BaseModel):
+    """An entity reference attached to a synthesis item."""
+
+    entity_id: str
+    name: str
+    confidence: float
+
+
+class SidecarEntitySummary(BaseModel):
+    """Summary of an entity's mentions for the day."""
+
+    entity_id: str
+    name: str
+    entity_type: str
+    mention_count: int
+
+
 class DailySidecar(BaseModel):
     """Complete JSON sidecar for a daily summary."""
 
@@ -61,12 +78,17 @@ class DailySidecar(BaseModel):
     decisions: list[SidecarDecision] = Field(default_factory=list)
     commitments: list[SidecarCommitment] = Field(default_factory=list)
     source_meetings: list[SidecarMeeting] = Field(default_factory=list)
+    substance_entity_refs: list[list[SidecarEntityReference]] = Field(default_factory=list)
+    decision_entity_refs: list[list[SidecarEntityReference]] = Field(default_factory=list)
+    commitment_entity_refs: list[list[SidecarEntityReference]] = Field(default_factory=list)
+    entity_summary: list[SidecarEntitySummary] = Field(default_factory=list)
 
 
 def build_daily_sidecar(
     synthesis: DailySynthesis,
     extractions: list[MeetingExtraction],
     extracted_commitments: list | None = None,
+    entity_attribution=None,
 ) -> DailySidecar:
     """Build a DailySidecar from synthesis data and meeting extractions.
 
@@ -151,6 +173,44 @@ def build_daily_sidecar(
                 )
             )
 
+    # Entity attribution enrichment
+    substance_entity_refs: list[list[SidecarEntityReference]] = []
+    decision_entity_refs: list[list[SidecarEntityReference]] = []
+    commitment_entity_refs: list[list[SidecarEntityReference]] = []
+    entity_summary_list: list[SidecarEntitySummary] = []
+
+    if entity_attribution is not None:
+        for refs in getattr(entity_attribution, "substance_refs", []):
+            substance_entity_refs.append([
+                SidecarEntityReference(
+                    entity_id=r.entity_id, name=r.name, confidence=r.confidence
+                )
+                for r in refs
+            ])
+        for refs in getattr(entity_attribution, "decision_refs", []):
+            decision_entity_refs.append([
+                SidecarEntityReference(
+                    entity_id=r.entity_id, name=r.name, confidence=r.confidence
+                )
+                for r in refs
+            ])
+        for refs in getattr(entity_attribution, "commitment_refs", []):
+            commitment_entity_refs.append([
+                SidecarEntityReference(
+                    entity_id=r.entity_id, name=r.name, confidence=r.confidence
+                )
+                for r in refs
+            ])
+        for s in getattr(entity_attribution, "entity_summary", []):
+            entity_summary_list.append(
+                SidecarEntitySummary(
+                    entity_id=s.entity_id,
+                    name=s.name,
+                    entity_type=s.entity_type,
+                    mention_count=s.mention_count,
+                )
+            )
+
     return DailySidecar(
         date=date_str,
         generated_at=synthesis.generated_at.isoformat(),
@@ -160,4 +220,8 @@ def build_daily_sidecar(
         decisions=decisions,
         commitments=sidecar_commitments,
         source_meetings=source_meetings,
+        substance_entity_refs=substance_entity_refs,
+        decision_entity_refs=decision_entity_refs,
+        commitment_entity_refs=commitment_entity_refs,
+        entity_summary=entity_summary_list,
     )
