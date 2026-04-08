@@ -409,9 +409,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 20-01-PLAN.md -- Name normalization module (TDD), entity extraction via Claude structured outputs, SynthesisItem/CommitmentRow model extension with entity_names
-- [ ] 20-02-PLAN.md -- Backfill CLI with weekly batching and checkpoint/resume, schema v2 migration, ongoing discovery wired into async_pipeline post-synthesis
-- [ ] 20-03-PLAN.md -- HubSpot contact/deal cross-reference with rapidfuzz fuzzy matching, entity enrichment in both backfill and pipeline paths
+- [x] 20-01-PLAN.md -- Name normalization module (TDD), entity extraction via Claude structured outputs, SynthesisItem/CommitmentRow model extension with entity_names
+- [x] 20-02-PLAN.md -- Backfill CLI with weekly batching and checkpoint/resume, schema v2 migration, ongoing discovery wired into async_pipeline post-synthesis
+- [x] 20-03-PLAN.md -- HubSpot contact/deal cross-reference with rapidfuzz fuzzy matching, entity enrichment in both backfill and pipeline paths
 
 ### Phase 21: Entity Attribution
 **Goal**: Every synthesis item carries entity references that are persisted to both SQLite (for querying) and JSON sidecar (for portability), making entity-scoped filtering possible
@@ -425,8 +425,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 21-01-PLAN.md -- TDD attributor module (name matching, confidence scoring, content hashing), sidecar entity models, synthesizer entity_names preservation
-- [ ] 21-02-PLAN.md -- Pipeline integration as optional post-synthesis stage in async_pipeline with graceful degradation, sidecar wiring, integration tests
+- [x] 21-01-PLAN.md -- TDD attributor module (name matching, confidence scoring, content hashing), sidecar entity models, synthesizer entity_names preservation
+- [x] 21-02-PLAN.md -- Pipeline integration as optional post-synthesis stage in async_pipeline with graceful degradation, sidecar wiring, integration tests
 
 ### Phase 22: Merge + Split Review
 **Goal**: Users can consolidate fragmented entity references ("Colin" / "Colin R." / "colin@partner.com") via merge proposals and undo incorrect merges via split -- so scoped views return clean, consolidated results
