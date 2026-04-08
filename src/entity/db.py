@@ -46,6 +46,9 @@ def get_connection(db_path: str, auto_create: bool = True) -> sqlite3.Connection
     # Enable foreign key enforcement
     conn.execute("PRAGMA foreign_keys=ON")
 
+    # Set busy timeout for concurrent web access
+    conn.execute("PRAGMA busy_timeout=5000")
+
     # Apply any pending migrations
     run_migrations(conn)
 
