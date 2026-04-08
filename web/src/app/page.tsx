@@ -1,56 +1,48 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
-interface ApiStatus {
-  status: string;
-  db_connected: boolean;
-  summary_count: number;
-  last_summary_date: string | null;
-}
+import { AppShell } from "@/components/layout/app-shell";
+import { LeftNav } from "@/components/layout/left-nav";
+import { RightSidebar } from "@/components/layout/right-sidebar";
+import { SidebarRail } from "@/components/layout/sidebar-rail";
+import { useUIStore } from "@/stores/ui-store";
 
 export default function Home() {
-  const [data, setData] = useState<ApiStatus | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("http://localhost:8000/api/v1/status")
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((json) => {
-        setData(json);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError(err.message);
-        setLoading(false);
-      });
-  }, []);
+  const leftCollapsed = useUIStore((s) => s.leftNavCollapsed);
+  const rightCollapsed = useUIStore((s) => s.rightSidebarCollapsed);
+  const toggleLeftNav = useUIStore((s) => s.toggleLeftNav);
+  const toggleRightSidebar = useUIStore((s) => s.toggleRightSidebar);
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-8">
-      <h1 className="text-4xl font-bold mb-2">Daily Summarizer</h1>
-      <h2 className="text-xl text-zinc-500 mb-8">API Status</h2>
-
-      {loading && <p className="text-zinc-400">Loading...</p>}
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 max-w-md">
-          <p className="text-red-700">Error: {error}</p>
-          <p className="text-red-500 text-sm mt-1">
-            Make sure the API is running on localhost:8000
-          </p>
-        </div>
-      )}
-
-      {data && (
-        <pre className="bg-zinc-100 dark:bg-zinc-900 rounded-lg p-6 max-w-md w-full overflow-auto text-sm">
-          {JSON.stringify(data, null, 2)}
-        </pre>
-      )}
-    </main>
+    <AppShell
+      leftNav={
+        leftCollapsed ? (
+          <SidebarRail side="left" onExpand={toggleLeftNav} />
+        ) : (
+          <LeftNav onCollapse={toggleLeftNav}>
+            <p className="p-4 text-sm text-muted-foreground">
+              Date navigation coming soon
+            </p>
+          </LeftNav>
+        )
+      }
+      rightSidebar={
+        rightCollapsed ? (
+          <SidebarRail side="right" onExpand={toggleRightSidebar} />
+        ) : (
+          <RightSidebar onCollapse={toggleRightSidebar}>
+            <p className="p-4 text-sm text-muted-foreground">
+              Summary metadata coming soon
+            </p>
+          </RightSidebar>
+        )
+      }
+    >
+      <div className="p-8">
+        <h1 className="text-2xl font-semibold">Daily Summary</h1>
+        <p className="mt-2 text-muted-foreground">
+          Select a date from the left panel
+        </p>
+      </div>
+    </AppShell>
   );
 }
