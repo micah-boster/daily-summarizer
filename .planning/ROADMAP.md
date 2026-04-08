@@ -482,7 +482,7 @@ Plans:
 
 **Milestone Goal:** A polished, demo-quality web UI that replaces the CLI as the daily interface -- browse summaries, manage entities, configure the pipeline, and trigger runs from the browser.
 
-- [ ] **Phase 24: FastAPI Skeleton + Summary API** - App factory, CORS, dependency injection, summary read endpoints, SQLite busy_timeout hardening
+- [x] **Phase 24: FastAPI Skeleton + Summary API** - App factory, CORS, dependency injection, summary read endpoints, SQLite busy_timeout hardening (completed 2026-04-08)
 - [ ] **Phase 25: Next.js Scaffold + Summary View** - Three-column layout shell, daily summary rendering, date navigation, roll-up browsing
 - [ ] **Phase 26: Entity API + Entity Browser** - Entity list/scoped view endpoints, nav sidebar with activity indicators, context sidebar
 - [ ] **Phase 27: Entity Management UI** - Entity CRUD forms, merge proposal review, alias management, command palette
@@ -605,7 +605,7 @@ Phases 24-29 execute sequentially: 24 -> 25 -> 26 -> 27 -> 28 -> 29.
 | 22. Merge + Split Review | v2.0 | 2/2 | Complete | 2026-04-08 |
 | 23. Scoped Views + Reports | v2.0 | 2/2 | Complete | 2026-04-08 |
 | 23.1. Milestone Audit Gap Closure | v2.0 | 1/1 | Complete | 2026-04-08 |
-| 24. FastAPI Skeleton + Summary API | 1/2 | In Progress|  | - |
+| 24. FastAPI Skeleton + Summary API | 2/2 | Complete   | 2026-04-08 | - |
 | 25. Next.js Scaffold + Summary View | v3.0 | 0/TBD | Not started | - |
 | 26. Entity API + Entity Browser | v3.0 | 0/TBD | Not started | - |
 | 27. Entity Management UI | v3.0 | 0/TBD | Not started | - |
