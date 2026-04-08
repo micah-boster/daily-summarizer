@@ -502,7 +502,11 @@ Plans:
   4. All API endpoints import from `src.*` modules -- zero business logic in the `api/` directory (grep for `sqlite3` in api/ returns nothing)
   5. SQLite connections use `busy_timeout=5000` and connection-per-request via FastAPI dependency injection
 **Pitfall Warnings**: Event loop conflict (#3) -- refactor async_pipeline entry point before building endpoints. CORS (#6) -- CORSMiddleware must be first middleware. SQLite busy_timeout (#1) -- add pragma to connection factory.
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 24-01-PLAN.md -- FastAPI skeleton with summary endpoints, SQLite hardening, API tests
+- [ ] 24-02-PLAN.md -- Next.js scaffold, Makefile, end-to-end CORS validation
 
 ### Phase 25: Next.js Scaffold + Summary View
 **Goal**: The daily use case works in the browser -- user opens localhost:3000 and sees yesterday's summary in a three-column layout, can navigate between dates, and sees roll-ups
