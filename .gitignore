@@ -17,5 +17,9 @@ __pycache__/
 data/
 *.db
 
+# Node.js
+node_modules/
+.next/
+
 # OS
 .DS_Store
