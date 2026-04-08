@@ -6,6 +6,7 @@ from typing import Generator
 
 from fastapi import HTTPException
 
+from src.api.services.rollup_reader import RollupReader
 from src.api.services.summary_reader import SummaryReader
 from src.config import load_config, PipelineConfig
 from src.entity.repository import EntityRepository
@@ -38,3 +39,9 @@ def get_summary_reader() -> SummaryReader:
     """Provide a SummaryReader configured from pipeline settings."""
     config = get_config()
     return SummaryReader(output_dir=config.pipeline.output_dir)
+
+
+def get_rollup_reader() -> RollupReader:
+    """Provide a RollupReader configured from pipeline settings."""
+    config = get_config()
+    return RollupReader(output_dir=config.pipeline.output_dir)
