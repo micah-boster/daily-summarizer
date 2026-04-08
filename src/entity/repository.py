@@ -12,7 +12,7 @@ import sqlite3
 from uuid import uuid4
 
 from src.entity.db import get_connection
-from src.entity.models import Alias, Entity, EntityType, _now_utc
+from src.entity.models import Alias, Entity, EntityType, MergeProposal, _now_utc
 
 logger = logging.getLogger(__name__)
 
@@ -265,3 +265,90 @@ class EntityRepository:
                 return merged
 
         return entity
+
+    # ------------------------------------------------------------------
+    # Mention queries
+    # ------------------------------------------------------------------
+
+    def get_mention_count(self, entity_id: str) -> int:
+        """Count total mentions for an entity."""
+        row = self._conn.execute(
+            "SELECT COUNT(*) AS cnt FROM entity_mentions WHERE entity_id = ?",
+            (entity_id,),
+        ).fetchone()
+        return row["cnt"]
+
+    def get_mention_sources(self, entity_id: str) -> list[str]:
+        """Return distinct source types that mention this entity."""
+        rows = self._conn.execute(
+            "SELECT DISTINCT source_type FROM entity_mentions WHERE entity_id = ? ORDER BY source_type",
+            (entity_id,),
+        ).fetchall()
+        return [row["source_type"] for row in rows]
+
+    # ------------------------------------------------------------------
+    # Merge proposal management
+    # ------------------------------------------------------------------
+
+    def save_proposal(
+        self,
+        source_id: str,
+        target_id: str,
+        reason: str,
+        status: str = "pending",
+    ) -> MergeProposal:
+        """Create a merge proposal record."""
+        proposal_id = uuid4().hex
+        now = _now_utc()
+        resolved_at = now if status != "pending" else None
+
+        self._conn.execute(
+            "INSERT INTO merge_proposals "
+            "(id, source_entity_id, target_entity_id, proposed_by, reason, status, created_at, resolved_at) "
+            "VALUES (?, ?, ?, 'system', ?, ?, ?, ?)",
+            (proposal_id, source_id, target_id, reason, status, now, resolved_at),
+        )
+        self._conn.commit()
+
+        return MergeProposal(
+            id=proposal_id,
+            source_entity_id=source_id,
+            target_entity_id=target_id,
+            proposed_by="system",
+            reason=reason,
+            status=status,
+            created_at=now,
+            resolved_at=resolved_at,
+        )
+
+    def get_existing_proposals(self, source_id: str, target_id: str) -> list[MergeProposal]:
+        """Find existing proposals for a pair (checks both orderings)."""
+        rows = self._conn.execute(
+            "SELECT * FROM merge_proposals "
+            "WHERE (source_entity_id = ? AND target_entity_id = ?) "
+            "   OR (source_entity_id = ? AND target_entity_id = ?)",
+            (source_id, target_id, target_id, source_id),
+        ).fetchall()
+        return [
+            MergeProposal(
+                id=row["id"],
+                source_entity_id=row["source_entity_id"],
+                target_entity_id=row["target_entity_id"],
+                proposed_by=row["proposed_by"],
+                reason=row["reason"],
+                status=row["status"],
+                created_at=row["created_at"],
+                resolved_at=row["resolved_at"],
+            )
+            for row in rows
+        ]
+
+    def update_proposal_status(self, proposal_id: str, status: str) -> bool:
+        """Update a proposal's status and set resolved_at timestamp."""
+        now = _now_utc()
+        cursor = self._conn.execute(
+            "UPDATE merge_proposals SET status = ?, resolved_at = ? WHERE id = ?",
+            (status, now, proposal_id),
+        )
+        self._conn.commit()
+        return cursor.rowcount > 0

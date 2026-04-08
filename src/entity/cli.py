@@ -64,6 +64,13 @@ def register_entity_parser(subparsers: argparse._SubParsersAction) -> None:
     alias_remove_p = alias_sub.add_parser("remove", help="Remove an alias")
     alias_remove_p.add_argument("alias", help="Alias to remove")
 
+    # entity review [--limit N] [--type partner|person]
+    review_p = entity_sub.add_parser("review", help="Review merge proposals interactively")
+    review_p.add_argument("--limit", type=int, default=10,
+                          help="Max proposals per session (default 10)")
+    review_p.add_argument("--type", dest="entity_type", default=None,
+                          choices=["partner", "person"], help="Filter by entity type")
+
     # entity backfill --from YYYY-MM-DD --to YYYY-MM-DD [--force]
     backfill_p = entity_sub.add_parser("backfill", help="Backfill entity registry from historical data")
     backfill_p.add_argument(
@@ -107,8 +114,10 @@ def handle_entity_command(args: argparse.Namespace) -> None:
                 _cmd_remove(repo, args)
             elif cmd == "alias":
                 _cmd_alias(repo, args)
+            elif cmd == "review":
+                _cmd_review(repo, args)
             else:
-                print("Usage: entity {add|list|show|remove|alias|backfill}", file=sys.stderr)
+                print("Usage: entity {add|list|show|remove|alias|review|backfill}", file=sys.stderr)
                 sys.exit(1)
     except Exception as e:
         print("Entity database unavailable: %s" % e, file=sys.stderr)
@@ -224,6 +233,85 @@ def _cmd_alias(repo: EntityRepository, args: argparse.Namespace) -> None:
     else:
         print("Usage: entity alias {add|list|remove}", file=sys.stderr)
         sys.exit(1)
+
+
+def _cmd_review(repo: EntityRepository, args: argparse.Namespace) -> None:
+    from src.entity.merger import generate_proposals
+
+    proposals = generate_proposals(
+        repo,
+        entity_type=getattr(args, "entity_type", None),
+        limit=getattr(args, "limit", 10),
+    )
+
+    if not proposals:
+        print("No merge proposals found.")
+        return
+
+    total = len(proposals)
+    print("Found %d merge proposal(s). Reviewing...\n" % total)
+
+    accepted = 0
+    rejected = 0
+    skipped = 0
+
+    for i, proposal in enumerate(proposals, 1):
+        source = proposal["source_entity"]
+        target = proposal["target_entity"]
+        score = proposal["score"]
+        src_ctx = proposal["source_context"]
+        tgt_ctx = proposal["target_context"]
+
+        src_types = ", ".join(src_ctx["source_types"]) if src_ctx["source_types"] else "none"
+        tgt_types = ", ".join(tgt_ctx["source_types"]) if tgt_ctx["source_types"] else "none"
+
+        print("--- Proposal %d/%d (score: %.0f) ---" % (i, total, score))
+        print("  A: %s (%s)" % (source.name, source.entity_type))
+        print("     Mentions: %d from %s" % (src_ctx["mention_count"], src_types))
+        print("  B: %s (%s)" % (target.name, target.entity_type))
+        print("     Mentions: %d from %s" % (tgt_ctx["mention_count"], tgt_types))
+        print("  Canonical if merged: %s" % target.name)
+
+        while True:
+            try:
+                choice = input("[a]ccept / [r]eject / [s]kip / [q]uit: ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                choice = "q"
+
+            if choice in ("a", "accept"):
+                repo.save_proposal(
+                    source.id, target.id,
+                    reason="similarity score %.0f" % score,
+                    status="approved",
+                )
+                accepted += 1
+                print("  -> Accepted\n")
+                break
+            elif choice in ("r", "reject"):
+                repo.save_proposal(
+                    source.id, target.id,
+                    reason="rejected by user",
+                    status="rejected",
+                )
+                rejected += 1
+                print("  -> Rejected\n")
+                break
+            elif choice in ("s", "skip"):
+                skipped += 1
+                print("  -> Skipped\n")
+                break
+            elif choice in ("q", "quit"):
+                break
+            else:
+                print("  Invalid choice. Use a/r/s/q.")
+
+        if choice in ("q", "quit"):
+            break
+
+    print("Review complete: %d accepted, %d rejected, %d skipped" % (accepted, rejected, skipped))
+    if accepted > 0:
+        print("Run merge execution to apply accepted proposals.")
 
 
 def _cmd_backfill(config, args: argparse.Namespace) -> None:
