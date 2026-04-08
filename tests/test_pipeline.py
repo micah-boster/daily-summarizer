@@ -12,6 +12,7 @@ from src.config import make_test_config
 from src.models.events import DailySynthesis, NormalizedEvent, Section
 from src.models.sources import SourceItem, SourceType, ContentType
 from src.pipeline import PipelineContext, _ingest_slack, _ingest_hubspot, _ingest_docs, run_pipeline
+from src.synthesis.models import SynthesisItem, CommitmentRow
 
 
 def _make_ctx(tmp_path: Path, **overrides) -> PipelineContext:
@@ -158,7 +159,7 @@ class TestRunPipeline:
         mock_slack.return_value = slack_items
         mock_async_anthropic.return_value = MagicMock()
         mock_synthesize.return_value = {
-            "substance": ["Item from Slack"],
+            "substance": [SynthesisItem(content="Item from Slack")],
             "decisions": [],
             "commitments": [],
             "executive_summary": None,
@@ -203,7 +204,7 @@ class TestRunPipeline:
         hubspot_items = [_make_source_item("HubSpot deal")]
         mock_hubspot.return_value = hubspot_items
         mock_synthesize.return_value = {
-            "substance": ["HubSpot item"], "decisions": [], "commitments": [], "executive_summary": None,
+            "substance": [SynthesisItem(content="HubSpot item")], "decisions": [], "commitments": [], "executive_summary": None,
         }
         output_file = tmp_path / "daily" / "2026" / "04" / "2026-04-01.md"
         output_file.parent.mkdir(parents=True, exist_ok=True)

@@ -378,15 +378,18 @@ async def async_pipeline(ctx: PipelineContext) -> None:
             meetings_without_transcripts=meetings_without_transcripts,
             substance=Section(
                 title="Substance",
-                items=synthesis_result.get("substance", []),
+                items=[item.content for item in synthesis_result.get("substance", [])],
             ),
             decisions=Section(
                 title="Decisions",
-                items=synthesis_result.get("decisions", []),
+                items=[item.content for item in synthesis_result.get("decisions", [])],
             ),
             commitments=Section(
                 title="Commitments",
-                items=synthesis_result.get("commitments", []),
+                items=[
+                    f"| {c.who} | {c.what} | {c.by_when} | {c.source} |"
+                    for c in synthesis_result.get("commitments", [])
+                ],
             ),
         )
     else:
@@ -416,15 +419,18 @@ async def async_pipeline(ctx: PipelineContext) -> None:
             executive_summary=synthesis_result.get("executive_summary"),
             substance=Section(
                 title="Substance",
-                items=synthesis_result.get("substance", []),
+                items=[item.content for item in synthesis_result.get("substance", [])],
             ),
             decisions=Section(
                 title="Decisions",
-                items=synthesis_result.get("decisions", []),
+                items=[item.content for item in synthesis_result.get("decisions", [])],
             ),
             commitments=Section(
                 title="Commitments",
-                items=synthesis_result.get("commitments", []),
+                items=[
+                    f"| {c.who} | {c.what} | {c.by_when} | {c.source} |"
+                    for c in synthesis_result.get("commitments", [])
+                ],
             ),
         )
 
@@ -434,9 +440,11 @@ async def async_pipeline(ctx: PipelineContext) -> None:
         synthesis_text_parts: list[str] = []
         if synthesis_result.get("executive_summary"):
             synthesis_text_parts.append(synthesis_result["executive_summary"])
-        for section in ["substance", "decisions", "commitments"]:
+        for section in ["substance", "decisions"]:
             for item in synthesis_result.get(section, []):
-                synthesis_text_parts.append(item)
+                synthesis_text_parts.append(item.content)
+        for c in synthesis_result.get("commitments", []):
+            synthesis_text_parts.append(f"{c.who}: {c.what} by {c.by_when}")
         synthesis_text = "\n".join(synthesis_text_parts)
         if synthesis_text.strip():
             extracted_commitments = extract_commitments(

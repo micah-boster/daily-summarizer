@@ -201,11 +201,13 @@ def test_convert_synthesis_to_dict():
 
     assert result["executive_summary"] == "Summary text."
     assert len(result["substance"]) == 2
-    assert result["substance"][0] == "Pipeline review -- Team Sync"
+    # Now returns full SynthesisItem objects (preserves entity_names for attribution)
+    assert result["substance"][0].content == "Pipeline review -- Team Sync"
     assert len(result["decisions"]) == 1
     assert len(result["commitments"]) == 1
-    # Commitment should be pipe-delimited table row
-    assert result["commitments"][0] == "| Mike | Write spec | 2026-04-10 | Team Sync |"
+    # Commitment is a CommitmentRow object
+    assert result["commitments"][0].who == "Mike"
+    assert result["commitments"][0].what == "Write spec"
 
 
 def test_convert_synthesis_to_dict_empty():
@@ -282,11 +284,11 @@ def test_synthesize_daily_structured_output():
     )
 
     assert len(result["substance"]) == 2
-    assert "Q2 pipeline" in result["substance"][0]
+    assert "Q2 pipeline" in result["substance"][0].content
     assert len(result["decisions"]) == 1
-    assert "Delay product launch" in result["decisions"][0]
+    assert "Delay product launch" in result["decisions"][0].content
     assert len(result["commitments"]) == 2
-    assert "Mike" in result["commitments"][0]
+    assert result["commitments"][0].who == "Mike"
     assert result["executive_summary"] is None
 
     # Verify API was called with tool-based structured output
@@ -496,7 +498,7 @@ def test_synthesize_daily_with_slack_only():
     )
 
     assert len(result["substance"]) == 1
-    assert "API redesign" in result["substance"][0]
+    assert "API redesign" in result["substance"][0].content
 
 
 # --- Prompt content tests ---

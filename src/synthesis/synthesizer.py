@@ -435,26 +435,26 @@ def _dedup_hubspot_items(
 
 
 def _convert_synthesis_to_dict(output: DailySynthesisOutput) -> dict:
-    """Convert DailySynthesisOutput to backward-compatible dict format.
+    """Convert DailySynthesisOutput to dict preserving full objects.
 
-    Maintains the existing return interface expected by writer.py,
-    sidecar.py, and pipeline.py.
+    Returns full SynthesisItem and CommitmentRow objects so downstream
+    consumers can access entity_names for attribution. Consumers that
+    need string content use .content on SynthesisItem or format
+    CommitmentRow fields directly.
 
     Args:
         output: Validated DailySynthesisOutput from API response.
 
     Returns:
-        Dict with keys: substance (list[str]), decisions (list[str]),
-        commitments (list[str]), executive_summary (str or None).
+        Dict with keys: substance (list[SynthesisItem]),
+        decisions (list[SynthesisItem]), commitments (list[CommitmentRow]),
+        executive_summary (str or None).
     """
     return {
         "executive_summary": output.executive_summary,
-        "substance": [item.content for item in output.substance],
-        "decisions": [item.content for item in output.decisions],
-        "commitments": [
-            f"| {c.who} | {c.what} | {c.by_when} | {c.source} |"
-            for c in output.commitments
-        ],
+        "substance": list(output.substance),
+        "decisions": list(output.decisions),
+        "commitments": list(output.commitments),
     }
 
 
