@@ -440,8 +440,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 22-01: Merge proposal generation (rapidfuzz similarity), proposal storage, CLI review workflow (accept/reject/skip with persistent rejection)
-- [ ] 22-02: Merge execution (soft pointer via merge_target_id), split/undo capability with mention re-attribution, batch proposal presentation
+- [x] 22-01: Merge proposal generation (rapidfuzz similarity), proposal storage, CLI review workflow (accept/reject/skip with persistent rejection)
+- [x] 22-02: Merge execution (soft pointer via merge_target_id), split/undo capability with mention re-attribution, batch proposal presentation
 
 ### Phase 23: Scoped Views + Reports
 **Goal**: Users can ask "what's happening with Affirm?" or "what does Colin owe me?" and get a sourced, time-filtered answer -- the payoff of the entire entity layer
@@ -456,13 +456,29 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 23-01-PLAN.md -- SQL query layer + significance scoring (TDD), CLI entity show with scoped views and enriched entity list
-- [ ] 23-02-PLAN.md -- Jinja2 entity report template, entity report CLI command, output/entities/ generation
+- [x] 23-01-PLAN.md -- SQL query layer + significance scoring (TDD), CLI entity show with scoped views and enriched entity list
+- [x] 23-02-PLAN.md -- Jinja2 entity report template, entity report CLI command, output/entities/ generation
+
+### Phase 23.1: Milestone Audit Gap Closure
+**Goal**: Close v2.0 audit gaps — fix pipeline attribution/discovery ordering, fix relative template path, write missing VERIFICATION.md for phases 19 and 23
+**Depends on**: Phase 23
+**Requirements**: ENTY-01, ENTY-02, ENTY-03, VIEW-01, VIEW-02, VIEW-03, ATTR-01
+**Gap Closure**: Closes gaps from v2.0 audit
+**Success Criteria** (what must be TRUE):
+  1. Pipeline runs discovery before attribution so first-mention entities are attributed same day
+  2. `entity report` works from any working directory (absolute template path resolution)
+  3. Phase 19 VERIFICATION.md exists and confirms all success criteria met
+  4. Phase 23 VERIFICATION.md exists and confirms all success criteria met
+  5. All SUMMARY.md files for phases 19-23 have `requirements` frontmatter populated
+**Plans**: 1 plan
+
+Plans:
+- [ ] 23.1-01: Fix pipeline ordering, fix template path, write VERIFICATION.md for phases 19 and 23, backfill requirements in summary frontmatter
 
 ## Progress
 
 **Execution Order:**
-Phases 19-23 execute sequentially: 19 -> 20 -> 21 -> 22 -> 23.
+Phases 19-23.1 execute sequentially: 19 -> 20 -> 21 -> 22 -> 23 -> 23.1.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
