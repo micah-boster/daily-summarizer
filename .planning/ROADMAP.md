@@ -473,7 +473,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 23.1-01: Fix pipeline ordering, fix template path, write VERIFICATION.md for phases 19 and 23, backfill requirements in summary frontmatter
+- [x] 23.1-01: Fix pipeline ordering, fix template path, write VERIFICATION.md for phases 19 and 23, backfill requirements in summary frontmatter
 
 ## Progress
 
@@ -502,8 +502,9 @@ Phases 19-23.1 execute sequentially: 19 -> 20 -> 21 -> 22 -> 23 -> 23.1.
 | 17. Asyncio Parallelization | v1.5.1 | 2/2 | Complete | 2026-04-05 |
 | 18. Structured Output Completion | v1.5.1 | 2/2 | Complete | 2026-04-05 |
 | 18.1. Milestone Audit Gap Closure | v1.5.1 | 2/2 | Complete | 2026-04-05 |
-| 19. Entity Registry Foundation | v2.0 | 0/2 | Not started | - |
-| 20. Entity Discovery + Backfill | 3/3 | Complete    | 2026-04-06 | - |
-| 21. Entity Attribution | 2/2 | Complete    | 2026-04-08 | - |
-| 22. Merge + Split Review | 2/2 | Complete    | 2026-04-08 | - |
-| 23. Scoped Views + Reports | 2/2 | Complete   | 2026-04-08 | - |
+| 19. Entity Registry Foundation | v2.0 | 2/2 | Complete | 2026-04-06 |
+| 20. Entity Discovery + Backfill | v2.0 | 3/3 | Complete | 2026-04-06 |
+| 21. Entity Attribution | v2.0 | 2/2 | Complete | 2026-04-08 |
+| 22. Merge + Split Review | v2.0 | 2/2 | Complete | 2026-04-08 |
+| 23. Scoped Views + Reports | v2.0 | 2/2 | Complete | 2026-04-08 |
+| 23.1. Milestone Audit Gap Closure | v2.0 | 1/1 | Complete | 2026-04-08 |
