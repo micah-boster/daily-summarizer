@@ -33,16 +33,25 @@ def register_entity_parser(subparsers: argparse._SubParsersAction) -> None:
     add_p.add_argument("--json", dest="json_output", action="store_true",
                        help="Output as JSON")
 
-    # entity list [--type partner|person]
-    list_p = entity_sub.add_parser("list", help="List entities")
+    # entity list [--type partner|person] [--sort active|mentions|name]
+    list_p = entity_sub.add_parser("list", help="List entities with enriched stats")
     list_p.add_argument("--type", dest="entity_type", default=None,
                         choices=["partner", "person"], help="Filter by type")
+    list_p.add_argument("--sort", dest="sort_by", default="active",
+                        choices=["active", "mentions", "name"],
+                        help="Sort by: active (default), mentions, name")
     list_p.add_argument("--json", dest="json_output", action="store_true",
                         help="Output as JSON")
 
-    # entity show <name>
-    show_p = entity_sub.add_parser("show", help="Show entity details")
+    # entity show <name> [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--all]
+    show_p = entity_sub.add_parser("show", help="Show entity scoped activity view")
     show_p.add_argument("name", help="Entity name")
+    show_p.add_argument("--from", dest="from_date", type=date.fromisoformat, default=None,
+                        help="Start date (YYYY-MM-DD)")
+    show_p.add_argument("--to", dest="to_date", type=date.fromisoformat, default=None,
+                        help="End date (YYYY-MM-DD)")
+    show_p.add_argument("--all", dest="show_all", action="store_true", default=False,
+                        help="Show all activity (no date filter)")
     show_p.add_argument("--json", dest="json_output", action="store_true",
                         help="Output as JSON")
 
@@ -149,7 +158,12 @@ def _cmd_add(repo: EntityRepository, args: argparse.Namespace) -> None:
 
 
 def _cmd_list(repo: EntityRepository, args: argparse.Namespace) -> None:
-    entities = repo.list_entities(entity_type=getattr(args, "entity_type", None))
+    from src.entity.views import get_enriched_entity_list
+
+    sort_by = getattr(args, "sort_by", "active")
+    entities = get_enriched_entity_list(
+        repo, entity_type=getattr(args, "entity_type", None), sort_by=sort_by
+    )
 
     if getattr(args, "json_output", False):
         print(json.dumps([e.model_dump() for e in entities], indent=2, default=str))
@@ -159,37 +173,71 @@ def _cmd_list(repo: EntityRepository, args: argparse.Namespace) -> None:
         print("No entities found.")
         return
 
-    # Table output
-    header = "%-32s  %-10s  %s" % ("Name", "Type", "Created")
+    # Enriched table output
+    header = "%-28s  %-8s  %8s  %8s  %-12s" % (
+        "Name", "Type", "Mentions", "Commits", "Last Active"
+    )
     print(header)
     print("-" * len(header))
     for e in entities:
-        created = e.created_at[:10] if len(e.created_at) >= 10 else e.created_at
-        print("%-32s  %-10s  %s" % (e.name, e.entity_type, created))
+        last = e.last_active_date[:10] if e.last_active_date else "\u2014"
+        print(
+            "%-28s  %-8s  %8d  %8d  %-12s"
+            % (e.name[:28], e.entity_type, e.mention_count, e.commitment_count, last)
+        )
 
 
 def _cmd_show(repo: EntityRepository, args: argparse.Namespace) -> None:
-    entity = repo.get_by_name(args.name)
-    if entity is None:
-        print("Entity not found: %s" % args.name, file=sys.stderr)
+    from src.entity.views import get_entity_scoped_view
+
+    show_all = getattr(args, "show_all", False)
+    from_date = None if show_all else getattr(args, "from_date", None)
+    to_date = None if show_all else getattr(args, "to_date", None)
+
+    try:
+        view = get_entity_scoped_view(repo, args.name, from_date, to_date)
+    except ValueError as e:
+        print("Error: %s" % e, file=sys.stderr)
         sys.exit(1)
 
-    aliases = repo.list_aliases(entity.id)
-
     if getattr(args, "json_output", False):
-        data = entity.model_dump()
-        data["aliases"] = [a.alias for a in aliases]
-        print(json.dumps(data, indent=2, default=str))
+        print(view.model_dump_json(indent=2))
         return
 
-    print("Name:    %s" % entity.name)
-    print("Type:    %s" % entity.entity_type)
-    print("ID:      %s" % entity.id)
-    print("Created: %s" % entity.created_at)
-    if aliases:
-        print("Aliases: %s" % ", ".join(a.alias for a in aliases))
-    else:
-        print("Aliases: (none)")
+    # Terminal output
+    print("Entity: %s (%s)" % (view.entity_name, view.entity_type))
+    print("Period: %s to %s" % (view.from_date or "all time", view.to_date or "today"))
+    print()
+
+    # Open commitments section (highlighted)
+    if view.open_commitments:
+        print("=== OPEN COMMITMENTS ===")
+        for c in view.open_commitments:
+            print("  [%s] %s" % (c.source_date, c.context_snippet or "(no details)"))
+        print()
+
+    # Highlights section (top 5 significant items)
+    if view.highlights:
+        print("--- Highlights ---")
+        for h in view.highlights:
+            label = h.source_type.upper()
+            print(
+                "  [%s] %s: %s"
+                % (h.source_date, label, h.context_snippet or "(no snippet)")
+            )
+        print()
+
+    # Full activity grouped by date
+    if view.activity_by_date:
+        print("--- Activity ---")
+        for date_group in view.activity_by_date:
+            print("\n  %s" % date_group["date"])
+            for item in date_group["items"]:
+                label = item.source_type.upper()
+                print("    [%s] %s" % (label, item.context_snippet or "(no snippet)"))
+    elif not view.open_commitments and not view.highlights:
+        print("No activity found for %s in this period." % view.entity_name)
+        print("Try: entity show %s --all" % args.name)
 
 
 def _cmd_remove(repo: EntityRepository, args: argparse.Namespace) -> None:

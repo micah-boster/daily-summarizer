@@ -278,6 +278,62 @@ class EntityRepository:
     # Mention queries
     # ------------------------------------------------------------------
 
+    def get_entity_mentions_in_range(
+        self,
+        entity_id: str,
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> list[dict]:
+        """Fetch mentions for an entity within a date range.
+
+        Includes mentions from entities whose merge_target_id equals this
+        entity (aggregating pre-merge mentions).
+        """
+        query = """
+            SELECT em.source_type, em.source_date, em.confidence,
+                   em.context_snippet, em.source_id
+            FROM entity_mentions em
+            WHERE (em.entity_id = ?
+                   OR em.entity_id IN (
+                       SELECT id FROM entities WHERE merge_target_id = ?
+                   ))
+        """
+        params: list[str] = [entity_id, entity_id]
+        if from_date:
+            query += " AND em.source_date >= ?"
+            params.append(from_date)
+        if to_date:
+            query += " AND em.source_date <= ?"
+            params.append(to_date)
+        query += " ORDER BY em.source_date DESC, em.source_type"
+        return [dict(row) for row in self._conn.execute(query, params).fetchall()]
+
+    def get_entity_stats(self, entity_id: str) -> dict:
+        """Return aggregate mention statistics for an entity.
+
+        Returns dict with mention_count, commitment_count, last_active_date.
+        Includes mentions from merged entities.
+        """
+        row = self._conn.execute(
+            """
+            SELECT
+                COUNT(*) AS mention_count,
+                SUM(CASE WHEN em.source_type = 'commitment' THEN 1 ELSE 0 END) AS commitment_count,
+                MAX(em.source_date) AS last_active_date
+            FROM entity_mentions em
+            WHERE em.entity_id = ?
+               OR em.entity_id IN (
+                   SELECT id FROM entities WHERE merge_target_id = ?
+               )
+            """,
+            (entity_id, entity_id),
+        ).fetchone()
+        return {
+            "mention_count": row["mention_count"],
+            "commitment_count": row["commitment_count"] or 0,
+            "last_active_date": row["last_active_date"],
+        }
+
     def get_mention_count(self, entity_id: str) -> int:
         """Count total mentions for an entity."""
         row = self._conn.execute(
