@@ -375,7 +375,7 @@ Plans:
 - [x] **Phase 19: Entity Registry Foundation** - SQLite entity storage with schema migrations, alias management, and confidence scoring models
 - [x] **Phase 20: Entity Discovery + Backfill** - Populate the registry from historical summaries and wire ongoing discovery into the pipeline (completed 2026-04-06)
 - [x] **Phase 21: Entity Attribution** - Tag synthesis items with entity references and persist mentions to SQLite and JSON sidecar (completed 2026-04-08)
-- [ ] **Phase 22: Merge + Split Review** - Entity merge proposals with CLI confirmation and split/undo capability
+- [x] **Phase 22: Merge + Split Review** - Entity merge proposals with CLI confirmation and split/undo capability (completed 2026-04-08)
 - [ ] **Phase 23: Scoped Views + Reports** - CLI entity queries and generated per-entity markdown reports
 
 ## Phase Details
@@ -489,5 +489,5 @@ Phases 19-23 execute sequentially: 19 -> 20 -> 21 -> 22 -> 23.
 | 19. Entity Registry Foundation | v2.0 | 0/2 | Not started | - |
 | 20. Entity Discovery + Backfill | 3/3 | Complete    | 2026-04-06 | - |
 | 21. Entity Attribution | 2/2 | Complete    | 2026-04-08 | - |
-| 22. Merge + Split Review | v2.0 | 0/2 | Not started | - |
+| 22. Merge + Split Review | 2/2 | Complete    | 2026-04-08 | - |
 | 23. Scoped Views + Reports | v2.0 | 0/2 | Not started | - |
