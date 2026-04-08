@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.entity.merger import generate_proposals, score_pair
+from src.entity.merger import execute_merge, execute_split, generate_proposals, score_pair
 from src.entity.models import MergeProposal, _now_utc
 from src.entity.repository import EntityRepository
 
@@ -214,4 +214,169 @@ class TestRepositoryExtensions:
         ).fetchone()
         assert row["status"] == "approved"
         assert row["resolved_at"] is not None
+        repo.close()
+
+
+# ---------------------------------------------------------------------------
+# Merge execution
+# ---------------------------------------------------------------------------
+
+
+class TestExecuteMerge:
+    def test_soft_deletes_source(self, tmp_path: object) -> None:
+        repo = _make_repo(tmp_path)
+        source = repo.add_entity("Affirm Inc", "partner")
+        target = repo.add_entity("Affirm", "partner")
+        execute_merge(repo, source.id, target.id)
+        # Source should be soft-deleted with merge_target_id
+        row = repo._conn.execute(
+            "SELECT deleted_at, merge_target_id FROM entities WHERE id = ?",
+            (source.id,),
+        ).fetchone()
+        assert row["deleted_at"] is not None
+        assert row["merge_target_id"] == target.id
+        repo.close()
+
+    def test_reassigns_mentions(self, tmp_path: object) -> None:
+        repo = _make_repo(tmp_path)
+        source = repo.add_entity("Affirm Inc", "partner")
+        target = repo.add_entity("Affirm", "partner")
+        _add_mention(repo, source.id, "gmail", "msg-1")
+        _add_mention(repo, source.id, "slack", "msg-2")
+        _add_mention(repo, target.id, "gmail", "msg-3")
+        execute_merge(repo, source.id, target.id)
+        # All mentions should now be on target
+        assert repo.get_mention_count(target.id) == 3
+        assert repo.get_mention_count(source.id) == 0
+        repo.close()
+
+    def test_transfers_aliases(self, tmp_path: object) -> None:
+        repo = _make_repo(tmp_path)
+        source = repo.add_entity("Affirm Inc", "partner")
+        target = repo.add_entity("Affirm", "partner")
+        repo.add_alias(source.id, "Afm")
+        execute_merge(repo, source.id, target.id)
+        # Alias should now be on target
+        target_aliases = repo.list_aliases(target.id)
+        alias_names = [a.alias for a in target_aliases]
+        assert "Afm" in alias_names
+        repo.close()
+
+    def test_adds_source_name_as_alias(self, tmp_path: object) -> None:
+        repo = _make_repo(tmp_path)
+        source = repo.add_entity("Affirm Inc", "partner")
+        target = repo.add_entity("Affirm", "partner")
+        execute_merge(repo, source.id, target.id)
+        target_aliases = repo.list_aliases(target.id)
+        alias_names = [a.alias for a in target_aliases]
+        assert "Affirm Inc" in alias_names
+        repo.close()
+
+    def test_handles_alias_collision(self, tmp_path: object) -> None:
+        repo = _make_repo(tmp_path)
+        source = repo.add_entity("Affirm Inc", "partner")
+        target = repo.add_entity("Affirm", "partner")
+        # Pre-add "Affirm Inc" as alias on target -- should not crash on merge
+        repo.add_alias(target.id, "Affirm Inc")
+        execute_merge(repo, source.id, target.id)  # Should not raise
+        repo.close()
+
+    def test_creates_approved_proposal(self, tmp_path: object) -> None:
+        repo = _make_repo(tmp_path)
+        source = repo.add_entity("Affirm Inc", "partner")
+        target = repo.add_entity("Affirm", "partner")
+        execute_merge(repo, source.id, target.id, score=95.0)
+        existing = repo.get_existing_proposals(source.id, target.id)
+        assert len(existing) == 1
+        assert existing[0].status == "approved"
+        repo.close()
+
+
+# ---------------------------------------------------------------------------
+# Split reversal
+# ---------------------------------------------------------------------------
+
+
+class TestExecuteSplit:
+    def test_restores_entity(self, tmp_path: object) -> None:
+        repo = _make_repo(tmp_path)
+        source = repo.add_entity("Affirm Inc", "partner")
+        target = repo.add_entity("Affirm", "partner")
+        execute_merge(repo, source.id, target.id)
+        execute_split(repo, source.id)
+        # Source should be restored
+        restored = repo.get_by_id(source.id)
+        assert restored is not None
+        assert restored.deleted_at is None
+        assert restored.merge_target_id is None
+        repo.close()
+
+    def test_reattributes_mentions(self, tmp_path: object) -> None:
+        repo = _make_repo(tmp_path)
+        source = repo.add_entity("Affirm Inc", "partner")
+        target = repo.add_entity("Affirm", "partner")
+        _add_mention(repo, source.id, "gmail", "msg-1")
+        _add_mention(repo, source.id, "gmail", "msg-2")
+        _add_mention(repo, target.id, "slack", "msg-3")
+        # Before merge: source=2, target=1
+        execute_merge(repo, source.id, target.id)
+        # After merge: target=3, source=0
+        assert repo.get_mention_count(target.id) == 3
+        execute_split(repo, source.id)
+        # After split: source's 2 original mentions should be restored
+        source_count = repo.get_mention_count(source.id)
+        target_count = repo.get_mention_count(target.id)
+        assert source_count + target_count == 3
+        assert source_count == 2  # exactly the 2 mentions that were originally on source
+        assert target_count == 1  # the 1 mention that was originally on target
+        repo.close()
+
+    def test_returns_aliases(self, tmp_path: object) -> None:
+        repo = _make_repo(tmp_path)
+        source = repo.add_entity("Affirm Inc", "partner")
+        target = repo.add_entity("Affirm", "partner")
+        repo.add_alias(source.id, "Afm")
+        execute_merge(repo, source.id, target.id)
+        # After merge: "Afm" and "Affirm Inc" are aliases on target
+        execute_split(repo, source.id)
+        # After split: "Affirm Inc" alias should be removed from target
+        target_aliases = [a.alias for a in repo.list_aliases(target.id)]
+        assert "Affirm Inc" not in target_aliases
+        repo.close()
+
+    def test_entity_not_merged_raises(self, tmp_path: object) -> None:
+        repo = _make_repo(tmp_path)
+        e = repo.add_entity("Affirm", "partner")
+        with pytest.raises(ValueError, match="never merged"):
+            execute_split(repo, e.id)
+        repo.close()
+
+    def test_end_to_end_merge_and_split(self, tmp_path: object) -> None:
+        """Integration test: full merge -> split cycle."""
+        repo = _make_repo(tmp_path)
+        source = repo.add_entity("Affirm Inc", "partner")
+        target = repo.add_entity("Affirm", "partner")
+        repo.add_alias(source.id, "Afm")
+        _add_mention(repo, source.id, "gmail", "msg-1")
+        _add_mention(repo, target.id, "slack", "msg-2")
+
+        # Pre-merge state
+        assert repo.get_mention_count(source.id) == 1
+        assert repo.get_mention_count(target.id) == 1
+        assert len(repo.list_aliases(source.id)) == 1  # "Afm"
+
+        # Merge
+        execute_merge(repo, source.id, target.id, score=95.0)
+        assert repo.get_by_id(source.id) is None  # soft-deleted
+        assert repo.get_mention_count(target.id) == 2  # consolidated
+
+        # Split
+        execute_split(repo, source.id)
+        restored = repo.get_by_id(source.id)
+        assert restored is not None
+        assert restored.name == "Affirm Inc"
+        assert restored.merge_target_id is None
+        # Total mentions should still be 2
+        total = repo.get_mention_count(source.id) + repo.get_mention_count(target.id)
+        assert total == 2
         repo.close()
