@@ -35,9 +35,9 @@ VALID_EXTRACTION_JSON = {
 
 
 def _make_mock_response(data: dict) -> MagicMock:
-    """Create a mock API response with JSON text content."""
+    """Create a mock API response with structured tool output."""
     content_block = MagicMock()
-    content_block.text = json.dumps(data)
+    content_block.input = data
     response = MagicMock()
     response.content = [content_block]
     return response

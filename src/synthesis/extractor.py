@@ -14,6 +14,7 @@ import logging
 import anthropic
 
 from src.config import PipelineConfig
+from src.schema_utils import prepare_schema_for_claude
 from src.models.events import NormalizedEvent
 from src.synthesis.models import (
     ExtractionItem,
@@ -38,12 +39,8 @@ def _call_claude_structured_with_retry(client, model, max_tokens, prompt, schema
         model=model,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
-        output_config={
-            "format": {
-                "type": "json_schema",
-                "schema": schema,
-            }
-        },
+        tools=[{"name": "output", "description": "Structured output", "input_schema": schema}],
+        tool_choice={"type": "tool", "name": "output"},
     )
 
 
@@ -142,7 +139,7 @@ def extract_meeting(
     max_tokens = config.synthesis.extraction_max_output_tokens
 
     # Generate JSON schema from Pydantic model
-    schema = MeetingExtractionOutput.model_json_schema()
+    schema = prepare_schema_for_claude(MeetingExtractionOutput.model_json_schema())
 
     # Call Claude API with structured output
     client = client or anthropic.Anthropic()
@@ -151,7 +148,7 @@ def extract_meeting(
     )
 
     # Parse and validate structured response
-    data = json.loads(response.content[0].text)
+    data = response.content[0].input
     output = MeetingExtractionOutput.model_validate(data)
 
     # Convert to downstream MeetingExtraction model
@@ -238,12 +235,8 @@ async def _call_claude_structured_async_with_retry(client, model, max_tokens, pr
         model=model,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
-        output_config={
-            "format": {
-                "type": "json_schema",
-                "schema": schema,
-            }
-        },
+        tools=[{"name": "output", "description": "Structured output", "input_schema": schema}],
+        tool_choice={"type": "tool", "name": "output"},
     )
 
 
@@ -292,7 +285,7 @@ async def extract_meeting_async(
     max_tokens = config.synthesis.extraction_max_output_tokens
 
     # Generate JSON schema from Pydantic model
-    schema = MeetingExtractionOutput.model_json_schema()
+    schema = prepare_schema_for_claude(MeetingExtractionOutput.model_json_schema())
 
     # Call Claude API with structured output (async)
     response = await _call_claude_structured_async_with_retry(
@@ -300,7 +293,7 @@ async def extract_meeting_async(
     )
 
     # Parse and validate structured response
-    data = json.loads(response.content[0].text)
+    data = response.content[0].input
     output = MeetingExtractionOutput.model_validate(data)
 
     # Convert to downstream MeetingExtraction model

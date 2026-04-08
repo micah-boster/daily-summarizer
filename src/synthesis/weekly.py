@@ -16,6 +16,7 @@ from pathlib import Path
 import anthropic
 
 from src.config import PipelineConfig
+from src.schema_utils import prepare_schema_for_claude
 from src.models.rollups import ThreadEntry, WeeklySynthesis, WeeklyThread
 from src.synthesis.models import WeeklySynthesisOutput
 from src.synthesis.prompts import WEEKLY_THREAD_DETECTION_PROMPT
@@ -35,12 +36,8 @@ def _call_claude_structured_with_retry(client, model, max_tokens, prompt, schema
         model=model,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
-        output_config={
-            "format": {
-                "type": "json_schema",
-                "schema": schema,
-            }
-        },
+        tools=[{"name": "output", "description": "Structured output", "input_schema": schema}],
+        tool_choice={"type": "tool", "name": "output"},
     )
 
 
@@ -376,9 +373,9 @@ def synthesize_weekly(
     max_tokens = config.synthesis.weekly_max_output_tokens
 
     client = client or anthropic.Anthropic()
-    schema = WeeklySynthesisOutput.model_json_schema()
+    schema = prepare_schema_for_claude(WeeklySynthesisOutput.model_json_schema())
     response = _call_claude_structured_with_retry(client, model, max_tokens, prompt, schema)
-    data = json.loads(response.content[0].text)
+    data = response.content[0].input
     output = WeeklySynthesisOutput.model_validate(data)
 
     # Convert structured output to domain models

@@ -17,6 +17,7 @@ from pathlib import Path
 import anthropic
 
 from src.config import PipelineConfig
+from src.schema_utils import prepare_schema_for_claude
 from src.models.rollups import MonthlyMetrics, MonthlySynthesis, ThematicArc
 from src.synthesis.models import MonthlySynthesisOutput
 from src.synthesis.prompts import MONTHLY_NARRATIVE_PROMPT
@@ -36,12 +37,8 @@ def _call_claude_structured_with_retry(client, model, max_tokens, prompt, schema
         model=model,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
-        output_config={
-            "format": {
-                "type": "json_schema",
-                "schema": schema,
-            }
-        },
+        tools=[{"name": "output", "description": "Structured output", "input_schema": schema}],
+        tool_choice={"type": "tool", "name": "output"},
     )
 
 
@@ -314,9 +311,9 @@ def synthesize_monthly(
     max_tokens = config.synthesis.monthly_max_output_tokens
 
     client = client or anthropic.Anthropic()
-    schema = MonthlySynthesisOutput.model_json_schema()
+    schema = prepare_schema_for_claude(MonthlySynthesisOutput.model_json_schema())
     response = _call_claude_structured_with_retry(client, model, max_tokens, prompt, schema)
-    data = json.loads(response.content[0].text)
+    data = response.content[0].input
     output = MonthlySynthesisOutput.model_validate(data)
 
     # Convert structured output to domain models

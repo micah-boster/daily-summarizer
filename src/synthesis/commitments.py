@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from src.config import PipelineConfig
 from src.retry import retry_api_call
+from src.schema_utils import prepare_schema_for_claude
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +28,8 @@ def _call_claude_structured_with_retry(client, model, prompt, schema):
         model=model,
         max_tokens=4096,
         messages=[{"role": "user", "content": prompt}],
-        output_config={
-            "format": {
-                "type": "json_schema",
-                "schema": schema,
-            }
-        },
+        tools=[{"name": "output", "description": "Structured output", "input_schema": schema}],
+        tool_choice={"type": "tool", "name": "output"},
     )
 
 
@@ -122,14 +119,14 @@ def extract_commitments(
             synthesis_text=synthesis_text,
         )
 
-        schema = CommitmentsOutput.model_json_schema()
+        schema = prepare_schema_for_claude(CommitmentsOutput.model_json_schema())
 
         # Use output_config for structured outputs (GA)
         response = _call_claude_structured_with_retry(
             client, model, prompt, schema
         )
 
-        data = json.loads(response.content[0].text)
+        data = response.content[0].input
         result = CommitmentsOutput.model_validate(data)
 
         logger.info("Extracted %d structured commitments", len(result.commitments))

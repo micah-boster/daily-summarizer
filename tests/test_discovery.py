@@ -83,7 +83,7 @@ def test_extract_entities_with_mock_response():
     }
 
     mock_response = MagicMock()
-    mock_response.content = [MagicMock(text=json.dumps(mock_response_data))]
+    mock_response.content = [MagicMock(input=mock_response_data)]
 
     mock_client = MagicMock()
     mock_client.messages.create.return_value = mock_response
@@ -126,7 +126,7 @@ def test_extract_entities_no_entities_response():
     }
 
     mock_response = MagicMock()
-    mock_response.content = [MagicMock(text=json.dumps(mock_response_data))]
+    mock_response.content = [MagicMock(input=mock_response_data)]
 
     mock_client = MagicMock()
     mock_client.messages.create.return_value = mock_response

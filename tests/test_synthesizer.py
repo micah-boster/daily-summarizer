@@ -222,9 +222,9 @@ def test_convert_synthesis_to_dict_empty():
 
 
 def _make_mock_response(data: dict) -> MagicMock:
-    """Create a mock API response containing JSON text."""
+    """Create a mock API response containing structured tool output."""
     content_block = MagicMock()
-    content_block.text = json.dumps(data)
+    content_block.input = data
     response = MagicMock()
     response.content = [content_block]
     return response
@@ -289,10 +289,10 @@ def test_synthesize_daily_structured_output():
     assert "Mike" in result["commitments"][0]
     assert result["executive_summary"] is None
 
-    # Verify API was called with output_config
+    # Verify API was called with tool-based structured output
     call_kwargs = mock_client.messages.create.call_args
-    assert "output_config" in call_kwargs.kwargs
-    assert call_kwargs.kwargs["output_config"]["format"]["type"] == "json_schema"
+    assert "tools" in call_kwargs.kwargs
+    assert call_kwargs.kwargs["tool_choice"]["name"] == "output"
 
 
 def test_synthesize_daily_structured_empty():

@@ -146,48 +146,47 @@ def run_backfill(
 
     output_dir = config.pipeline.output_dir
 
-    # Open database connection for backfill_progress tracking
-    conn = get_connection(config.entity.db_path)
-
-    # Generate list of all dates in range
-    all_dates: list[date] = []
-    current = from_date
-    while current <= to_date:
-        all_dates.append(current)
-        current += timedelta(days=1)
-
-    # Filter out already-processed dates (unless force)
-    if force:
-        dates_to_process = all_dates
-    else:
-        dates_to_process = [
-            d for d in all_dates if not _is_day_processed(conn, d.isoformat())
-        ]
-
-    if not dates_to_process:
-        print("Backfill complete: 0 days to process (all already done)")
-        conn.close()
-        return {"days_processed": 0, "days_skipped": len(all_dates), "entities_registered": 0}
-
-    # Group into weekly batches
-    batches: list[list[date]] = []
-    for i in range(0, len(dates_to_process), 7):
-        batches.append(dates_to_process[i : i + 7])
-
-    total_days = len(dates_to_process)
-    total_entities = 0
-    days_processed = 0
-    days_skipped = len(all_dates) - len(dates_to_process)
-
-    threshold = config.entity.auto_register_threshold
-    review_threshold = config.entity.review_threshold
-
-    # Check HubSpot availability once for the entire backfill run
-    hubspot_available = bool(getattr(config.hubspot, "access_token", ""))
-    if not hubspot_available:
-        logger.info("HubSpot cross-reference skipped: no access_token configured")
-
+    # Use a single connection for both backfill_progress and entity operations
+    # to avoid SQLite "database is locked" errors
     with EntityRepository(config.entity.db_path) as repo:
+        conn = repo._conn
+
+        # Generate list of all dates in range
+        all_dates: list[date] = []
+        current = from_date
+        while current <= to_date:
+            all_dates.append(current)
+            current += timedelta(days=1)
+
+        # Filter out already-processed dates (unless force)
+        if force:
+            dates_to_process = all_dates
+        else:
+            dates_to_process = [
+                d for d in all_dates if not _is_day_processed(conn, d.isoformat())
+            ]
+
+        if not dates_to_process:
+            print("Backfill complete: 0 days to process (all already done)")
+            return {"days_processed": 0, "days_skipped": len(all_dates), "entities_registered": 0}
+
+        # Group into weekly batches
+        batches: list[list[date]] = []
+        for i in range(0, len(dates_to_process), 7):
+            batches.append(dates_to_process[i : i + 7])
+
+        total_days = len(dates_to_process)
+        total_entities = 0
+        days_processed = 0
+        days_skipped = len(all_dates) - len(dates_to_process)
+
+        threshold = config.entity.auto_register_threshold
+        review_threshold = config.entity.review_threshold
+
+        # Check HubSpot availability once for the entire backfill run
+        hubspot_available = bool(getattr(config.hubspot, "access_token", ""))
+        if not hubspot_available:
+            logger.info("HubSpot cross-reference skipped: no access_token configured")
         for batch_idx, batch in enumerate(batches):
             batch_entities = 0
             new_entities_in_batch: list[tuple[str, str, str]] = []  # (entity_id, name, type)
@@ -293,15 +292,13 @@ def run_backfill(
                 f"processed {len(batch)} days, found {batch_entities} entities"
             )
 
-    conn.close()
+        print(
+            f"\nBackfill complete: processed {days_processed}/{len(all_dates)} days, "
+            f"{total_entities} entities registered"
+        )
 
-    print(
-        f"\nBackfill complete: processed {days_processed}/{len(all_dates)} days, "
-        f"{total_entities} entities registered"
-    )
-
-    return {
-        "days_processed": days_processed,
-        "days_skipped": days_skipped,
-        "entities_registered": total_entities,
-    }
+        return {
+            "days_processed": days_processed,
+            "days_skipped": days_skipped,
+            "entities_registered": total_entities,
+        }

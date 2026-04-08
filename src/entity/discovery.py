@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from src.config import PipelineConfig
 from src.retry import retry_api_call
+from src.schema_utils import prepare_schema_for_claude
 
 logger = logging.getLogger(__name__)
 
@@ -79,12 +80,8 @@ def _call_claude_entity_extraction(client, model, max_tokens, prompt, schema):
         model=model,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
-        output_config={
-            "format": {
-                "type": "json_schema",
-                "schema": schema,
-            }
-        },
+        tools=[{"name": "output", "description": "Structured output", "input_schema": schema}],
+        tool_choice={"type": "tool", "name": "output"},
     )
 
 
@@ -117,13 +114,14 @@ def extract_entities(
         model = config.synthesis.model
 
         prompt = ENTITY_EXTRACTION_PROMPT.format(text=text)
-        schema = EntityExtractionOutput.model_json_schema()
+        schema = prepare_schema_for_claude(EntityExtractionOutput.model_json_schema())
 
         response = _call_claude_entity_extraction(
             client, model, 1024, prompt, schema
         )
 
-        data = json.loads(response.content[0].text)
+        # Tool-based structured output returns input dict directly
+        data = response.content[0].input
         output = EntityExtractionOutput.model_validate(data)
 
         logger.info("Extracted %d entities from text", len(output.entities))

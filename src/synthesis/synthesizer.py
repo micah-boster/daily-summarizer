@@ -17,6 +17,7 @@ from src.config import PipelineConfig
 from src.models.sources import SourceItem, SourceType
 from src.synthesis.models import CommitmentRow, DailySynthesisOutput, MeetingExtraction, SynthesisItem
 from src.retry import retry_api_call
+from src.schema_utils import prepare_schema_for_claude
 from src.synthesis.validator import validate_evidence_only
 
 logger = logging.getLogger(__name__)
@@ -39,12 +40,8 @@ def _call_claude_structured_with_retry(client, model, max_tokens, prompt, schema
         model=model,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
-        output_config={
-            "format": {
-                "type": "json_schema",
-                "schema": schema,
-            }
-        },
+        tools=[{"name": "output", "description": "Structured output", "input_schema": schema}],
+        tool_choice={"type": "tool", "name": "output"},
     )
 
 
@@ -609,7 +606,7 @@ def synthesize_daily(
     max_tokens = config.synthesis.synthesis_max_output_tokens
 
     # Generate JSON schema from Pydantic model
-    schema = DailySynthesisOutput.model_json_schema()
+    schema = prepare_schema_for_claude(DailySynthesisOutput.model_json_schema())
 
     # Call Claude API with structured output
     client = client or anthropic.Anthropic()
@@ -618,7 +615,7 @@ def synthesize_daily(
     )
 
     # Parse and validate structured response
-    data = json.loads(response.content[0].text)
+    data = response.content[0].input
     output = DailySynthesisOutput.model_validate(data)
 
     # Validate evidence-only language on content fields
