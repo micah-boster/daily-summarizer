@@ -44,6 +44,50 @@
 
 ---
 
+## Milestone: v2.0 — Entity Layer
+
+**Shipped:** 2026-04-08
+**Phases:** 6 | **Plans:** 12
+
+### What Was Built
+- SQLite entity registry with 5-table schema, PRAGMA-based migrations, CLI CRUD + alias management
+- Entity discovery from synthesis output (Claude structured outputs) with historical backfill from 6 months of sidecars
+- HubSpot cross-referencing via rapidfuzz fuzzy name matching
+- Entity attribution — every synthesis item tagged with entity references, persisted to SQLite + JSON sidecar
+- Merge proposal generation (rapidfuzz), interactive CLI review, reversible split/undo
+- Scoped entity views (`entity show`), enriched list (`entity list`), per-entity markdown reports (`entity report`)
+
+### What Worked
+- Reusing existing patterns (Pydantic models, structured outputs, CLI subparsers) made each phase faster
+- Entity module isolation (src/entity/) kept complexity contained — 2,736 LOC in a single package
+- Retroactive summaries + verification backfill in 23.1 cleaned up paperwork debt efficiently
+- discuss-phase → plan-phase → execute-phase auto-advance pipeline shipped entire phases in single sessions
+
+### What Was Inefficient
+- Phases 12 and 19 were executed before the verification/summary workflow matured — required retroactive paperwork
+- Summary frontmatter `requirements` field was consistently missing — had to backfill 12 files in gap closure
+- First audit found documentation gaps (missing VERIFICATIONs) that could have been caught by executor agents writing them during execution
+- Roadmap plan checkboxes not auto-checked after execution — required manual cleanup of 7 unchecked plans
+
+### Patterns Established
+- Entity package pattern: models → migrations → db → repository → CLI, each building on the last
+- Graceful degradation pattern: get_connection_from_config returns None, pipeline try/except wraps entity features
+- Name normalization: normalize_for_matching as shared utility across discovery, attribution, merge
+- Merge pattern: soft-delete with merge_target_id, resolve_name follows pointer
+
+### Key Lessons
+1. Executor agents should write VERIFICATION.md as part of phase completion — not left for audits to catch
+2. Summary frontmatter requirements field should be mandatory in the summary template
+3. Pipeline ordering matters — discovery before attribution is not optional
+4. Gap closure phases are lightweight but essential — Phase 23.1 was 1 plan, 4 tasks, fixed 4 real issues
+
+### Cost Observations
+- Model mix: ~70% sonnet (executors, verifiers, checkers), ~30% opus (orchestrator, planner)
+- Entity milestone completed across Apr 5-8 (4 calendar days)
+- Auto-advance pipeline (discuss → plan → execute) reduced manual orchestration significantly
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -53,6 +97,7 @@
 | v1.0 | 6 | 14 | Initial GSD workflow established |
 | v1.5 | 7 | 18 | Multi-source expansion, pipeline decomposition |
 | v1.5.1 | 7 | 16 | Milestone audit + gap closure cycle proven |
+| v2.0 | 6 | 12 | Entity layer, auto-advance pipeline, retroactive cleanup |
 
 ### Cumulative Quality
 
@@ -61,9 +106,12 @@
 | v1.0 | ~150 | First test suite |
 | v1.5 | ~380 | Pipeline orchestration tests added |
 | v1.5.1 | 468 | Async tests, config validation, structured output tests |
+| v2.0 | 651+ | 14 entity test files, TDD attributor/merger/views |
 
 ### Top Lessons (Verified Across Milestones)
 
 1. Requirements must be scoped to verifiable, grep-able artifacts — not vague descriptions
 2. TDD (red-green) produces cleaner code than write-then-test, especially for data transformation
 3. Milestone audits with 3-source cross-reference catch gaps that phase-level verification misses
+4. Executor agents should write VERIFICATION.md + populate summary frontmatter during execution, not after
+5. Auto-advance (discuss → plan → execute) is a major throughput multiplier — entire phases in single sessions

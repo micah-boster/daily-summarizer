@@ -74,3 +74,13 @@
 
 ---
 
+
+## v2.0 Entity Layer (Shipped: 2026-04-08)
+
+**Phases completed:** 19 phases, 41 plans, 0 tasks
+
+**Key accomplishments:**
+- (none recorded)
+
+---
+

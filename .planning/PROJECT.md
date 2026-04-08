@@ -141,5 +141,9 @@ Every morning I open a structured daily summary of yesterday's work and find it 
 | Async pipeline with sync entry point | `run_pipeline()` stays sync; `asyncio.run()` wraps internal async | ✓ Good |
 | Decimal phase numbering for gap closure | Phase 18.1 inserted without renumbering — clear audit trail | ✓ Good |
 
+| SQLite entity registry (no server) | Flat files for summaries + SQLite for entity graph; matches personal-tool scale | ✓ Good |
+| rapidfuzz for entity matching | Name similarity at threshold 80; works for merge proposals and HubSpot xref | ✓ Good |
+| Discovery before attribution in pipeline | Ensures first-mention entities attributed same day; fixed in 23.1 | ✓ Good |
+
 ---
-*Last updated: 2026-04-08 after v3.0 milestone start*
+*Last updated: 2026-04-08 after v2.0 Entity Layer shipped*
