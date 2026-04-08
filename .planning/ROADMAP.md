@@ -456,8 +456,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 23-01: SQL query layer for entity-scoped views, CLI `entity show` and `entity list` commands with terminal output
-- [ ] 23-02: Per-entity markdown report generation via Jinja2, `entity report` CLI command, temporal summary logic (mention frequency, open commitments, last-active)
+- [ ] 23-01-PLAN.md -- SQL query layer + significance scoring (TDD), CLI entity show with scoped views and enriched entity list
+- [ ] 23-02-PLAN.md -- Jinja2 entity report template, entity report CLI command, output/entities/ generation
 
 ## Progress
 
