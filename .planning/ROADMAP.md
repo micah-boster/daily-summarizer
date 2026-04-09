@@ -608,7 +608,13 @@ Plans:
   4. Keyboard navigation works across all three columns: j/k for list traversal, h/l for column focus, Enter to select, Esc to deselect
   5. The overall design is demo-presentable with consistent typography, spacing, color palette, and visual hierarchy across all views
 **Pitfall Warnings**: Write safety (#7) -- build config read-only view first, validate all writes through PipelineConfig before disk write. Config mutation (#7) -- atomic write with backup, reject writes during active pipeline runs.
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 29-01-PLAN.md — Config API endpoints + config panel UI with Pydantic validation and atomic writes
+- [ ] 29-02-PLAN.md — Dark mode integration with next-themes, brand color CSS variables, theme toggle
+- [ ] 29-03-PLAN.md — Vim-style keyboard navigation across three columns with shortcut help overlay
+- [ ] 29-04-PLAN.md — Visual polish: markdown typography overhaul, layout spacing, demo-quality aesthetic
 
 ## Progress
 
