@@ -118,3 +118,47 @@ export interface MonthlyRollupResponse {
   markdown: string;
   sidecar: Record<string, unknown> | null;
 }
+
+// --- Entity types ---
+
+export interface EntityListItem {
+  entity_id: string;
+  name: string;
+  entity_type: string; // "partner" | "person" | "initiative"
+  mention_count: number;
+  commitment_count: number;
+  last_active_date: string | null;
+}
+
+export interface ActivityItemResponse {
+  source_type: string; // "substance" | "decision" | "commitment"
+  source_date: string;
+  context_snippet: string | null;
+  confidence: number;
+  significance_score: number;
+}
+
+export interface ActivityDay {
+  date: string;
+  items: ActivityItemResponse[];
+}
+
+export interface EntityScopedViewResponse {
+  entity_name: string;
+  entity_type: string;
+  entity_id: string;
+  from_date: string | null;
+  to_date: string | null;
+  total_mentions: number;
+  aliases: string[];
+  open_commitments: ActivityItemResponse[];
+  highlights: ActivityItemResponse[];
+  activity_by_date: ActivityDay[];
+}
+
+export interface RelatedEntityItem {
+  entity_id: string;
+  name: string;
+  entity_type: string;
+  co_mention_count: number;
+}
