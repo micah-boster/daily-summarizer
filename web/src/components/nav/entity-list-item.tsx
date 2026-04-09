@@ -30,13 +30,13 @@ export function EntityListItemRow({ entity }: EntityListItemProps) {
       className={cn(
         "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors",
         isSelected
-          ? "bg-accent text-accent-foreground"
+          ? "bg-primary/15 text-primary"
           : "hover:bg-accent/50",
       )}
     >
       {/* Activity dot */}
       {isRecentlyActive && (
-        <span className="h-2 w-2 flex-shrink-0 rounded-full bg-green-500" />
+        <span className="h-2 w-2 flex-shrink-0 rounded-full bg-amber-500" />
       )}
 
       {/* Name */}

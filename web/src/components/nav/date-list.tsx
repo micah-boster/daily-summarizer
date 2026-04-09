@@ -32,7 +32,7 @@ export function DateListItem({
       className={cn(
         "flex w-full flex-col gap-0.5 rounded-md px-3 py-2 text-left text-sm transition-colors",
         isSelected
-          ? "bg-accent text-accent-foreground"
+          ? "bg-primary/15 text-primary"
           : "hover:bg-accent/50",
       )}
     >
@@ -79,7 +79,7 @@ export function WeeklyListItem({
       className={cn(
         "flex w-full flex-col gap-0.5 rounded-md px-3 py-2 text-left text-sm transition-colors",
         isSelected
-          ? "bg-accent text-accent-foreground"
+          ? "bg-primary/15 text-primary"
           : "hover:bg-accent/50",
       )}
     >
@@ -113,7 +113,7 @@ export function MonthlyListItem({
       className={cn(
         "flex w-full rounded-md px-3 py-2 text-left text-sm font-medium transition-colors",
         isSelected
-          ? "bg-accent text-accent-foreground"
+          ? "bg-primary/15 text-primary"
           : "hover:bg-accent/50",
       )}
     >
