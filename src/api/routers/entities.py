@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import sqlite3
-
 from fastapi import APIRouter, Depends, HTTPException, Query
+
+from src.entity.db import DBOperationalError
 
 from src.api.deps import get_entity_repo
 from src.api.models.requests import AddAliasRequest, CreateEntityRequest, UpdateEntityRequest
@@ -52,7 +52,7 @@ def create_entity(
     """Create a new entity."""
     try:
         entity = repo.add_entity(name=body.name, entity_type=body.entity_type)
-    except sqlite3.OperationalError:
+    except DBOperationalError:
         raise HTTPException(status_code=503, detail="Database busy")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -76,7 +76,7 @@ def update_entity(
             name=body.name,
             entity_type=body.entity_type,
         )
-    except sqlite3.OperationalError:
+    except DBOperationalError:
         raise HTTPException(status_code=503, detail="Database busy")
     if entity is None:
         raise HTTPException(status_code=404, detail="Entity not found")
@@ -95,7 +95,7 @@ def delete_entity(
     """Soft-delete an entity."""
     try:
         deleted = repo.remove_entity(entity_id)
-    except sqlite3.OperationalError:
+    except DBOperationalError:
         raise HTTPException(status_code=503, detail="Database busy")
     if not deleted:
         raise HTTPException(status_code=404, detail="Entity not found")
@@ -110,7 +110,7 @@ def add_alias(
     """Add an alias to an entity."""
     try:
         alias = repo.add_alias(entity_id=entity_id, alias=body.alias)
-    except sqlite3.OperationalError:
+    except DBOperationalError:
         raise HTTPException(status_code=503, detail="Database busy")
     except ValueError as exc:
         detail = str(exc)
@@ -133,7 +133,7 @@ def remove_alias(
     """Remove an alias from an entity."""
     try:
         removed = repo.remove_alias(alias)
-    except sqlite3.OperationalError:
+    except DBOperationalError:
         raise HTTPException(status_code=503, detail="Database busy")
     if not removed:
         raise HTTPException(status_code=404, detail="Alias not found")

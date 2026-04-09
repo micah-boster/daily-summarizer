@@ -148,7 +148,7 @@ def test_run_pipeline_sync_wrapper(mock_async_pipeline, mock_cleanup, tmp_path):
     """run_pipeline() calls asyncio.run(async_pipeline(ctx)) as sync wrapper."""
     ctx = _make_ctx(tmp_path)
     run_pipeline(ctx)
-    mock_async_pipeline.assert_called_once_with(ctx)
+    mock_async_pipeline.assert_called_once_with(ctx, progress_reporter=None)
 
 
 # --- Test 4: End-to-end async pipeline ---

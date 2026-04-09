@@ -1,6 +1,6 @@
 """Pipeline run management: subprocess isolation, run persistence, SSE event streaming.
 
-Uses sqlite3 directly (no ORM) following project convention. Each function
+Uses entity.db connection layer (no direct sqlite3). Each function
 opens its own connection (connection-per-call pattern) for thread safety.
 """
 
@@ -11,7 +11,6 @@ import json
 import logging
 import os
 import signal
-import sqlite3
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -29,7 +28,7 @@ def get_db_path() -> str:
     return config.entity.db_path
 
 
-def _get_conn(db_path: str | None = None) -> sqlite3.Connection:
+def _get_conn(db_path: str | None = None):
     """Open a connection to the entity DB with migrations applied."""
     from src.entity.db import get_connection
 
@@ -159,7 +158,7 @@ def list_runs(limit: int = 14, db_path: str | None = None) -> list[dict]:
         conn.close()
 
 
-def _row_to_dict(row: sqlite3.Row) -> dict:
+def _row_to_dict(row) -> dict:
     """Convert a sqlite3.Row to a plain dict with parsed stages."""
     d = dict(row)
     # Parse stages_json into a list

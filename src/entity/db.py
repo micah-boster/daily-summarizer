@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 from pathlib import Path
+from sqlite3 import OperationalError as DBOperationalError  # re-export for API layer
 
 from src.entity.migrations import run_migrations
 

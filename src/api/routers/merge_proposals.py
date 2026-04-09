@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import sqlite3
-
 from fastapi import APIRouter, Depends, HTTPException
+
+from src.entity.db import DBOperationalError
 from pydantic import BaseModel
 
 from src.api.deps import get_entity_repo
@@ -113,7 +113,7 @@ def approve_merge_proposal(
 
     try:
         execute_merge(repo, merge_source_id, merge_target_id)
-    except sqlite3.OperationalError:
+    except DBOperationalError:
         raise HTTPException(status_code=503, detail="Database busy")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -166,7 +166,7 @@ def reject_merge_proposal(
         source_id, target_id = parts[0], parts[1]
         try:
             repo.save_proposal(source_id, target_id, reason="rejected by user", status="rejected")
-        except sqlite3.OperationalError:
+        except DBOperationalError:
             raise HTTPException(status_code=503, detail="Database busy")
     else:
         row = repo._conn.execute(
@@ -179,7 +179,7 @@ def reject_merge_proposal(
         target_id = row["target_entity_id"]
         try:
             repo.update_proposal_status(proposal_id, "rejected")
-        except sqlite3.OperationalError:
+        except DBOperationalError:
             raise HTTPException(status_code=503, detail="Database busy")
 
     source = repo.get_by_id(source_id)
