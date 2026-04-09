@@ -20,8 +20,6 @@ import {
   useMonthlyRollup,
 } from "@/hooks/use-summaries";
 
-type ViewType = "daily" | "weekly" | "monthly";
-
 export default function Home() {
   const leftCollapsed = useUIStore((s) => s.leftNavCollapsed);
   const rightCollapsed = useUIStore((s) => s.rightSidebarCollapsed);
@@ -35,9 +33,11 @@ export default function Home() {
 
   const { data: summaryList } = useSummaryList();
 
-  // Selection state
-  const [selectedType, setSelectedType] = useState<ViewType>("daily");
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  // Selection state (selectedDate and selectedType lifted to Zustand for command palette bridge)
+  const selectedType = useUIStore((s) => s.selectedViewType);
+  const setSelectedType = useUIStore((s) => s.setSelectedViewType);
+  const selectedDate = useUIStore((s) => s.selectedDate);
+  const setSelectedDate = useUIStore((s) => s.setSelectedDate);
   const [selectedWeekly, setSelectedWeekly] = useState<{
     year: number;
     week: number;

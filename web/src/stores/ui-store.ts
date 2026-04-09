@@ -25,6 +25,10 @@ interface UIState {
   // Merge review state
   showMergeReview: boolean;
 
+  // Date/view selection state (shared between page.tsx and command palette)
+  selectedDate: string | null;
+  selectedViewType: "daily" | "weekly" | "monthly";
+
   // Command palette state
   commandPaletteOpen: boolean;
   recentEntities: string[];
@@ -51,6 +55,10 @@ interface UIState {
 
   // Merge review actions
   setShowMergeReview: (show: boolean) => void;
+
+  // Date/view selection actions
+  setSelectedDate: (date: string | null) => void;
+  setSelectedViewType: (type: "daily" | "weekly" | "monthly") => void;
 
   // Command palette actions
   toggleCommandPalette: () => void;
@@ -91,6 +99,10 @@ export const useUIStore = create<UIState>()(
 
       // Merge review defaults
       showMergeReview: false,
+
+      // Date/view selection defaults
+      selectedDate: null,
+      selectedViewType: "daily",
 
       // Command palette defaults
       commandPaletteOpen: false,
@@ -166,6 +178,10 @@ export const useUIStore = create<UIState>()(
           showMergeReview: show,
           ...(show ? { selectedEntityId: null } : {}),
         }),
+
+      // Date/view selection actions
+      setSelectedDate: (date) => set({ selectedDate: date }),
+      setSelectedViewType: (type) => set({ selectedViewType: type }),
 
       // Command palette actions
       toggleCommandPalette: () =>
