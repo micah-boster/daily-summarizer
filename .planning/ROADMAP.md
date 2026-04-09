@@ -487,7 +487,7 @@ Plans:
 - [x] **Phase 26: Entity API + Entity Browser** - Entity list/scoped view endpoints, nav sidebar with activity indicators, context sidebar (completed 2026-04-09)
 - [x] **Phase 27: Entity Management UI** - Entity CRUD forms, merge proposal review, alias management, command palette (completed 2026-04-09)
 - [x] **Phase 27.1: Verify Summary View + Fix Command Palette Date Nav** - Verify Phase 25 requirements (SUM-01/02/04, NAV-01, UX-03), fix Cmd+K date navigation (completed 2026-04-09)
-- [ ] **Phase 28: Pipeline Run Management** - Pipeline trigger endpoint, SSE status streaming, subprocess isolation, run history
+- [x] **Phase 28: Pipeline Run Management** - Pipeline trigger endpoint, SSE status streaming, subprocess isolation, run history (completed 2026-04-09)
 - [ ] **Phase 29: Config Management + Polish** - Config viewer/editor, dark mode, keyboard navigation, design polish
 
 ## Phase Details
@@ -647,5 +647,5 @@ Phases 24-29 execute sequentially: 24 -> 25 -> 26 -> 27 -> 28 -> 29.
 | 25. Next.js Scaffold + Summary View | v3.0 | 0/TBD | Not started | - |
 | 26. Entity API + Entity Browser | 3/3 | Complete   | 2026-04-09 | - |
 | 27. Entity Management UI | 5/5 | Complete    | 2026-04-09 | - |
-| 28. Pipeline Run Management | 2/3 | In Progress|  | - |
+| 28. Pipeline Run Management | 3/3 | Complete   | 2026-04-09 | - |
 | 29. Config Management + Polish | v3.0 | 0/TBD | Not started | - |

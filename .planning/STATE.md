@@ -22,12 +22,12 @@ See: .planning/PROJECT.md (updated 2026-04-08)
 
 ## Current Position
 
-Phase: 28 (Pipeline Run Management) -- Plan 02 complete (3/3 plans done)
-Plan: 03 ready
-Status: In progress
-Last activity: 2026-04-09 -- Backend pipeline run infrastructure (subprocess, SSE, persistence)
+Phase: 28 (Pipeline Run Management) -- Plan 03 complete (3/3 plans done)
+Plan: Phase 28 complete
+Status: Phase complete
+Last activity: 2026-04-09 -- Run history UI with Runs tab, status badges, and error drill-down
 
-Progress: [##############################] 54/54 plans complete (51 prior + 3 Phase 28)
+Progress: [##############################] 54/54 plans complete (51 prior + 3 Phase 28) -- Phase 28 COMPLETE
 
 ## Performance Metrics
 
@@ -71,6 +71,7 @@ Progress: [##############################] 54/54 plans complete (51 prior + 3 Ph
 - [Phase 28-02]: EventSource native reconnection instead of custom retry logic
 - [Phase 28-02]: Fixed bottom status bar (40px) at z-50 with AppShell pb-10 offset
 - [Phase 28-02]: Auto-reset to idle 3s after completion for clean UX
+- [Phase 28-03]: Widened right-sidebar activeTab prop to accept 'runs' for type consistency with expanded tab union
 
 ### Pending Todos
 
@@ -85,5 +86,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-04-09
-Stopped at: Completed 28-01-PLAN.md (Backend pipeline run infrastructure)
+Stopped at: Completed 28-03-PLAN.md (Run history view -- Phase 28 complete)
 Resume file: None
