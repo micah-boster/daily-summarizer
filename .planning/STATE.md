@@ -22,12 +22,12 @@ See: .planning/PROJECT.md (updated 2026-04-08)
 
 ## Current Position
 
-Phase: 27 (Entity Management UI) -- Plan 03 complete (3/4 plans done)
-Plan: 03 complete
-Status: In progress
-Last activity: 2026-04-09 -- Merge review UI with side-by-side comparison and queue flow
+Phase: 27 (Entity Management UI) -- Plan 04 complete (4/4 plans done)
+Plan: 04 complete
+Status: Phase complete
+Last activity: 2026-04-09 -- Global command palette with Cmd+K entity search and navigation
 
-Progress: [######################........] 47/48 plans complete (44 prior + 3 Phase 27)
+Progress: [##############################] 48/48 plans complete (44 prior + 4 Phase 27)
 
 ## Performance Metrics
 
@@ -59,6 +59,8 @@ Progress: [######################........] 47/48 plans complete (44 prior + 3 Ph
 - [Phase 27-02]: Sheet panel at 400px width keeps entity list visible alongside form
 - [Phase 27-02]: Optimistic alias removal with undo toast (5s window) rather than confirmation dialog
 - [Phase 27-02]: Modal state managed via Zustand slices (open/close + entityId tracking)
+- [Phase 27-04]: Command palette mounted in Providers client component for Zustand/TanStack access
+- [Phase 27-04]: Inline natural date parsing (no external library) for command palette date shortcuts
 
 ### Pending Todos
 
@@ -73,5 +75,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-04-09
-Stopped at: Completed 27-03-PLAN.md (Merge review UI)
+Stopped at: Completed 27-04-PLAN.md (Command palette) -- Phase 27 complete
 Resume file: None

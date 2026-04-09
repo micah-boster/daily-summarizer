@@ -485,7 +485,7 @@ Plans:
 - [x] **Phase 24: FastAPI Skeleton + Summary API** - App factory, CORS, dependency injection, summary read endpoints, SQLite busy_timeout hardening (completed 2026-04-08)
 - [x] **Phase 25: Next.js Scaffold + Summary View** - Three-column layout shell, daily summary rendering, date navigation, roll-up browsing
 - [x] **Phase 26: Entity API + Entity Browser** - Entity list/scoped view endpoints, nav sidebar with activity indicators, context sidebar (completed 2026-04-09)
-- [ ] **Phase 27: Entity Management UI** - Entity CRUD forms, merge proposal review, alias management, command palette
+- [x] **Phase 27: Entity Management UI** - Entity CRUD forms, merge proposal review, alias management, command palette (completed 2026-04-09)
 - [ ] **Phase 28: Pipeline Run Management** - Pipeline trigger endpoint, SSE status streaming, subprocess isolation, run history
 - [ ] **Phase 29: Config Management + Polish** - Config viewer/editor, dark mode, keyboard navigation, design polish
 
@@ -623,6 +623,6 @@ Phases 24-29 execute sequentially: 24 -> 25 -> 26 -> 27 -> 28 -> 29.
 | 24. FastAPI Skeleton + Summary API | 2/2 | Complete    | 2026-04-08 | - |
 | 25. Next.js Scaffold + Summary View | v3.0 | 0/TBD | Not started | - |
 | 26. Entity API + Entity Browser | 3/3 | Complete   | 2026-04-09 | - |
-| 27. Entity Management UI | 3/4 | In Progress|  | - |
+| 27. Entity Management UI | 4/4 | Complete   | 2026-04-09 | - |
 | 28. Pipeline Run Management | v3.0 | 0/TBD | Not started | - |
 | 29. Config Management + Polish | v3.0 | 0/TBD | Not started | - |
