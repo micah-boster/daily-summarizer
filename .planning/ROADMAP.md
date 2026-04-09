@@ -489,6 +489,7 @@ Plans:
 - [x] **Phase 27.1: Verify Summary View + Fix Command Palette Date Nav** - Verify Phase 25 requirements (SUM-01/02/04, NAV-01, UX-03), fix Cmd+K date navigation (completed 2026-04-09)
 - [x] **Phase 28: Pipeline Run Management** - Pipeline trigger endpoint, SSE status streaming, subprocess isolation, run history (completed 2026-04-09)
 - [x] **Phase 29: Config Management + Polish** - Config viewer/editor, dark mode, keyboard navigation, design polish (completed 2026-04-09)
+- [ ] **Phase 30: Summary Redesign** - Executive brief at top, collapsible per-meeting sections, better busy-day information hierarchy
 
 ## Phase Details
 
@@ -655,3 +656,9 @@ Phases 24-29 execute sequentially: 24 -> 25 -> 26 -> 27 -> 28 -> 29.
 | 27. Entity Management UI | 5/5 | Complete    | 2026-04-09 | - |
 | 28. Pipeline Run Management | 3/3 | Complete    | 2026-04-09 | - |
 | 29. Config Management + Polish | v3.0 | Complete    | 2026-04-09 | - |
+
+### Phase 30: Summary Redesign
+**Goal**: Busy days are usable — executive brief at top, collapsible per-meeting sections, better information hierarchy so 10+ meeting days don't feel like an info dump
+**Depends on**: Phase 29
+**Requirements**: TBD
+**Plans**: TBD
