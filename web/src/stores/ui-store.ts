@@ -25,6 +25,11 @@ interface UIState {
   // Merge review state
   showMergeReview: boolean;
 
+  // Command palette state
+  commandPaletteOpen: boolean;
+  recentEntities: string[];
+  recentDates: string[];
+
   toggleLeftNav: () => void;
   toggleRightSidebar: () => void;
   toggleSection: (id: string) => void;
@@ -46,6 +51,12 @@ interface UIState {
 
   // Merge review actions
   setShowMergeReview: (show: boolean) => void;
+
+  // Command palette actions
+  toggleCommandPalette: () => void;
+  setCommandPaletteOpen: (open: boolean) => void;
+  addRecentEntity: (entityId: string) => void;
+  addRecentDate: (date: string) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -81,6 +92,11 @@ export const useUIStore = create<UIState>()(
       // Merge review defaults
       showMergeReview: false,
 
+      // Command palette defaults
+      commandPaletteOpen: false,
+      recentEntities: [],
+      recentDates: [],
+
       toggleLeftNav: () =>
         set((s) => ({ leftNavCollapsed: !s.leftNavCollapsed })),
 
@@ -105,7 +121,13 @@ export const useUIStore = create<UIState>()(
 
       setActiveTab: (tab) => set({ activeTab: tab }),
 
-      selectEntity: (id) => set({ selectedEntityId: id }),
+      selectEntity: (id) =>
+        set((s) => ({
+          selectedEntityId: id,
+          recentEntities: id
+            ? [id, ...s.recentEntities.filter((e) => e !== id)].slice(0, 5)
+            : s.recentEntities,
+        })),
 
       setEntityTypeFilter: (type) => set({ entityTypeFilter: type }),
 
@@ -144,6 +166,28 @@ export const useUIStore = create<UIState>()(
           showMergeReview: show,
           ...(show ? { selectedEntityId: null } : {}),
         }),
+
+      // Command palette actions
+      toggleCommandPalette: () =>
+        set((s) => ({ commandPaletteOpen: !s.commandPaletteOpen })),
+
+      setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
+
+      addRecentEntity: (entityId) =>
+        set((s) => ({
+          recentEntities: [
+            entityId,
+            ...s.recentEntities.filter((e) => e !== entityId),
+          ].slice(0, 5),
+        })),
+
+      addRecentDate: (date) =>
+        set((s) => ({
+          recentDates: [
+            date,
+            ...s.recentDates.filter((d) => d !== date),
+          ].slice(0, 5),
+        })),
     }),
     {
       name: "ui-state",
