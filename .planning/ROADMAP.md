@@ -538,7 +538,12 @@ Plans:
   4. The right sidebar adapts to the current selection -- for entities it shows aliases, metadata, organization linkage, and related entities
   5. Clicking a mention in the activity timeline expands the source evidence snippet showing source type, date, and confidence score
 **Pitfall Warnings**: Logic duplication (#4) -- entity endpoints must import from `src.entity.repository` and `src.entity.views`, no direct SQL. Concurrent reads (#1) -- connection-per-request pattern from Phase 24 handles this.
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 26-01-PLAN.md -- Entity API endpoints (list, scoped view, related entities) + related entities repository method
+- [ ] 26-02-PLAN.md -- Frontend data layer: entity TypeScript types, TanStack Query hooks, Zustand store additions
+- [ ] 26-03-PLAN.md -- Entity browser UI: tab switcher, grouped entity list, scoped view, evidence drill-down, sidebar adaptation
 
 ### Phase 27: Entity Management UI
 **Goal**: Users can manage the entity registry entirely from the browser -- create, edit, delete entities, review merge proposals, manage aliases, and navigate anywhere via keyboard
