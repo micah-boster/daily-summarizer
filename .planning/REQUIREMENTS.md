@@ -48,7 +48,7 @@
 
 ### Quality & Polish
 
-- [ ] **UX-01**: Dark mode with system preference detection and manual toggle
+- [x] **UX-01**: Dark mode with system preference detection and manual toggle
 - [ ] **UX-02**: Keyboard navigation across all three columns (j/k list traversal, h/l column focus, Enter/Esc)
 - [x] **UX-03**: Loading skeletons per panel, error boundaries per column, toast notifications for actions
 - [ ] **UX-04**: Design quality is demo-presentable -- consistent typography, spacing, and visual hierarchy
@@ -110,7 +110,7 @@
 | CFG-01 | Phase 29 | Pending |
 | CFG-02 | Phase 29 | Pending |
 | CFG-03 | Phase 29 | Pending |
-| UX-01 | Phase 29 | Pending |
+| UX-01 | Phase 29 | Complete |
 | UX-02 | Phase 29 | Pending |
 | UX-03 | Phase 27.1 | Complete |
 | UX-04 | Phase 29 | Pending |

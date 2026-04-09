@@ -612,7 +612,7 @@ Plans:
 
 Plans:
 - [ ] 29-01-PLAN.md — Config API endpoints + config panel UI with Pydantic validation and atomic writes
-- [ ] 29-02-PLAN.md — Dark mode integration with next-themes, brand color CSS variables, theme toggle
+- [x] 29-02-PLAN.md — Dark mode integration with next-themes, brand color CSS variables, theme toggle
 - [ ] 29-03-PLAN.md — Vim-style keyboard navigation across three columns with shortcut help overlay
 - [ ] 29-04-PLAN.md — Visual polish: markdown typography overhaul, layout spacing, demo-quality aesthetic
 
@@ -654,4 +654,4 @@ Phases 24-29 execute sequentially: 24 -> 25 -> 26 -> 27 -> 28 -> 29.
 | 26. Entity API + Entity Browser | 3/3 | Complete   | 2026-04-09 | - |
 | 27. Entity Management UI | 5/5 | Complete    | 2026-04-09 | - |
 | 28. Pipeline Run Management | 3/3 | Complete    | 2026-04-09 | - |
-| 29. Config Management + Polish | v3.0 | 0/TBD | Not started | - |
+| 29. Config Management + Polish | v3.0 | 2/4 | In progress | - |

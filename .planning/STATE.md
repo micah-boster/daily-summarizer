@@ -22,12 +22,12 @@ See: .planning/PROJECT.md (updated 2026-04-08)
 
 ## Current Position
 
-Phase: 28 (Pipeline Run Management) -- Plan 03 complete (3/3 plans done)
-Plan: Phase 28 complete
-Status: Phase complete
-Last activity: 2026-04-09 -- Run history UI with Runs tab, status badges, and error drill-down
+Phase: 29 (Config Management Polish) -- Plan 02 complete
+Plan: 02 of Phase 29
+Status: In progress
+Last activity: 2026-04-09 -- Dark mode with brand colors and three-state theme toggle
 
-Progress: [##############################] 54/54 plans complete (51 prior + 3 Phase 28) -- Phase 28 COMPLETE
+Progress: [##############################] 56/58 plans complete (54 prior + 2 Phase 29)
 
 ## Performance Metrics
 
@@ -44,6 +44,9 @@ Progress: [##############################] 54/54 plans complete (51 prior + 3 Ph
 
 ### Decisions
 
+- [Phase 29-02]: ThemeProvider wraps at top level with attribute='class' matching existing @custom-variant dark directive
+- [Phase 29-02]: Brand colors use oklch color space for perceptual uniformity across light/dark modes
+- [Phase 29-02]: Theme toggle cycles system->light->dark with mounted guard to prevent hydration mismatch
 - [v3.0 roadmap]: 6 phases (24-29) following read-first dependency chain: API -> Summary UI -> Entity reads -> Entity writes -> Pipeline -> Config+Polish
 - [v3.0 roadmap]: FastAPI as thin facade over existing src.* modules -- zero business logic in API layer
 - [v3.0 roadmap]: SQLite busy_timeout + connection-per-request as Phase 24 foundation (prevents locked DB under concurrent web requests)
@@ -86,5 +89,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-04-09
-Stopped at: Completed 28-03-PLAN.md (Run history view -- Phase 28 complete)
+Stopped at: Completed 29-02-PLAN.md (Dark mode and brand colors)
 Resume file: None
