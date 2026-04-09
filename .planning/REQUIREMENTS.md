@@ -13,14 +13,14 @@
 
 ### Summary Browsing
 
-- [ ] **SUM-01**: User can view daily summary (structured data + rendered markdown) for any available date
-- [ ] **SUM-02**: User can navigate between dates (prev/next, date picker) with graceful handling of missing dates
+- [x] **SUM-01**: User can view daily summary (structured data + rendered markdown) for any available date
+- [x] **SUM-02**: User can navigate between dates (prev/next, date picker) with graceful handling of missing dates
 - [ ] **SUM-03**: Summary index endpoint returns available dates so navigation skips gaps
-- [ ] **SUM-04**: Weekly and monthly roll-up summaries are browsable alongside daily summaries
+- [x] **SUM-04**: Weekly and monthly roll-up summaries are browsable alongside daily summaries
 
 ### Layout & Navigation
 
-- [ ] **NAV-01**: Three-column layout: entity nav (left), content panel (center), context sidebar (right)
+- [x] **NAV-01**: Three-column layout: entity nav (left), content panel (center), context sidebar (right)
 - [x] **NAV-02**: Left nav shows entities grouped by type (partners, people, initiatives) with activity indicators
 - [x] **NAV-03**: Selecting an entity in left nav opens its scoped view in center panel
 - [x] **NAV-04**: Context sidebar adapts to selection: related items, source evidence, timeline
@@ -50,7 +50,7 @@
 
 - [ ] **UX-01**: Dark mode with system preference detection and manual toggle
 - [ ] **UX-02**: Keyboard navigation across all three columns (j/k list traversal, h/l column focus, Enter/Esc)
-- [ ] **UX-03**: Loading skeletons per panel, error boundaries per column, toast notifications for actions
+- [x] **UX-03**: Loading skeletons per panel, error boundaries per column, toast notifications for actions
 - [ ] **UX-04**: Design quality is demo-presentable -- consistent typography, spacing, and visual hierarchy
 
 ## v4.0 Requirements (Deferred)
@@ -90,11 +90,11 @@
 | API-01 | Phase 24 | Pending |
 | API-02 | Phase 24 | Pending |
 | API-03 | Phase 24 | Pending |
-| SUM-01 | Phase 27.1 | Pending |
-| SUM-02 | Phase 27.1 | Pending |
+| SUM-01 | Phase 27.1 | Complete |
+| SUM-02 | Phase 27.1 | Complete |
 | SUM-03 | Phase 24 | Pending |
-| SUM-04 | Phase 27.1 | Pending |
-| NAV-01 | Phase 27.1 | Pending |
+| SUM-04 | Phase 27.1 | Complete |
+| NAV-01 | Phase 27.1 | Complete |
 | NAV-02 | Phase 26 | Complete |
 | NAV-03 | Phase 26 | Complete |
 | NAV-04 | Phase 26 | Complete |
@@ -112,7 +112,7 @@
 | CFG-03 | Phase 29 | Pending |
 | UX-01 | Phase 29 | Pending |
 | UX-02 | Phase 29 | Pending |
-| UX-03 | Phase 27.1 | Pending |
+| UX-03 | Phase 27.1 | Complete |
 | UX-04 | Phase 29 | Pending |
 
 **Coverage:**

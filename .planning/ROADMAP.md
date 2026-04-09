@@ -486,7 +486,7 @@ Plans:
 - [x] **Phase 25: Next.js Scaffold + Summary View** - Three-column layout shell, daily summary rendering, date navigation, roll-up browsing
 - [x] **Phase 26: Entity API + Entity Browser** - Entity list/scoped view endpoints, nav sidebar with activity indicators, context sidebar (completed 2026-04-09)
 - [x] **Phase 27: Entity Management UI** - Entity CRUD forms, merge proposal review, alias management, command palette (completed 2026-04-09)
-- [ ] **Phase 27.1: Verify Summary View + Fix Command Palette Date Nav** - Verify Phase 25 requirements (SUM-01/02/04, NAV-01, UX-03), fix Cmd+K date navigation
+- [x] **Phase 27.1: Verify Summary View + Fix Command Palette Date Nav** - Verify Phase 25 requirements (SUM-01/02/04, NAV-01, UX-03), fix Cmd+K date navigation (completed 2026-04-09)
 - [ ] **Phase 28: Pipeline Run Management** - Pipeline trigger endpoint, SSE status streaming, subprocess isolation, run history
 - [ ] **Phase 29: Config Management + Polish** - Config viewer/editor, dark mode, keyboard navigation, design polish
 
