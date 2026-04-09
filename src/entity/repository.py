@@ -350,6 +350,40 @@ class EntityRepository:
         ).fetchall()
         return [row["source_type"] for row in rows]
 
+    def get_related_entities(self, entity_id: str, limit: int = 10) -> list[dict]:
+        """Find entities that co-occur with the given entity.
+
+        Co-occurrence is defined as sharing the same (source_date, source_id)
+        in entity_mentions.  Includes mentions from merged entities (where
+        merge_target_id equals this entity).
+
+        Returns a list of dicts with keys: entity_id, name, entity_type,
+        co_mention_count.  Sorted by co_mention_count descending.
+        """
+        rows = self._conn.execute(
+            """
+            SELECT e.id AS entity_id, e.name, e.entity_type,
+                   COUNT(*) AS co_mention_count
+            FROM entity_mentions em1
+            JOIN entity_mentions em2
+                ON em1.source_date = em2.source_date
+               AND em1.source_id = em2.source_id
+               AND em1.entity_id != em2.entity_id
+            JOIN entities e
+                ON em2.entity_id = e.id
+               AND e.deleted_at IS NULL
+            WHERE (em1.entity_id = ?
+                   OR em1.entity_id IN (
+                       SELECT id FROM entities WHERE merge_target_id = ?
+                   ))
+            GROUP BY e.id, e.name, e.entity_type
+            ORDER BY co_mention_count DESC
+            LIMIT ?
+            """,
+            (entity_id, entity_id, limit),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     # ------------------------------------------------------------------
     # Merge proposal management
     # ------------------------------------------------------------------

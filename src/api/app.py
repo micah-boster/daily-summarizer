@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.api.routers.entities import router as entities_router
 from src.api.routers.summaries import router as summaries_router
 
 
@@ -26,6 +27,7 @@ def create_app() -> FastAPI:
     )
 
     application.include_router(summaries_router, prefix="/api/v1")
+    application.include_router(entities_router, prefix="/api/v1")
 
     return application
 

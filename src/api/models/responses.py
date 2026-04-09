@@ -76,3 +76,58 @@ class MonthlyResponse(BaseModel):
     year: int
     markdown: str
     sidecar: dict | None = None
+
+
+# --- Entity models ---
+
+
+class EntityListItem(BaseModel):
+    """A single entity in the entity list endpoint."""
+
+    entity_id: str
+    name: str
+    entity_type: str
+    mention_count: int = 0
+    commitment_count: int = 0
+    last_active_date: str | None = None
+
+
+class ActivityItemResponse(BaseModel):
+    """A single activity mention for an entity."""
+
+    source_type: str
+    source_date: str
+    context_snippet: str | None = None
+    confidence: float = 1.0
+    significance_score: float = 0.0
+
+
+class ActivityDayResponse(BaseModel):
+    """Activity items grouped by date."""
+
+    date: str
+    items: list[ActivityItemResponse] = []
+
+
+class EntityScopedViewResponse(BaseModel):
+    """Complete scoped view of an entity's activity."""
+
+    entity_name: str
+    entity_type: str
+    entity_id: str
+    from_date: str | None = None
+    to_date: str | None = None
+    total_mentions: int = 0
+    aliases: list[str] = []
+    open_commitments: list[ActivityItemResponse] = []
+    highlights: list[ActivityItemResponse] = []
+    activity_by_date: list[ActivityDayResponse] = []
+
+
+class RelatedEntityItem(BaseModel):
+    """A related entity with co-mention count."""
+
+    entity_id: str
+    name: str
+    entity_type: str
+    co_mention_count: int = 0
