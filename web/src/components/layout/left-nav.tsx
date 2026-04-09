@@ -1,11 +1,12 @@
 "use client";
 
-import { Calendar, CalendarRange, CalendarDays, ChevronLeft } from "lucide-react";
+import { Calendar, CalendarRange, CalendarDays, ChevronLeft, GitMerge } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NavHeader } from "@/components/nav/nav-header";
 import { NavTabSwitcher } from "@/components/nav/nav-tab-switcher";
 import { EntityFilterBar } from "@/components/nav/entity-filter-bar";
 import { EntityList } from "@/components/nav/entity-list";
+import { MergeReviewButton } from "@/components/merge/merge-review-button";
 import { DateGroup } from "@/components/nav/date-group";
 import {
   DateListItem,
@@ -158,6 +159,7 @@ export function LeftNav({
       {activeTab === "entities" && (
         <>
           <EntityFilterBar />
+          <MergeReviewButton />
           <div className="flex-1 overflow-y-auto py-2">
             <EntityList />
           </div>

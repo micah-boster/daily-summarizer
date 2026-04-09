@@ -22,6 +22,9 @@ interface UIState {
   deleteDialogOpen: boolean;
   deleteDialogEntityId: string | null;
 
+  // Merge review state
+  showMergeReview: boolean;
+
   toggleLeftNav: () => void;
   toggleRightSidebar: () => void;
   toggleSection: (id: string) => void;
@@ -40,6 +43,9 @@ interface UIState {
   // Entity delete dialog actions
   openDeleteDialog: (entityId: string) => void;
   closeDeleteDialog: () => void;
+
+  // Merge review actions
+  setShowMergeReview: (show: boolean) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -71,6 +77,9 @@ export const useUIStore = create<UIState>()(
       // Entity delete dialog defaults
       deleteDialogOpen: false,
       deleteDialogEntityId: null,
+
+      // Merge review defaults
+      showMergeReview: false,
 
       toggleLeftNav: () =>
         set((s) => ({ leftNavCollapsed: !s.leftNavCollapsed })),
@@ -127,6 +136,13 @@ export const useUIStore = create<UIState>()(
         set({
           deleteDialogOpen: false,
           deleteDialogEntityId: null,
+        }),
+
+      // Merge review actions
+      setShowMergeReview: (show) =>
+        set({
+          showMergeReview: show,
+          ...(show ? { selectedEntityId: null } : {}),
         }),
     }),
     {

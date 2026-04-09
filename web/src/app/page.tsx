@@ -9,6 +9,7 @@ import { SummaryView } from "@/components/summary/summary-view";
 import { MarkdownRenderer } from "@/components/summary/markdown-renderer";
 import { EmptyState } from "@/components/summary/empty-state";
 import { EntityScopedView } from "@/components/entity/entity-scoped-view";
+import { MergeReviewPanel } from "@/components/merge/merge-review-panel";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUIStore } from "@/stores/ui-store";
@@ -29,6 +30,7 @@ export default function Home() {
 
   const activeTab = useUIStore((s) => s.activeTab);
   const selectedEntityId = useUIStore((s) => s.selectedEntityId);
+  const showMergeReview = useUIStore((s) => s.showMergeReview);
   const setActiveTab = useUIStore((s) => s.setActiveTab);
 
   const { data: summaryList } = useSummaryList();
@@ -90,7 +92,8 @@ export default function Home() {
   };
 
   // Determine center panel content
-  const showEntityView = activeTab === "entities" && selectedEntityId;
+  const showMergePanel = activeTab === "entities" && showMergeReview;
+  const showEntityView = activeTab === "entities" && selectedEntityId && !showMergeReview;
 
   return (
     <AppShell
@@ -134,7 +137,9 @@ export default function Home() {
       }
     >
       <ErrorBoundary>
-        {showEntityView ? (
+        {showMergePanel ? (
+          <MergeReviewPanel />
+        ) : showEntityView ? (
           <EntityScopedView
             entityId={selectedEntityId}
             onViewInSummary={handleViewInSummary}
