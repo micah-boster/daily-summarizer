@@ -142,7 +142,7 @@ def _ingest_notion(ctx: PipelineContext) -> list[SourceItem]:
 # ---------------------------------------------------------------------------
 
 
-def run_pipeline(ctx: PipelineContext) -> None:
+def run_pipeline(ctx: PipelineContext, progress_reporter=None) -> None:
     """Orchestrate a single day's pipeline: ingest -> synthesize -> output.
 
     Delegates to the async pipeline orchestrator which runs all ingest sources
@@ -150,6 +150,7 @@ def run_pipeline(ctx: PipelineContext) -> None:
 
     Args:
         ctx: PipelineContext with config, dates, services, and shared client.
+        progress_reporter: Optional ProgressReporter for JSON progress output.
     """
     # Cache retention: cleanup old raw data (quick sync operation)
     try:
@@ -166,4 +167,4 @@ def run_pipeline(ctx: PipelineContext) -> None:
     # Run the async pipeline (parallel ingest -> sequential synthesis -> output)
     from src.pipeline_async import async_pipeline
 
-    asyncio.run(async_pipeline(ctx))
+    asyncio.run(async_pipeline(ctx, progress_reporter=progress_reporter))

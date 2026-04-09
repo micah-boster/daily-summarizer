@@ -136,6 +136,18 @@ def parse_args() -> argparse.Namespace:
         default="config/config.yaml",
         help="Path to config YAML file.",
     )
+    parser.add_argument(
+        "--json-progress",
+        action="store_true",
+        default=False,
+        help="Emit JSON progress lines to stdout (for subprocess monitoring).",
+    )
+    parser.add_argument(
+        "--run-id",
+        type=str,
+        default=None,
+        help="Pipeline run ID (used with --json-progress).",
+    )
 
     return parser.parse_args()
 
@@ -149,6 +161,29 @@ def run_daily(args: argparse.Namespace) -> None:
     import anthropic
 
     from src.pipeline import PipelineContext, run_pipeline
+
+    # When --json-progress is set, redirect logging to stderr so stdout
+    # is clean JSON lines for the parent process to parse.
+    json_progress = getattr(args, "json_progress", False)
+    run_id = getattr(args, "run_id", None)
+    progress_reporter = None
+
+    if json_progress:
+        import uuid
+
+        from src.pipeline_progress import ProgressReporter
+
+        if run_id is None:
+            run_id = str(uuid.uuid4())
+
+        # Redirect all logging to stderr so stdout is clean JSON
+        for handler in logging.root.handlers[:]:
+            logging.root.removeHandler(handler)
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(levelname)s %(message)s",
+            stream=__import__("sys").stderr,
+        )
 
     config = load_config(Path(args.config))
 
@@ -199,6 +234,15 @@ def run_daily(args: argparse.Namespace) -> None:
 
     current = from_date
     while current <= to_date:
+        # Create progress reporter per day when --json-progress is set
+        if json_progress:
+            from src.pipeline_progress import ProgressReporter
+
+            progress_reporter = ProgressReporter(
+                run_id=run_id,
+                target_date=current.isoformat(),
+            )
+
         ctx = PipelineContext(
             config=config,
             target_date=current,
@@ -211,9 +255,11 @@ def run_daily(args: argparse.Namespace) -> None:
             user_email=user_email,
         )
         try:
-            run_pipeline(ctx)
+            run_pipeline(ctx, progress_reporter=progress_reporter)
         except Exception as e:
             logger.error("Failed to process %s: %s", current, e)
+            if progress_reporter:
+                progress_reporter.run_failed(str(e))
 
         current += timedelta(days=1)
 

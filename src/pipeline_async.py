@@ -317,18 +317,26 @@ async def async_ingest_all(
     )
 
 
-async def async_pipeline(ctx: PipelineContext) -> None:
+async def async_pipeline(ctx: PipelineContext, progress_reporter=None) -> None:
     """Async entry point: parallel ingest then sequential synthesis and output.
 
     Called from run_pipeline() via asyncio.run(). Runs all ingest sources
     concurrently, then proceeds with dedup, synthesis, and output writing
     sequentially (those depend on accumulated ingest results).
+
+    Args:
+        ctx: PipelineContext with config, dates, services, and shared client.
+        progress_reporter: Optional ProgressReporter for JSON progress output.
     """
     current = ctx.target_date
     pipeline_start = time.perf_counter()
+    _current_stage: str | None = None
 
     # Phase 1: Parallel ingest
     ingest_start = time.perf_counter()
+    if progress_reporter:
+        _current_stage = "ingest"
+        progress_reporter.stage_start("ingest")
     (
         slack_items,
         hubspot_items,
@@ -341,6 +349,8 @@ async def async_pipeline(ctx: PipelineContext) -> None:
     ) = await async_ingest_all(ctx)
     ingest_elapsed = time.perf_counter() - ingest_start
     logger.info("Parallel ingest completed in %.1fs", ingest_elapsed)
+    if progress_reporter:
+        progress_reporter.stage_complete("ingest")
 
     # Cross-source dedup pre-filter
     all_source_items = (
@@ -374,6 +384,10 @@ async def async_pipeline(ctx: PipelineContext) -> None:
             )
 
     # Phase 2: Synthesis
+    if progress_reporter:
+        _current_stage = "synthesis"
+        progress_reporter.stage_start("synthesis")
+
     synthesis_result: dict = {
         "substance": [],
         "decisions": [],
@@ -504,7 +518,29 @@ async def async_pipeline(ctx: PipelineContext) -> None:
             e,
         )
 
-    # Phase 3: Output
+    if progress_reporter:
+        progress_reporter.stage_complete("synthesis")
+
+    # Phase 3: Entity processing
+    if progress_reporter:
+        _current_stage = "entity_processing"
+        progress_reporter.stage_start("entity_processing")
+
+    # Entity discovery (post-synthesis, optional) -- must run BEFORE attribution
+    # so first-mention entities are in the registry when attribution looks them up
+    _discover_and_register_entities(synthesis_result, current, ctx.config)
+
+    # Entity attribution (post-synthesis, optional)
+    attribution_result = _attribute_entities(synthesis_result, current, ctx.config)
+
+    if progress_reporter:
+        progress_reporter.stage_complete("entity_processing")
+
+    # Phase 4: Output
+    if progress_reporter:
+        _current_stage = "output"
+        progress_reporter.stage_start("output")
+
     # Quality tracking: detect edits
     try:
         edit_result = detect_edits(current, ctx.output_dir)
@@ -548,13 +584,6 @@ async def async_pipeline(ctx: PipelineContext) -> None:
     except Exception as e:
         logger.warning("Quality tracking (save) failed: %s", e)
 
-    # Entity discovery (post-synthesis, optional) — must run BEFORE attribution
-    # so first-mention entities are in the registry when attribution looks them up
-    _discover_and_register_entities(synthesis_result, current, ctx.config)
-
-    # Entity attribution (post-synthesis, optional)
-    attribution_result = _attribute_entities(synthesis_result, current, ctx.config)
-
     # JSON sidecar
     try:
         sidecar_path = write_daily_sidecar(
@@ -574,6 +603,10 @@ async def async_pipeline(ctx: PipelineContext) -> None:
         send_slack_summary(summary_content, current)
     except Exception as e:
         logger.warning("Slack notification failed: %s", e)
+
+    if progress_reporter:
+        progress_reporter.stage_complete("output")
+        progress_reporter.run_complete()
 
     pipeline_elapsed = time.perf_counter() - pipeline_start
     logger.info("Total pipeline completed in %.1fs", pipeline_elapsed)
