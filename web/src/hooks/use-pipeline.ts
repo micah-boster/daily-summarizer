@@ -161,7 +161,8 @@ export function useRunHistory() {
     queryFn: async () => {
       const res = await fetch(`${API_BASE}/runs?limit=14`);
       if (!res.ok) throw new Error(`API error: ${res.status}`);
-      return res.json() as Promise<RunResponse[]>;
+      const payload = await res.json() as { runs: RunResponse[]; total: number };
+      return payload.runs;
     },
     refetchInterval: 30_000,
   });
