@@ -162,3 +162,37 @@ export interface RelatedEntityItem {
   entity_type: string;
   co_mention_count: number;
 }
+
+// --- Entity write types ---
+
+export interface CreateEntityPayload {
+  name: string;
+  entity_type: string;
+}
+
+export interface UpdateEntityPayload {
+  name?: string;
+  entity_type?: string;
+}
+
+export interface EntityResponse {
+  entity_id: string;
+  name: string;
+  entity_type: string;
+}
+
+export interface AliasResponse {
+  alias_id: string;
+  entity_id: string;
+  alias: string;
+}
+
+export interface MergeProposalResponse {
+  proposal_id: string;
+  source_entity: EntityListItem;
+  target_entity: EntityListItem;
+  score: number;
+  reason: string | null;
+  status: string;
+  created_at: string;
+}
