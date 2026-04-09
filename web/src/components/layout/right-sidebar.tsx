@@ -12,7 +12,7 @@ interface RightSidebarProps {
   summary?: SummaryResponse | null;
   isLoading?: boolean;
   children?: ReactNode;
-  activeTab?: "summaries" | "entities";
+  activeTab?: "summaries" | "entities" | "runs";
   entityId?: string | null;
 }
 

@@ -8,7 +8,7 @@ interface UIState {
   expandedNavGroups: Record<string, boolean>;
 
   // Entity navigation state
-  activeTab: "summaries" | "entities";
+  activeTab: "summaries" | "entities" | "runs";
   selectedEntityId: string | null;
   entityTypeFilter: string | null;
   entitySort: "activity" | "name";
@@ -40,7 +40,7 @@ interface UIState {
   toggleNavGroup: (id: string) => void;
 
   // Entity navigation actions
-  setActiveTab: (tab: "summaries" | "entities") => void;
+  setActiveTab: (tab: "summaries" | "entities" | "runs") => void;
   selectEntity: (id: string | null) => void;
   setEntityTypeFilter: (type: string | null) => void;
   setEntitySort: (sort: "activity" | "name") => void;

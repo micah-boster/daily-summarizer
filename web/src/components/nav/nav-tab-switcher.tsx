@@ -6,6 +6,7 @@ import { useUIStore } from "@/stores/ui-store";
 const tabs = [
   { key: "summaries" as const, label: "Summaries" },
   { key: "entities" as const, label: "Entities" },
+  { key: "runs" as const, label: "Runs" },
 ];
 
 export function NavTabSwitcher() {

@@ -7,6 +7,7 @@ import { NavTabSwitcher } from "@/components/nav/nav-tab-switcher";
 import { EntityFilterBar } from "@/components/nav/entity-filter-bar";
 import { EntityList } from "@/components/nav/entity-list";
 import { MergeReviewButton } from "@/components/merge/merge-review-button";
+import { RunHistory } from "@/components/pipeline/run-history";
 import { DateGroup } from "@/components/nav/date-group";
 import {
   DateListItem,
@@ -164,6 +165,13 @@ export function LeftNav({
             <EntityList />
           </div>
         </>
+      )}
+
+      {/* Runs content */}
+      {activeTab === "runs" && (
+        <div className="flex-1 overflow-y-auto py-2">
+          <RunHistory />
+        </div>
       )}
     </div>
   );
