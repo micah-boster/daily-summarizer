@@ -21,18 +21,18 @@
 ### Layout & Navigation
 
 - [ ] **NAV-01**: Three-column layout: entity nav (left), content panel (center), context sidebar (right)
-- [ ] **NAV-02**: Left nav shows entities grouped by type (partners, people, initiatives) with activity indicators
-- [ ] **NAV-03**: Selecting an entity in left nav opens its scoped view in center panel
-- [ ] **NAV-04**: Context sidebar adapts to selection: related items, source evidence, timeline
+- [x] **NAV-02**: Left nav shows entities grouped by type (partners, people, initiatives) with activity indicators
+- [x] **NAV-03**: Selecting an entity in left nav opens its scoped view in center panel
+- [x] **NAV-04**: Context sidebar adapts to selection: related items, source evidence, timeline
 - [ ] **NAV-05**: Command palette (Cmd+K) for keyboard-first entity search, date jump, and action triggers
 
 ### Entity Management
 
-- [ ] **ENT-01**: User can browse entity list with filtering by type and sorting by activity/name
-- [ ] **ENT-02**: Entity scoped view shows highlights, open commitments, activity timeline with significance scoring
+- [x] **ENT-01**: User can browse entity list with filtering by type and sorting by activity/name
+- [x] **ENT-02**: Entity scoped view shows highlights, open commitments, activity timeline with significance scoring
 - [ ] **ENT-03**: User can create, edit, and delete entities and their aliases from the browser
 - [ ] **ENT-04**: Merge proposal review UI with side-by-side comparison, similarity score, approve/reject
-- [ ] **ENT-05**: Source evidence drill-down -- click a mention to see original context snippet with source type and confidence
+- [x] **ENT-05**: Source evidence drill-down -- click a mention to see original context snippet with source type and confidence
 
 ### Pipeline Operations
 
@@ -95,15 +95,15 @@
 | SUM-03 | Phase 24 | Pending |
 | SUM-04 | Phase 25 | Pending |
 | NAV-01 | Phase 25 | Pending |
-| NAV-02 | Phase 26 | Pending |
-| NAV-03 | Phase 26 | Pending |
-| NAV-04 | Phase 26 | Pending |
+| NAV-02 | Phase 26 | Complete |
+| NAV-03 | Phase 26 | Complete |
+| NAV-04 | Phase 26 | Complete |
 | NAV-05 | Phase 27 | Pending |
-| ENT-01 | Phase 26 | Pending |
-| ENT-02 | Phase 26 | Pending |
+| ENT-01 | Phase 26 | Complete |
+| ENT-02 | Phase 26 | Complete |
 | ENT-03 | Phase 27 | Pending |
 | ENT-04 | Phase 27 | Pending |
-| ENT-05 | Phase 26 | Pending |
+| ENT-05 | Phase 26 | Complete |
 | PIPE-01 | Phase 28 | Pending |
 | PIPE-02 | Phase 28 | Pending |
 | PIPE-03 | Phase 28 | Pending |

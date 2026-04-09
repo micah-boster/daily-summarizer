@@ -22,12 +22,12 @@ See: .planning/PROJECT.md (updated 2026-04-08)
 
 ## Current Position
 
-Phase: 24 (FastAPI Skeleton + Summary API) -- first of 6 v3.0 phases (24-29)
-Plan: --
-Status: Ready to plan
-Last activity: 2026-04-08 -- v3.0 roadmap created (6 phases, 27 requirements mapped)
+Phase: 26 (Entity API + Entity Browser) -- Plan 03 complete (3/3 plans done)
+Plan: 03 complete
+Status: Phase 26 complete
+Last activity: 2026-04-08 -- Entity browser UI complete (tab switcher, scoped view, evidence drill-down)
 
-Progress: [####################..........] 41/41 prior plans complete, 0/6 v3.0 phases started
+Progress: [####################..........] 44/44 plans complete (41 prior + 3 Phase 26)
 
 ## Performance Metrics
 
@@ -50,6 +50,9 @@ Progress: [####################..........] 41/41 prior plans complete, 0/6 v3.0 
 - [v3.0 roadmap]: Pipeline runs via subprocess isolation (never in-process) -- Phase 28
 - [v3.0 roadmap]: Client components for all interactive panels; RSC only for layout shell
 - [v3.0 stack]: FastAPI 0.135+ / Next.js 15 / shadcn-ui / TanStack Query / Zustand / raw sqlite3 (no ORM)
+- [Phase 26-03]: Reused DateGroup collapsible pattern for entity type grouping
+- [Phase 26-03]: Local React state for timeline expand/collapse, global store for tab/filter/sort
+- [Phase 26-03]: Significance thresholds: High >= 3.0, Medium >= 1.5; Confidence: green > 80%, yellow 50-80%, red < 50%
 
 ### Pending Todos
 
@@ -64,5 +67,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-04-08
-Stopped at: v3.0 roadmap created, ready to plan Phase 24
+Stopped at: Completed 26-03-PLAN.md (entity browser UI)
 Resume file: None
