@@ -6,7 +6,7 @@
 - ✅ **v1.5 Expanded Ingest** - Phases 6-12 (shipped 2026-04-05)
 - ✅ **v1.5.1 Notion + Performance + Reliability** - Phases 13-18.1 (shipped 2026-04-05)
 - ✅ **v2.0 Entity Layer** - Phases 19-23.1 (shipped 2026-04-08)
-- [ ] **v3.0 Web Interface** - Phases 24-29
+- [ ] **v3.0 Web Interface** - Phases 24-29 (includes 27.1 gap closure)
 
 ## Phases
 
@@ -486,6 +486,7 @@ Plans:
 - [x] **Phase 25: Next.js Scaffold + Summary View** - Three-column layout shell, daily summary rendering, date navigation, roll-up browsing
 - [x] **Phase 26: Entity API + Entity Browser** - Entity list/scoped view endpoints, nav sidebar with activity indicators, context sidebar (completed 2026-04-09)
 - [x] **Phase 27: Entity Management UI** - Entity CRUD forms, merge proposal review, alias management, command palette (completed 2026-04-09)
+- [ ] **Phase 27.1: Verify Summary View + Fix Command Palette Date Nav** - Verify Phase 25 requirements (SUM-01/02/04, NAV-01, UX-03), fix Cmd+K date navigation
 - [ ] **Phase 28: Pipeline Run Management** - Pipeline trigger endpoint, SSE status streaming, subprocess isolation, run history
 - [ ] **Phase 29: Config Management + Polish** - Config viewer/editor, dark mode, keyboard navigation, design polish
 
@@ -562,6 +563,20 @@ Plans:
 - [x] 27-03-PLAN.md — Merge proposal review UI (side-by-side comparison, approve/reject queue)
 - [x] 27-04-PLAN.md — Command palette (Cmd+K) with entity/date/action search and keyboard navigation
 - [ ] 27-05-PLAN.md — Gap closure: mount orphaned EntityFormPanel and EntityDeleteDialog in app tree
+
+### Phase 27.1: Verify Summary View + Fix Command Palette Date Nav
+**Goal**: Close all milestone audit gaps -- verify Phase 25 requirements that were never formally checked, and fix the broken command palette date navigation so Cmd+K date selection actually navigates the center panel
+**Depends on**: Phase 27
+**Requirements**: SUM-01, SUM-02, SUM-04, NAV-01, NAV-05, UX-03
+**Gap Closure**: Closes gaps from v1.0 milestone audit
+**Success Criteria** (what must be TRUE):
+  1. Daily summary view renders structured data + markdown for any available date (SUM-01)
+  2. Date navigation (prev/next, picker) works with graceful handling of missing dates (SUM-02)
+  3. Weekly and monthly roll-up summaries are browsable alongside daily summaries (SUM-04)
+  4. Three-column layout renders with left nav, center content, and right sidebar (NAV-01)
+  5. Selecting a date in the command palette (Cmd+K) navigates the center panel to that date's summary (NAV-05 fix)
+  6. Loading skeletons show per panel, error boundaries prevent cascade, toast notifications work for actions (UX-03)
+**Plans**: TBD
 
 ### Phase 28: Pipeline Run Management
 **Goal**: Users can trigger and monitor pipeline runs from the browser -- fire-and-forget with real-time status updates, never blocking the API server

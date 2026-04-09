@@ -24,7 +24,7 @@
 - [x] **NAV-02**: Left nav shows entities grouped by type (partners, people, initiatives) with activity indicators
 - [x] **NAV-03**: Selecting an entity in left nav opens its scoped view in center panel
 - [x] **NAV-04**: Context sidebar adapts to selection: related items, source evidence, timeline
-- [x] **NAV-05**: Command palette (Cmd+K) for keyboard-first entity search, date jump, and action triggers
+- [ ] **NAV-05**: Command palette (Cmd+K) for keyboard-first entity search, date jump, and action triggers
 
 ### Entity Management
 
@@ -90,15 +90,15 @@
 | API-01 | Phase 24 | Pending |
 | API-02 | Phase 24 | Pending |
 | API-03 | Phase 24 | Pending |
-| SUM-01 | Phase 25 | Pending |
-| SUM-02 | Phase 25 | Pending |
+| SUM-01 | Phase 27.1 | Pending |
+| SUM-02 | Phase 27.1 | Pending |
 | SUM-03 | Phase 24 | Pending |
-| SUM-04 | Phase 25 | Pending |
-| NAV-01 | Phase 25 | Pending |
+| SUM-04 | Phase 27.1 | Pending |
+| NAV-01 | Phase 27.1 | Pending |
 | NAV-02 | Phase 26 | Complete |
 | NAV-03 | Phase 26 | Complete |
 | NAV-04 | Phase 26 | Complete |
-| NAV-05 | Phase 27 | Complete |
+| NAV-05 | Phase 27.1 | Pending |
 | ENT-01 | Phase 26 | Complete |
 | ENT-02 | Phase 26 | Complete |
 | ENT-03 | Phase 27 | Complete |
@@ -112,7 +112,7 @@
 | CFG-03 | Phase 29 | Pending |
 | UX-01 | Phase 29 | Pending |
 | UX-02 | Phase 29 | Pending |
-| UX-03 | Phase 25 | Pending |
+| UX-03 | Phase 27.1 | Pending |
 | UX-04 | Phase 29 | Pending |
 
 **Coverage:**
