@@ -576,7 +576,11 @@ Plans:
   4. Three-column layout renders with left nav, center content, and right sidebar (NAV-01)
   5. Selecting a date in the command palette (Cmd+K) navigates the center panel to that date's summary (NAV-05 fix)
   6. Loading skeletons show per panel, error boundaries prevent cascade, toast notifications work for actions (UX-03)
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 27.1-01-PLAN.md -- Fix NAV-05: lift selectedDate to Zustand store, wire command palette handleSelectDate to page.tsx
+- [ ] 27.1-02-PLAN.md -- Verify all 6 requirements (SUM-01, SUM-02, SUM-04, NAV-01, NAV-05, UX-03) and produce VERIFICATION.md
 
 ### Phase 28: Pipeline Run Management
 **Goal**: Users can trigger and monitor pipeline runs from the browser -- fire-and-forget with real-time status updates, never blocking the API server
