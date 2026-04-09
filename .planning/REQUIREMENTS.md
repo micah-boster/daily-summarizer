@@ -24,7 +24,7 @@
 - [x] **NAV-02**: Left nav shows entities grouped by type (partners, people, initiatives) with activity indicators
 - [x] **NAV-03**: Selecting an entity in left nav opens its scoped view in center panel
 - [x] **NAV-04**: Context sidebar adapts to selection: related items, source evidence, timeline
-- [ ] **NAV-05**: Command palette (Cmd+K) for keyboard-first entity search, date jump, and action triggers
+- [x] **NAV-05**: Command palette (Cmd+K) for keyboard-first entity search, date jump, and action triggers
 
 ### Entity Management
 
@@ -98,7 +98,7 @@
 | NAV-02 | Phase 26 | Complete |
 | NAV-03 | Phase 26 | Complete |
 | NAV-04 | Phase 26 | Complete |
-| NAV-05 | Phase 27.1 | Pending |
+| NAV-05 | Phase 27.1 | Complete |
 | ENT-01 | Phase 26 | Complete |
 | ENT-02 | Phase 26 | Complete |
 | ENT-03 | Phase 27 | Complete |

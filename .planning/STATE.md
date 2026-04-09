@@ -22,12 +22,12 @@ See: .planning/PROJECT.md (updated 2026-04-08)
 
 ## Current Position
 
-Phase: 27 (Entity Management UI) -- Plan 05 complete (5/5 plans done)
-Plan: 05 complete
+Phase: 27.1 (Verify Summary View, Fix Cmd+K Date Nav) -- Plan 01 complete (1/1 plans done)
+Plan: 01 complete
 Status: Phase complete
-Last activity: 2026-04-09 -- Mount EntityFormPanel and EntityDeleteDialog in providers.tsx
+Last activity: 2026-04-09 -- Fix Cmd+K date navigation via Zustand shared state
 
-Progress: [##############################] 49/49 plans complete (44 prior + 5 Phase 27)
+Progress: [##############################] 50/50 plans complete (49 prior + 1 Phase 27.1)
 
 ## Performance Metrics
 
@@ -61,6 +61,7 @@ Progress: [##############################] 49/49 plans complete (44 prior + 5 Ph
 - [Phase 27-02]: Modal state managed via Zustand slices (open/close + entityId tracking)
 - [Phase 27-04]: Command palette mounted in Providers client component for Zustand/TanStack access
 - [Phase 27-04]: Inline natural date parsing (no external library) for command palette date shortcuts
+- [Phase 27.1-01]: Lifted selectedDate/selectedViewType to Zustand store for command palette -> page.tsx bridge (NAV-05 fix)
 
 ### Pending Todos
 
@@ -75,5 +76,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-04-09
-Stopped at: Completed 27-05-PLAN.md (Gap closure - mount entity overlays) -- Phase 27 complete
+Stopped at: Completed 27.1-01-PLAN.md (Fix Cmd+K date navigation) -- Phase 27.1 complete
 Resume file: None
