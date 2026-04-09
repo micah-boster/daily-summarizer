@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 import { useUIStore } from "@/stores/ui-store";
+import { useKeyboardNav } from "@/hooks/use-keyboard-nav";
+import { cn } from "@/lib/utils";
 
 interface AppShellProps {
   leftNav: ReactNode;
@@ -12,8 +14,12 @@ interface AppShellProps {
 export function AppShell({ leftNav, children, rightSidebar }: AppShellProps) {
   const leftCollapsed = useUIStore((s) => s.leftNavCollapsed);
   const rightCollapsed = useUIStore((s) => s.rightSidebarCollapsed);
+  const focusedColumn = useUIStore((s) => s.focusedColumn);
 
   const bothCollapsed = leftCollapsed && rightCollapsed;
+
+  // Mount global keyboard navigation
+  useKeyboardNav();
 
   return (
     <div
@@ -23,21 +29,44 @@ export function AppShell({ leftNav, children, rightSidebar }: AppShellProps) {
       }}
     >
       {/* Left sidebar / rail */}
-      <div className="overflow-hidden">{leftNav}</div>
+      <div
+        data-kb-column="left"
+        className={cn(
+          "overflow-hidden border-r border-border transition-colors",
+          focusedColumn === "left" && "border-r-primary/20",
+        )}
+      >
+        {leftNav}
+      </div>
 
       {/* Center content */}
-      <div className="overflow-y-auto">
+      <div
+        data-kb-column="center"
+        className={cn(
+          "overflow-y-auto transition-colors",
+          focusedColumn === "center" && "border-x border-primary/20",
+        )}
+      >
         <div
-          className={
-            bothCollapsed ? "mx-auto max-w-[900px]" : "h-full w-full"
-          }
+          className={cn(
+            "px-6 py-4",
+            bothCollapsed ? "mx-auto max-w-[900px]" : "h-full w-full",
+          )}
         >
           {children}
         </div>
       </div>
 
       {/* Right sidebar / rail */}
-      <div className="overflow-hidden">{rightSidebar}</div>
+      <div
+        data-kb-column="right"
+        className={cn(
+          "overflow-hidden border-l border-border transition-colors",
+          focusedColumn === "right" && "border-l-primary/20",
+        )}
+      >
+        {rightSidebar}
+      </div>
     </div>
   );
 }

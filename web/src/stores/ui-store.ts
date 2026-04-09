@@ -32,6 +32,11 @@ interface UIState {
   // Config panel state
   configPanelOpen: boolean;
 
+  // Keyboard navigation state (ephemeral, resets per session)
+  focusedColumn: "left" | "center" | "right";
+  focusedIndex: number;
+  shortcutHelpOpen: boolean;
+
   // Command palette state
   commandPaletteOpen: boolean;
   recentEntities: string[];
@@ -66,6 +71,11 @@ interface UIState {
   // Config panel actions
   toggleConfigPanel: () => void;
   setConfigPanelOpen: (open: boolean) => void;
+
+  // Keyboard navigation actions
+  setFocusedColumn: (col: "left" | "center" | "right") => void;
+  setFocusedIndex: (idx: number) => void;
+  toggleShortcutHelp: () => void;
 
   // Command palette actions
   toggleCommandPalette: () => void;
@@ -113,6 +123,11 @@ export const useUIStore = create<UIState>()(
 
       // Config panel defaults
       configPanelOpen: false,
+
+      // Keyboard navigation defaults (ephemeral)
+      focusedColumn: "center",
+      focusedIndex: -1,
+      shortcutHelpOpen: false,
 
       // Command palette defaults
       commandPaletteOpen: false,
@@ -198,6 +213,12 @@ export const useUIStore = create<UIState>()(
         set((s) => ({ configPanelOpen: !s.configPanelOpen })),
 
       setConfigPanelOpen: (open) => set({ configPanelOpen: open }),
+
+      // Keyboard navigation actions
+      setFocusedColumn: (col) => set({ focusedColumn: col }),
+      setFocusedIndex: (idx) => set({ focusedIndex: idx }),
+      toggleShortcutHelp: () =>
+        set((s) => ({ shortcutHelpOpen: !s.shortcutHelpOpen })),
 
       // Command palette actions
       toggleCommandPalette: () =>

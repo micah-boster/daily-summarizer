@@ -7,6 +7,7 @@ import { CommandPalette } from "@/components/command/command-palette";
 import { ConfigPanel } from "@/components/config/config-panel";
 import { EntityFormPanel } from "@/components/entity/entity-form-panel";
 import { EntityDeleteDialog } from "@/components/entity/entity-delete-dialog";
+import { ShortcutHelp } from "@/components/keyboard/shortcut-help";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -35,6 +36,7 @@ export function Providers({ children }: { children: ReactNode }) {
         <ConfigPanel />
         <EntityFormPanel />
         <EntityDeleteDialog />
+        <ShortcutHelp />
       </QueryClientProvider>
     </ThemeProvider>
   );
