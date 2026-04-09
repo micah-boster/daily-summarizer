@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.api.routers.config import router as config_router
 from src.api.routers.entities import router as entities_router
 from src.api.routers.merge_proposals import router as merge_proposals_router
 from src.api.routers.pipeline import router as pipeline_router
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
     application.include_router(entities_router, prefix="/api/v1")
     application.include_router(merge_proposals_router, prefix="/api/v1")
     application.include_router(pipeline_router, prefix="/api/v1")
+    application.include_router(config_router, prefix="/api/v1")
 
     @application.on_event("startup")
     async def _startup_cleanup() -> None:

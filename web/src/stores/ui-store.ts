@@ -29,6 +29,9 @@ interface UIState {
   selectedDate: string | null;
   selectedViewType: "daily" | "weekly" | "monthly";
 
+  // Config panel state
+  configPanelOpen: boolean;
+
   // Command palette state
   commandPaletteOpen: boolean;
   recentEntities: string[];
@@ -59,6 +62,10 @@ interface UIState {
   // Date/view selection actions
   setSelectedDate: (date: string | null) => void;
   setSelectedViewType: (type: "daily" | "weekly" | "monthly") => void;
+
+  // Config panel actions
+  toggleConfigPanel: () => void;
+  setConfigPanelOpen: (open: boolean) => void;
 
   // Command palette actions
   toggleCommandPalette: () => void;
@@ -103,6 +110,9 @@ export const useUIStore = create<UIState>()(
       // Date/view selection defaults
       selectedDate: null,
       selectedViewType: "daily",
+
+      // Config panel defaults
+      configPanelOpen: false,
 
       // Command palette defaults
       commandPaletteOpen: false,
@@ -182,6 +192,12 @@ export const useUIStore = create<UIState>()(
       // Date/view selection actions
       setSelectedDate: (date) => set({ selectedDate: date }),
       setSelectedViewType: (type) => set({ selectedViewType: type }),
+
+      // Config panel actions
+      toggleConfigPanel: () =>
+        set((s) => ({ configPanelOpen: !s.configPanelOpen })),
+
+      setConfigPanelOpen: (open) => set({ configPanelOpen: open }),
 
       // Command palette actions
       toggleCommandPalette: () =>
