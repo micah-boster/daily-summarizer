@@ -162,6 +162,8 @@ export function CommandPalette() {
   const openFormPanel = useUIStore((s) => s.openFormPanel);
   const setShowMergeReview = useUIStore((s) => s.setShowMergeReview);
   const addRecentDate = useUIStore((s) => s.addRecentDate);
+  const setSelectedDate = useUIStore((s) => s.setSelectedDate);
+  const setSelectedViewType = useUIStore((s) => s.setSelectedViewType);
 
   const [search, setSearch] = useState("");
 
@@ -257,10 +259,10 @@ export function CommandPalette() {
       setOpen(false);
       addRecentDate(dateStr);
       setActiveTab("summaries");
-      // Navigation to specific date is handled by the summary view
-      // by reading the active tab state change
+      setSelectedDate(dateStr);
+      setSelectedViewType("daily");
     },
-    [setOpen, addRecentDate, setActiveTab],
+    [setOpen, addRecentDate, setActiveTab, setSelectedDate, setSelectedViewType],
   );
 
   const handleCreateEntity = useCallback(() => {
