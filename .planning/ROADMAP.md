@@ -618,7 +618,7 @@ Phases 24-29 execute sequentially: 24 -> 25 -> 26 -> 27 -> 28 -> 29.
 | 23.1. Milestone Audit Gap Closure | v2.0 | 1/1 | Complete | 2026-04-08 |
 | 24. FastAPI Skeleton + Summary API | 2/2 | Complete    | 2026-04-08 | - |
 | 25. Next.js Scaffold + Summary View | v3.0 | 0/TBD | Not started | - |
-| 26. Entity API + Entity Browser | v3.0 | 0/TBD | Not started | - |
+| 26. Entity API + Entity Browser | 2/3 | In Progress|  | - |
 | 27. Entity Management UI | v3.0 | 0/TBD | Not started | - |
 | 28. Pipeline Run Management | v3.0 | 0/TBD | Not started | - |
 | 29. Config Management + Polish | v3.0 | 0/TBD | Not started | - |
