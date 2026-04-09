@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { API_BASE } from "@/lib/api";
 import { usePipelineStore, type PipelineEvent } from "@/stores/pipeline-store";
@@ -137,4 +137,32 @@ export function usePipelineRun() {
     triggerRun,
     isRunning: store.status === "running",
   };
+}
+
+export interface RunResponse {
+  id: string;
+  target_date: string;
+  status: "running" | "complete" | "failed";
+  stages: Array<{
+    name: string;
+    status: "pending" | "running" | "complete" | "failed";
+    elapsed_s: number | null;
+  }>;
+  started_at: string;
+  completed_at: string | null;
+  duration_s: number | null;
+  error_message: string | null;
+  error_stage: string | null;
+}
+
+export function useRunHistory() {
+  return useQuery<RunResponse[]>({
+    queryKey: ["pipeline-runs"],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE}/runs?limit=14`);
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      return res.json() as Promise<RunResponse[]>;
+    },
+    refetchInterval: 30_000,
+  });
 }
