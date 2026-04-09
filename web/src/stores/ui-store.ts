@@ -13,6 +13,15 @@ interface UIState {
   entityTypeFilter: string | null;
   entitySort: "activity" | "name";
 
+  // Entity form panel state
+  formPanelOpen: boolean;
+  formPanelMode: "create" | "edit";
+  formPanelEntityId: string | null;
+
+  // Entity delete dialog state
+  deleteDialogOpen: boolean;
+  deleteDialogEntityId: string | null;
+
   toggleLeftNav: () => void;
   toggleRightSidebar: () => void;
   toggleSection: (id: string) => void;
@@ -23,6 +32,14 @@ interface UIState {
   selectEntity: (id: string | null) => void;
   setEntityTypeFilter: (type: string | null) => void;
   setEntitySort: (sort: "activity" | "name") => void;
+
+  // Entity form panel actions
+  openFormPanel: (mode: "create" | "edit", entityId?: string | null) => void;
+  closeFormPanel: () => void;
+
+  // Entity delete dialog actions
+  openDeleteDialog: (entityId: string) => void;
+  closeDeleteDialog: () => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -45,6 +62,15 @@ export const useUIStore = create<UIState>()(
       selectedEntityId: null,
       entityTypeFilter: null,
       entitySort: "activity",
+
+      // Entity form panel defaults
+      formPanelOpen: false,
+      formPanelMode: "create",
+      formPanelEntityId: null,
+
+      // Entity delete dialog defaults
+      deleteDialogOpen: false,
+      deleteDialogEntityId: null,
 
       toggleLeftNav: () =>
         set((s) => ({ leftNavCollapsed: !s.leftNavCollapsed })),
@@ -75,6 +101,33 @@ export const useUIStore = create<UIState>()(
       setEntityTypeFilter: (type) => set({ entityTypeFilter: type }),
 
       setEntitySort: (sort) => set({ entitySort: sort }),
+
+      // Entity form panel actions
+      openFormPanel: (mode, entityId = null) =>
+        set({
+          formPanelOpen: true,
+          formPanelMode: mode,
+          formPanelEntityId: entityId ?? null,
+        }),
+
+      closeFormPanel: () =>
+        set({
+          formPanelOpen: false,
+          formPanelEntityId: null,
+        }),
+
+      // Entity delete dialog actions
+      openDeleteDialog: (entityId) =>
+        set({
+          deleteDialogOpen: true,
+          deleteDialogEntityId: entityId,
+        }),
+
+      closeDeleteDialog: () =>
+        set({
+          deleteDialogOpen: false,
+          deleteDialogEntityId: null,
+        }),
     }),
     {
       name: "ui-state",
