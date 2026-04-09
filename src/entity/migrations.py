@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def _get_version(conn: sqlite3.Connection) -> int:
@@ -113,10 +113,36 @@ def _migrate_v1_to_v2(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_v2_to_v3(conn: sqlite3.Connection) -> None:
+    """Add pipeline_runs table for tracking pipeline execution history."""
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS pipeline_runs (
+            id TEXT PRIMARY KEY,
+            target_date TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'running',
+            stages_json TEXT,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            duration_s REAL,
+            error_message TEXT,
+            error_stage TEXT,
+            pid INTEGER
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_pipeline_runs_status
+            ON pipeline_runs(status);
+        CREATE INDEX IF NOT EXISTS idx_pipeline_runs_started
+            ON pipeline_runs(started_at DESC);
+        """
+    )
+
+
 # Ordered list of migration functions. Index + 1 = target version.
 MIGRATIONS: list = [
     _migrate_v0_to_v1,
     _migrate_v1_to_v2,
+    _migrate_v2_to_v3,
 ]
 
 # Safety check: migration count must match declared schema version.
