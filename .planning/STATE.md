@@ -22,12 +22,12 @@ See: .planning/PROJECT.md (updated 2026-04-08)
 
 ## Current Position
 
-Phase: 27 (Entity Management UI) -- Plan 01 complete (1/4 plans done)
-Plan: 01 complete
+Phase: 27 (Entity Management UI) -- Plan 03 complete (3/4 plans done)
+Plan: 03 complete
 Status: In progress
-Last activity: 2026-04-08 -- API foundation + frontend infrastructure for entity management
+Last activity: 2026-04-09 -- Merge review UI with side-by-side comparison and queue flow
 
-Progress: [####################..........] 45/48 plans complete (44 prior + 1 Phase 27)
+Progress: [######################........] 47/48 plans complete (44 prior + 3 Phase 27)
 
 ## Performance Metrics
 
@@ -55,6 +55,10 @@ Progress: [####################..........] 45/48 plans complete (44 prior + 1 Ph
 - [Phase 26-03]: Significance thresholds: High >= 3.0, Medium >= 1.5; Confidence: green > 80%, yellow 50-80%, red < 50%
 - [Phase 27-01]: Fresh merge proposals use source:target encoded IDs (no DB record until approve/reject)
 - [Phase 27-01]: Approve endpoint lets user pick primary_entity_id (which entity survives merge)
+- [Phase 27-03]: Merge review uses local state for queue index (ephemeral), Zustand only for panel toggle
+- [Phase 27-02]: Sheet panel at 400px width keeps entity list visible alongside form
+- [Phase 27-02]: Optimistic alias removal with undo toast (5s window) rather than confirmation dialog
+- [Phase 27-02]: Modal state managed via Zustand slices (open/close + entityId tracking)
 
 ### Pending Todos
 
@@ -68,6 +72,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-08
-Stopped at: Completed 27-01-PLAN.md (API foundation + frontend infrastructure)
+Last session: 2026-04-09
+Stopped at: Completed 27-03-PLAN.md (Merge review UI)
 Resume file: None

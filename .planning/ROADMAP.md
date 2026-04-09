@@ -557,8 +557,8 @@ Plans:
   5. Command palette (Cmd+K) enables keyboard-first search for entities by name/alias, jump to any date, and trigger actions without touching the mouse
 **Pitfall Warnings**: Concurrent write locks (#1) -- use `BEGIN IMMEDIATE` for entity writes. Thread safety (#8) -- never share PipelineContext or mutable state across requests.
 **Plans**: 4 plans
-- [ ] 27-01-PLAN.md — API endpoints for entity CRUD, aliases, merge proposals + shadcn-ui components + apiMutate helper
-- [ ] 27-02-PLAN.md — Entity CRUD forms (slide-over panel), delete confirmation, alias chip management
+- [x] 27-01-PLAN.md — API endpoints for entity CRUD, aliases, merge proposals + shadcn-ui components + apiMutate helper
+- [x] 27-02-PLAN.md — Entity CRUD forms (slide-over panel), delete confirmation, alias chip management
 - [ ] 27-03-PLAN.md — Merge proposal review UI (side-by-side comparison, approve/reject queue)
 - [ ] 27-04-PLAN.md — Command palette (Cmd+K) with entity/date/action search and keyboard navigation
 
