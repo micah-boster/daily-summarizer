@@ -5,12 +5,15 @@ import { ChevronRight, Video, Calendar, BarChart3 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format, parseISO } from "date-fns";
 import type { SummaryResponse } from "@/lib/types";
+import { EntitySidebar } from "./entity-sidebar";
 
 interface RightSidebarProps {
   onCollapse: () => void;
   summary?: SummaryResponse | null;
   isLoading?: boolean;
   children?: ReactNode;
+  activeTab?: "summaries" | "entities";
+  entityId?: string | null;
 }
 
 export function RightSidebar({
@@ -18,12 +21,17 @@ export function RightSidebar({
   summary,
   isLoading,
   children,
+  activeTab = "summaries",
+  entityId,
 }: RightSidebarProps) {
+  const showEntity = activeTab === "entities" && entityId;
+  const headerTitle = showEntity ? "Entity Details" : "Summary Info";
+
   return (
     <div className="flex h-full flex-col border-l bg-background">
       {/* Header */}
       <div className="flex h-14 items-center justify-between border-b px-4">
-        <span className="text-sm font-semibold">Summary Info</span>
+        <span className="text-sm font-semibold">{headerTitle}</span>
         <button
           onClick={onCollapse}
           className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -35,7 +43,13 @@ export function RightSidebar({
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto p-4">
-        {isLoading ? (
+        {showEntity ? (
+          <EntitySidebar entityId={entityId} />
+        ) : activeTab === "entities" ? (
+          <p className="text-xs text-muted-foreground">
+            Select an entity to see details
+          </p>
+        ) : isLoading ? (
           <MetadataLoading />
         ) : summary?.sidecar ? (
           <SummaryMetadata summary={summary} />

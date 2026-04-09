@@ -8,6 +8,7 @@ import { SidebarRail } from "@/components/layout/sidebar-rail";
 import { SummaryView } from "@/components/summary/summary-view";
 import { MarkdownRenderer } from "@/components/summary/markdown-renderer";
 import { EmptyState } from "@/components/summary/empty-state";
+import { EntityScopedView } from "@/components/entity/entity-scoped-view";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUIStore } from "@/stores/ui-store";
@@ -25,6 +26,10 @@ export default function Home() {
   const rightCollapsed = useUIStore((s) => s.rightSidebarCollapsed);
   const toggleLeftNav = useUIStore((s) => s.toggleLeftNav);
   const toggleRightSidebar = useUIStore((s) => s.toggleRightSidebar);
+
+  const activeTab = useUIStore((s) => s.activeTab);
+  const selectedEntityId = useUIStore((s) => s.selectedEntityId);
+  const setActiveTab = useUIStore((s) => s.setActiveTab);
 
   const { data: summaryList } = useSummaryList();
 
@@ -78,6 +83,15 @@ export default function Home() {
     setSelectedWeekly(null);
   };
 
+  // Cross-link handler: entity evidence -> daily summary
+  const handleViewInSummary = (date: string) => {
+    setActiveTab("summaries");
+    handleSelectDaily(date);
+  };
+
+  // Determine center panel content
+  const showEntityView = activeTab === "entities" && selectedEntityId;
+
   return (
     <AppShell
       leftNav={
@@ -106,8 +120,10 @@ export default function Home() {
               onCollapse={toggleRightSidebar}
               summary={selectedType === "daily" ? summaryData : undefined}
               isLoading={selectedType === "daily" ? summaryLoading : false}
+              activeTab={activeTab}
+              entityId={selectedEntityId}
             >
-              {selectedType !== "daily" && (
+              {selectedType !== "daily" && activeTab === "summaries" && (
                 <p className="text-xs text-muted-foreground">
                   Select a daily summary for detailed metadata
                 </p>
@@ -118,20 +134,29 @@ export default function Home() {
       }
     >
       <ErrorBoundary>
-        {selectedType === "daily" && (
-          <SummaryView selectedDate={selectedDate} />
-        )}
-        {selectedType === "weekly" && selectedWeekly && (
-          <WeeklyView
-            year={selectedWeekly.year}
-            week={selectedWeekly.week}
+        {showEntityView ? (
+          <EntityScopedView
+            entityId={selectedEntityId}
+            onViewInSummary={handleViewInSummary}
           />
-        )}
-        {selectedType === "monthly" && selectedMonthly && (
-          <MonthlyView
-            year={selectedMonthly.year}
-            month={selectedMonthly.month}
-          />
+        ) : (
+          <>
+            {selectedType === "daily" && (
+              <SummaryView selectedDate={selectedDate} />
+            )}
+            {selectedType === "weekly" && selectedWeekly && (
+              <WeeklyView
+                year={selectedWeekly.year}
+                week={selectedWeekly.week}
+              />
+            )}
+            {selectedType === "monthly" && selectedMonthly && (
+              <MonthlyView
+                year={selectedMonthly.year}
+                month={selectedMonthly.month}
+              />
+            )}
+          </>
         )}
       </ErrorBoundary>
     </AppShell>
@@ -139,7 +164,7 @@ export default function Home() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Rollup views — fetch markdown and render                           */
+/*  Rollup views -- fetch markdown and render                          */
 /* ------------------------------------------------------------------ */
 
 function WeeklyView({ year, week }: { year: number; week: number }) {
