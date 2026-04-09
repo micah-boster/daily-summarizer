@@ -592,7 +592,10 @@ Plans:
   3. Run history page shows past runs with status (success/failed/running), duration, target date, and error details for failed runs
   4. If the SSE connection drops mid-run, reconnecting shows current status (not lost state)
 **Pitfall Warnings**: Server blocking (#2) -- pipeline MUST run in subprocess, never in-process. Event loop conflict (#3) -- use `await async_pipeline()` directly or subprocess, never nested `asyncio.run()`. Lost state (#12) -- persist run status to survive server restarts.
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 28-01-PLAN.md — Backend pipeline runner: subprocess isolation, SSE streaming, SQLite run persistence
+- [ ] 28-02-PLAN.md — Frontend trigger + progress: status bar, SSE hook, stage display
+- [ ] 28-03-PLAN.md — Run history: Runs tab in left nav, history table, error drill-down
 
 ### Phase 29: Config Management + Polish
 **Goal**: The v3.0 feature set is complete and demo-quality -- config is manageable from the browser, the UI is dark-mode ready, keyboard-navigable, and visually polished
