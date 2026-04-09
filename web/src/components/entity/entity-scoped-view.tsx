@@ -3,6 +3,8 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEntityScopedView } from "@/hooks/use-entities";
 import { EntityHeader } from "./entity-header";
+import { AliasChipList } from "./alias-chip-list";
+import { AliasInput } from "./alias-input";
 import { HighlightsSection } from "./highlights-section";
 import { CommitmentsSection } from "./commitments-section";
 import { ActivityTimeline } from "./activity-timeline";
@@ -38,8 +40,17 @@ export function EntityScopedView({
       <EntityHeader
         name={data.entity_name}
         entityType={data.entity_type}
+        entityId={data.entity_id}
         aliases={data.aliases}
       />
+
+      <div className="space-y-2">
+        <AliasChipList aliases={data.aliases} entityId={data.entity_id} />
+        <AliasInput
+          entityId={data.entity_id}
+          existingAliases={data.aliases}
+        />
+      </div>
 
       <Separator />
 
