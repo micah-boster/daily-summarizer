@@ -3,6 +3,9 @@
 import { Calendar, CalendarRange, CalendarDays, ChevronLeft } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NavHeader } from "@/components/nav/nav-header";
+import { NavTabSwitcher } from "@/components/nav/nav-tab-switcher";
+import { EntityFilterBar } from "@/components/nav/entity-filter-bar";
+import { EntityList } from "@/components/nav/entity-list";
 import { DateGroup } from "@/components/nav/date-group";
 import {
   DateListItem,
@@ -14,6 +17,7 @@ import {
   useWeeklyList,
   useMonthlyList,
 } from "@/hooks/use-summaries";
+import { useUIStore } from "@/stores/ui-store";
 
 interface LeftNavProps {
   selectedDate: string | null;
@@ -34,6 +38,8 @@ export function LeftNav({
   onSelectMonthly,
   onCollapse,
 }: LeftNavProps) {
+  const activeTab = useUIStore((s) => s.activeTab);
+
   const { data: dailyList, isLoading: dailyLoading } = useSummaryList();
   const { data: weeklyList, isLoading: weeklyLoading } = useWeeklyList();
   const { data: monthlyList, isLoading: monthlyLoading } = useMonthlyList();
@@ -54,93 +60,109 @@ export function LeftNav({
         </button>
       </div>
 
-      {/* Date nav header (prev/next + picker) */}
-      <NavHeader
-        selectedDate={selectedDate}
-        availableDates={availableDates}
-        onDateChange={onSelectDaily}
-      />
+      {/* Tab switcher */}
+      <NavTabSwitcher />
 
-      {/* Scrollable body */}
-      <div className="flex-1 overflow-y-auto py-2">
-        {/* Daily group */}
-        {dailyLoading ? (
-          <NavSkeleton />
-        ) : dailyList && dailyList.length > 0 ? (
-          <DateGroup
-            title="Daily"
-            icon={Calendar}
-            count={dailyList.length}
-            groupId="daily"
-          >
-            {dailyList.map((item) => (
-              <DateListItem
-                key={item.date}
-                date={item.date}
-                meetingCount={item.meeting_count}
-                commitmentCount={item.commitment_count}
-                isSelected={
-                  selectedType === "daily" && selectedDate === item.date
-                }
-                onClick={() => onSelectDaily(item.date)}
-              />
-            ))}
-          </DateGroup>
-        ) : null}
+      {/* Summaries content */}
+      {activeTab === "summaries" && (
+        <>
+          <NavHeader
+            selectedDate={selectedDate}
+            availableDates={availableDates}
+            onDateChange={onSelectDaily}
+          />
 
-        {/* Weekly group */}
-        {weeklyLoading ? (
-          <NavSkeleton />
-        ) : weeklyList && weeklyList.length > 0 ? (
-          <DateGroup
-            title="Weekly"
-            icon={CalendarRange}
-            count={weeklyList.length}
-            groupId="weekly"
-          >
-            {weeklyList.map((item) => {
-              const key = `w-${item.year}-${item.week_number}`;
-              return (
-                <WeeklyListItem
-                  key={key}
-                  weekLabel={item.week_label}
-                  dailyCount={item.daily_count}
-                  isSelected={selectedType === "weekly" && selectedKey === key}
-                  onClick={() =>
-                    onSelectWeekly(item.year, item.week_number)
-                  }
-                />
-              );
-            })}
-          </DateGroup>
-        ) : null}
+          <div className="flex-1 overflow-y-auto py-2">
+            {/* Daily group */}
+            {dailyLoading ? (
+              <NavSkeleton />
+            ) : dailyList && dailyList.length > 0 ? (
+              <DateGroup
+                title="Daily"
+                icon={Calendar}
+                count={dailyList.length}
+                groupId="daily"
+              >
+                {dailyList.map((item) => (
+                  <DateListItem
+                    key={item.date}
+                    date={item.date}
+                    meetingCount={item.meeting_count}
+                    commitmentCount={item.commitment_count}
+                    isSelected={
+                      selectedType === "daily" && selectedDate === item.date
+                    }
+                    onClick={() => onSelectDaily(item.date)}
+                  />
+                ))}
+              </DateGroup>
+            ) : null}
 
-        {/* Monthly group */}
-        {monthlyLoading ? (
-          <NavSkeleton />
-        ) : monthlyList && monthlyList.length > 0 ? (
-          <DateGroup
-            title="Monthly"
-            icon={CalendarDays}
-            count={monthlyList.length}
-            groupId="monthly"
-          >
-            {monthlyList.map((item) => {
-              const key = `m-${item.year}-${item.month}`;
-              return (
-                <MonthlyListItem
-                  key={key}
-                  monthLabel={item.month_label}
-                  isSelected={
-                    selectedType === "monthly" && selectedKey === key
-                  }
-                  onClick={() => onSelectMonthly(item.year, item.month)}
-                />
-              );
-            })}
-          </DateGroup>
-        ) : null}
-      </div>
+            {/* Weekly group */}
+            {weeklyLoading ? (
+              <NavSkeleton />
+            ) : weeklyList && weeklyList.length > 0 ? (
+              <DateGroup
+                title="Weekly"
+                icon={CalendarRange}
+                count={weeklyList.length}
+                groupId="weekly"
+              >
+                {weeklyList.map((item) => {
+                  const key = `w-${item.year}-${item.week_number}`;
+                  return (
+                    <WeeklyListItem
+                      key={key}
+                      weekLabel={item.week_label}
+                      dailyCount={item.daily_count}
+                      isSelected={selectedType === "weekly" && selectedKey === key}
+                      onClick={() =>
+                        onSelectWeekly(item.year, item.week_number)
+                      }
+                    />
+                  );
+                })}
+              </DateGroup>
+            ) : null}
+
+            {/* Monthly group */}
+            {monthlyLoading ? (
+              <NavSkeleton />
+            ) : monthlyList && monthlyList.length > 0 ? (
+              <DateGroup
+                title="Monthly"
+                icon={CalendarDays}
+                count={monthlyList.length}
+                groupId="monthly"
+              >
+                {monthlyList.map((item) => {
+                  const key = `m-${item.year}-${item.month}`;
+                  return (
+                    <MonthlyListItem
+                      key={key}
+                      monthLabel={item.month_label}
+                      isSelected={
+                        selectedType === "monthly" && selectedKey === key
+                      }
+                      onClick={() => onSelectMonthly(item.year, item.month)}
+                    />
+                  );
+                })}
+              </DateGroup>
+            ) : null}
+          </div>
+        </>
+      )}
+
+      {/* Entities content */}
+      {activeTab === "entities" && (
+        <>
+          <EntityFilterBar />
+          <div className="flex-1 overflow-y-auto py-2">
+            <EntityList />
+          </div>
+        </>
+      )}
     </div>
   );
 }
