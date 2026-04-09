@@ -22,12 +22,12 @@ See: .planning/PROJECT.md (updated 2026-04-08)
 
 ## Current Position
 
-Phase: 26 (Entity API + Entity Browser) -- Plan 03 complete (3/3 plans done)
-Plan: 03 complete
-Status: Phase 26 complete
-Last activity: 2026-04-08 -- Entity browser UI complete (tab switcher, scoped view, evidence drill-down)
+Phase: 27 (Entity Management UI) -- Plan 01 complete (1/4 plans done)
+Plan: 01 complete
+Status: In progress
+Last activity: 2026-04-08 -- API foundation + frontend infrastructure for entity management
 
-Progress: [####################..........] 44/44 plans complete (41 prior + 3 Phase 26)
+Progress: [####################..........] 45/48 plans complete (44 prior + 1 Phase 27)
 
 ## Performance Metrics
 
@@ -53,6 +53,8 @@ Progress: [####################..........] 44/44 plans complete (41 prior + 3 Ph
 - [Phase 26-03]: Reused DateGroup collapsible pattern for entity type grouping
 - [Phase 26-03]: Local React state for timeline expand/collapse, global store for tab/filter/sort
 - [Phase 26-03]: Significance thresholds: High >= 3.0, Medium >= 1.5; Confidence: green > 80%, yellow 50-80%, red < 50%
+- [Phase 27-01]: Fresh merge proposals use source:target encoded IDs (no DB record until approve/reject)
+- [Phase 27-01]: Approve endpoint lets user pick primary_entity_id (which entity survives merge)
 
 ### Pending Todos
 
@@ -67,5 +69,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-04-08
-Stopped at: Completed 26-03-PLAN.md (entity browser UI)
+Stopped at: Completed 27-01-PLAN.md (API foundation + frontend infrastructure)
 Resume file: None

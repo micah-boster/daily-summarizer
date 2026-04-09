@@ -623,6 +623,6 @@ Phases 24-29 execute sequentially: 24 -> 25 -> 26 -> 27 -> 28 -> 29.
 | 24. FastAPI Skeleton + Summary API | 2/2 | Complete    | 2026-04-08 | - |
 | 25. Next.js Scaffold + Summary View | v3.0 | 0/TBD | Not started | - |
 | 26. Entity API + Entity Browser | 3/3 | Complete   | 2026-04-09 | - |
-| 27. Entity Management UI | v3.0 | 0/TBD | Not started | - |
+| 27. Entity Management UI | 1/4 | In Progress|  | - |
 | 28. Pipeline Run Management | v3.0 | 0/TBD | Not started | - |
 | 29. Config Management + Polish | v3.0 | 0/TBD | Not started | - |

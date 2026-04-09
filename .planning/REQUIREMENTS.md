@@ -24,14 +24,14 @@
 - [x] **NAV-02**: Left nav shows entities grouped by type (partners, people, initiatives) with activity indicators
 - [x] **NAV-03**: Selecting an entity in left nav opens its scoped view in center panel
 - [x] **NAV-04**: Context sidebar adapts to selection: related items, source evidence, timeline
-- [ ] **NAV-05**: Command palette (Cmd+K) for keyboard-first entity search, date jump, and action triggers
+- [x] **NAV-05**: Command palette (Cmd+K) for keyboard-first entity search, date jump, and action triggers
 
 ### Entity Management
 
 - [x] **ENT-01**: User can browse entity list with filtering by type and sorting by activity/name
 - [x] **ENT-02**: Entity scoped view shows highlights, open commitments, activity timeline with significance scoring
-- [ ] **ENT-03**: User can create, edit, and delete entities and their aliases from the browser
-- [ ] **ENT-04**: Merge proposal review UI with side-by-side comparison, similarity score, approve/reject
+- [x] **ENT-03**: User can create, edit, and delete entities and their aliases from the browser
+- [x] **ENT-04**: Merge proposal review UI with side-by-side comparison, similarity score, approve/reject
 - [x] **ENT-05**: Source evidence drill-down -- click a mention to see original context snippet with source type and confidence
 
 ### Pipeline Operations
@@ -98,11 +98,11 @@
 | NAV-02 | Phase 26 | Complete |
 | NAV-03 | Phase 26 | Complete |
 | NAV-04 | Phase 26 | Complete |
-| NAV-05 | Phase 27 | Pending |
+| NAV-05 | Phase 27 | Complete |
 | ENT-01 | Phase 26 | Complete |
 | ENT-02 | Phase 26 | Complete |
-| ENT-03 | Phase 27 | Pending |
-| ENT-04 | Phase 27 | Pending |
+| ENT-03 | Phase 27 | Complete |
+| ENT-04 | Phase 27 | Complete |
 | ENT-05 | Phase 26 | Complete |
 | PIPE-01 | Phase 28 | Pending |
 | PIPE-02 | Phase 28 | Pending |
