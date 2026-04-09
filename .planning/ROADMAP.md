@@ -483,7 +483,7 @@ Plans:
 **Milestone Goal:** A polished, demo-quality web UI that replaces the CLI as the daily interface -- browse summaries, manage entities, configure the pipeline, and trigger runs from the browser.
 
 - [x] **Phase 24: FastAPI Skeleton + Summary API** - App factory, CORS, dependency injection, summary read endpoints, SQLite busy_timeout hardening (completed 2026-04-08)
-- [ ] **Phase 25: Next.js Scaffold + Summary View** - Three-column layout shell, daily summary rendering, date navigation, roll-up browsing
+- [x] **Phase 25: Next.js Scaffold + Summary View** - Three-column layout shell, daily summary rendering, date navigation, roll-up browsing
 - [ ] **Phase 26: Entity API + Entity Browser** - Entity list/scoped view endpoints, nav sidebar with activity indicators, context sidebar
 - [ ] **Phase 27: Entity Management UI** - Entity CRUD forms, merge proposal review, alias management, command palette
 - [ ] **Phase 28: Pipeline Run Management** - Pipeline trigger endpoint, SSE status streaming, subprocess isolation, run history
@@ -522,10 +522,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 25-01-PLAN.md -- Install frontend deps, create data layer (API client, types, hooks, Zustand store, providers), add roll-up API endpoints
-- [ ] 25-02-PLAN.md -- Three-column layout shell with collapsible sidebars and icon rails
-- [ ] 25-03-PLAN.md -- Summary view with structured cards, markdown renderer, error boundaries, loading skeletons, metadata sidebar
-- [ ] 25-04-PLAN.md -- Date navigation: grouped date list (Daily/Weekly/Monthly), prev/next arrows, calendar date picker
+- [x] 25-01-PLAN.md -- Install frontend deps, create data layer (API client, types, hooks, Zustand store, providers), add roll-up API endpoints
+- [x] 25-02-PLAN.md -- Three-column layout shell with collapsible sidebars and icon rails
+- [x] 25-03-PLAN.md -- Summary view with structured cards, markdown renderer, error boundaries, loading skeletons, metadata sidebar
+- [x] 25-04-PLAN.md -- Date navigation: grouped date list (Daily/Weekly/Monthly), prev/next arrows, calendar date picker
 
 ### Phase 26: Entity API + Entity Browser
 **Goal**: The entity navigation experience works end-to-end -- user sees entities in the left nav, clicks one, and sees its scoped view in the center panel with contextual details in the right sidebar
