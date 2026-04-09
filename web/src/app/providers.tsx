@@ -3,6 +3,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { CommandPalette } from "@/components/command/command-palette";
+import { EntityFormPanel } from "@/components/entity/entity-form-panel";
+import { EntityDeleteDialog } from "@/components/entity/entity-delete-dialog";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -21,6 +23,8 @@ export function Providers({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       {children}
       <CommandPalette />
+      <EntityFormPanel />
+      <EntityDeleteDialog />
     </QueryClientProvider>
   );
 }
