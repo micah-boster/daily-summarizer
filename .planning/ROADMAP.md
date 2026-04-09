@@ -556,7 +556,11 @@ Plans:
   4. User can add and remove aliases for any entity from the entity detail view
   5. Command palette (Cmd+K) enables keyboard-first search for entities by name/alias, jump to any date, and trigger actions without touching the mouse
 **Pitfall Warnings**: Concurrent write locks (#1) -- use `BEGIN IMMEDIATE` for entity writes. Thread safety (#8) -- never share PipelineContext or mutable state across requests.
-**Plans**: TBD
+**Plans**: 4 plans
+- [ ] 27-01-PLAN.md — API endpoints for entity CRUD, aliases, merge proposals + shadcn-ui components + apiMutate helper
+- [ ] 27-02-PLAN.md — Entity CRUD forms (slide-over panel), delete confirmation, alias chip management
+- [ ] 27-03-PLAN.md — Merge proposal review UI (side-by-side comparison, approve/reject queue)
+- [ ] 27-04-PLAN.md — Command palette (Cmd+K) with entity/date/action search and keyboard navigation
 
 ### Phase 28: Pipeline Run Management
 **Goal**: Users can trigger and monitor pipeline runs from the browser -- fire-and-forget with real-time status updates, never blocking the API server
