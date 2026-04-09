@@ -131,3 +131,31 @@ class RelatedEntityItem(BaseModel):
     name: str
     entity_type: str
     co_mention_count: int = 0
+
+
+class EntityResponse(BaseModel):
+    """Returned on entity create/update."""
+
+    entity_id: str
+    name: str
+    entity_type: str
+
+
+class AliasResponse(BaseModel):
+    """Returned on alias create."""
+
+    alias_id: str
+    entity_id: str
+    alias: str
+
+
+class MergeProposalResponse(BaseModel):
+    """A merge proposal with enriched entity details."""
+
+    proposal_id: str
+    source_entity: EntityListItem
+    target_entity: EntityListItem
+    score: float
+    reason: str | None = None
+    status: str
+    created_at: str

@@ -1,14 +1,19 @@
-"""Entity list, scoped view, and related entity endpoints."""
+"""Entity list, scoped view, related entity, and CRUD endpoints."""
 
 from __future__ import annotations
+
+import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.api.deps import get_entity_repo
+from src.api.models.requests import AddAliasRequest, CreateEntityRequest, UpdateEntityRequest
 from src.api.models.responses import (
     ActivityDayResponse,
     ActivityItemResponse,
+    AliasResponse,
     EntityListItem,
+    EntityResponse,
     EntityScopedViewResponse,
     RelatedEntityItem,
 )
@@ -37,6 +42,113 @@ def list_entities(
         )
         for e in enriched
     ]
+
+
+@router.post("", response_model=EntityResponse, status_code=201)
+def create_entity(
+    body: CreateEntityRequest,
+    repo: EntityRepository = Depends(get_entity_repo),
+) -> EntityResponse:
+    """Create a new entity."""
+    try:
+        entity = repo.add_entity(name=body.name, entity_type=body.entity_type)
+    except sqlite3.OperationalError:
+        raise HTTPException(status_code=503, detail="Database busy")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return EntityResponse(
+        entity_id=entity.id,
+        name=entity.name,
+        entity_type=str(entity.entity_type),
+    )
+
+
+@router.put("/{entity_id}", response_model=EntityResponse)
+def update_entity(
+    entity_id: str,
+    body: UpdateEntityRequest,
+    repo: EntityRepository = Depends(get_entity_repo),
+) -> EntityResponse:
+    """Update an entity's name and/or type."""
+    try:
+        entity = repo.update_entity(
+            entity_id=entity_id,
+            name=body.name,
+            entity_type=body.entity_type,
+        )
+    except sqlite3.OperationalError:
+        raise HTTPException(status_code=503, detail="Database busy")
+    if entity is None:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    return EntityResponse(
+        entity_id=entity.id,
+        name=entity.name,
+        entity_type=str(entity.entity_type),
+    )
+
+
+@router.delete("/{entity_id}", status_code=204)
+def delete_entity(
+    entity_id: str,
+    repo: EntityRepository = Depends(get_entity_repo),
+) -> None:
+    """Soft-delete an entity."""
+    try:
+        deleted = repo.remove_entity(entity_id)
+    except sqlite3.OperationalError:
+        raise HTTPException(status_code=503, detail="Database busy")
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+
+@router.post("/{entity_id}/aliases", response_model=AliasResponse, status_code=201)
+def add_alias(
+    entity_id: str,
+    body: AddAliasRequest,
+    repo: EntityRepository = Depends(get_entity_repo),
+) -> AliasResponse:
+    """Add an alias to an entity."""
+    try:
+        alias = repo.add_alias(entity_id=entity_id, alias=body.alias)
+    except sqlite3.OperationalError:
+        raise HTTPException(status_code=503, detail="Database busy")
+    except ValueError as exc:
+        detail = str(exc)
+        if "already exists" in detail.lower():
+            raise HTTPException(status_code=409, detail=detail)
+        raise HTTPException(status_code=404, detail=detail)
+    return AliasResponse(
+        alias_id=alias.id,
+        entity_id=alias.entity_id,
+        alias=alias.alias,
+    )
+
+
+@router.delete("/{entity_id}/aliases/{alias}", status_code=204)
+def remove_alias(
+    entity_id: str,
+    alias: str,
+    repo: EntityRepository = Depends(get_entity_repo),
+) -> None:
+    """Remove an alias from an entity."""
+    try:
+        removed = repo.remove_alias(alias)
+    except sqlite3.OperationalError:
+        raise HTTPException(status_code=503, detail="Database busy")
+    if not removed:
+        raise HTTPException(status_code=404, detail="Alias not found")
+
+
+@router.get("/unmatched-mentions", response_model=list[str])
+def get_unmatched_mentions(
+    repo: EntityRepository = Depends(get_entity_repo),
+) -> list[str]:
+    """Return mention source names not matching any entity or alias.
+
+    TODO: Implement full SQL join query against entity_mentions, entities,
+    and aliases to find truly unmatched names. For now returns empty list.
+    """
+    return []
 
 
 @router.get("/{entity_id}", response_model=EntityScopedViewResponse)

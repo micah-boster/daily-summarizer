@@ -132,6 +132,37 @@ class EntityRepository:
         rows = self._conn.execute(query, params).fetchall()
         return [self._row_to_entity(row) for row in rows]
 
+    def update_entity(
+        self,
+        entity_id: str,
+        name: str | None = None,
+        entity_type: str | None = None,
+    ) -> "Entity | None":
+        """Update an entity's name and/or type. Returns updated entity or None."""
+        entity = self.get_by_id(entity_id)
+        if entity is None:
+            return None
+
+        new_name = name.strip() if name else entity.name
+        new_type = entity_type if entity_type else str(entity.entity_type)
+        now = _now_utc()
+
+        self._conn.execute(
+            "BEGIN IMMEDIATE",
+        )
+        try:
+            self._conn.execute(
+                "UPDATE entities SET name = ?, entity_type = ?, updated_at = ? "
+                "WHERE id = ? AND deleted_at IS NULL",
+                (new_name, new_type, now, entity_id),
+            )
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
+
+        return self.get_by_id(entity_id)
+
     def remove_entity(self, entity_id: str) -> bool:
         """Soft-delete an entity by setting deleted_at."""
         now = _now_utc()
