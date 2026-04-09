@@ -36,7 +36,7 @@
 
 ### Pipeline Operations
 
-- [ ] **PIPE-01**: User can trigger a pipeline run from the browser and receive real-time status via SSE
+- [x] **PIPE-01**: User can trigger a pipeline run from the browser and receive real-time status via SSE
 - [ ] **PIPE-02**: Pipeline runs execute in isolation (subprocess/thread) -- never block the API server
 - [ ] **PIPE-03**: Run history is visible with status, duration, and date processed
 
@@ -104,7 +104,7 @@
 | ENT-03 | Phase 27 | Complete |
 | ENT-04 | Phase 27 | Complete |
 | ENT-05 | Phase 26 | Complete |
-| PIPE-01 | Phase 28 | Pending |
+| PIPE-01 | Phase 28 | Complete |
 | PIPE-02 | Phase 28 | Pending |
 | PIPE-03 | Phase 28 | Pending |
 | CFG-01 | Phase 29 | Pending |
