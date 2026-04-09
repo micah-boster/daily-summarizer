@@ -51,7 +51,7 @@
 - [x] **UX-01**: Dark mode with system preference detection and manual toggle
 - [ ] **UX-02**: Keyboard navigation across all three columns (j/k list traversal, h/l column focus, Enter/Esc)
 - [x] **UX-03**: Loading skeletons per panel, error boundaries per column, toast notifications for actions
-- [ ] **UX-04**: Design quality is demo-presentable -- consistent typography, spacing, and visual hierarchy
+- [x] **UX-04**: Design quality is demo-presentable -- consistent typography, spacing, and visual hierarchy
 
 ## v4.0 Requirements (Deferred)
 
@@ -113,7 +113,7 @@
 | UX-01 | Phase 29 | Complete |
 | UX-02 | Phase 29 | Pending |
 | UX-03 | Phase 27.1 | Complete |
-| UX-04 | Phase 29 | Pending |
+| UX-04 | Phase 29 | Complete |
 
 **Coverage:**
 - v3.0 requirements: 27 total

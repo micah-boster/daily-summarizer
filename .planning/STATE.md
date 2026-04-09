@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Web Interface
 status: unknown
-last_updated: "2026-04-09T15:54:02.926Z"
+last_updated: "2026-04-09T17:11:00Z"
 progress:
   total_phases: 19
   completed_phases: 18
@@ -22,12 +22,12 @@ See: .planning/PROJECT.md (updated 2026-04-08)
 
 ## Current Position
 
-Phase: 29 (Config Management Polish) -- Plan 02 complete
-Plan: 02 of Phase 29
+Phase: 29 (Config Management Polish) -- Plan 04 complete
+Plan: 04 of Phase 29
 Status: In progress
-Last activity: 2026-04-09 -- Dark mode with brand colors and three-state theme toggle
+Last activity: 2026-04-09 -- Visual polish: markdown typography, layout spacing, brand colors
 
-Progress: [##############################] 56/58 plans complete (54 prior + 2 Phase 29)
+Progress: [##############################] 58/58 plans complete (54 prior + 4 Phase 29)
 
 ## Performance Metrics
 
@@ -44,6 +44,8 @@ Progress: [##############################] 56/58 plans complete (54 prior + 2 Ph
 
 ### Decisions
 
+- [Phase 29-04]: Column borders moved from individual sidebars to app-shell for single source of truth
+- [Phase 29-04]: Markdown code uses 13px font-mono; blockquotes use brand green tint; tables use border-t per row
 - [Phase 29-02]: ThemeProvider wraps at top level with attribute='class' matching existing @custom-variant dark directive
 - [Phase 29-02]: Brand colors use oklch color space for perceptual uniformity across light/dark modes
 - [Phase 29-02]: Theme toggle cycles system->light->dark with mounted guard to prevent hydration mismatch
@@ -89,5 +91,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-04-09
-Stopped at: Completed 29-02-PLAN.md (Dark mode and brand colors)
+Stopped at: Completed 29-04-PLAN.md (Visual polish -- pending commits)
 Resume file: None
