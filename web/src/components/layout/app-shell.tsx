@@ -17,7 +17,7 @@ export function AppShell({ leftNav, children, rightSidebar }: AppShellProps) {
 
   return (
     <div
-      className="grid h-screen min-w-[1024px]"
+      className="grid h-screen min-w-[1024px] pb-10"
       style={{
         gridTemplateColumns: `${leftCollapsed ? "48px" : "280px"} 1fr ${rightCollapsed ? "48px" : "300px"}`,
       }}
