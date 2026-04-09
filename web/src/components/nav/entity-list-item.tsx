@@ -18,7 +18,7 @@ export function EntityListItemRow({ entity }: EntityListItemProps) {
 
   const isRecentlyActive =
     entity.last_active_date != null &&
-    differenceInDays(new Date(), parseISO(entity.last_active_date)) <= 7;
+    differenceInDays(new Date(), parseISO(entity.last_active_date)) <= 30;
 
   return (
     <button

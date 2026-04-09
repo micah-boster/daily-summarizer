@@ -70,8 +70,8 @@ function SummaryMetadata({ summary }: { summary: SummaryResponse }) {
   if (!sidecar) return null;
 
   const totalItems =
-    sidecar.decisions.length + sidecar.commitments.length + sidecar.tasks.length;
-  const entityMentions = sidecar.entity_summary.reduce(
+    (sidecar.decisions?.length ?? 0) + (sidecar.commitments?.length ?? 0) + (sidecar.tasks?.length ?? 0);
+  const entityMentions = (sidecar.entity_summary ?? []).reduce(
     (sum, e) => sum + e.mention_count,
     0,
   );
@@ -81,7 +81,7 @@ function SummaryMetadata({ summary }: { summary: SummaryResponse }) {
       {/* Sources Used */}
       <MetadataSection title="Sources">
         <div className="space-y-1.5">
-          {sidecar.source_meetings.map((m, i) => (
+          {(sidecar.source_meetings ?? []).map((m, i) => (
             <div key={i} className="flex items-center gap-2 text-xs">
               {m.has_transcript ? (
                 <Video className="h-3 w-3 text-muted-foreground" />
@@ -92,7 +92,7 @@ function SummaryMetadata({ summary }: { summary: SummaryResponse }) {
             </div>
           ))}
           <p className="mt-1 text-xs text-muted-foreground">
-            {sidecar.meeting_count} meetings
+            {sidecar.meeting_count ?? 0} meetings
           </p>
         </div>
       </MetadataSection>
@@ -123,7 +123,7 @@ function SummaryMetadata({ summary }: { summary: SummaryResponse }) {
         <div className="flex items-center gap-2">
           <BarChart3 className="h-3 w-3 text-muted-foreground" />
           <span className="text-xs text-muted-foreground">
-            {sidecar.transcript_count}/{sidecar.meeting_count} meetings with
+            {sidecar.transcript_count ?? 0}/{sidecar.meeting_count ?? 0} meetings with
             transcripts
           </span>
         </div>

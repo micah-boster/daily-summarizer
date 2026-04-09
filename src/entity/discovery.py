@@ -50,13 +50,19 @@ class EntityExtractionOutput(BaseModel):
 ENTITY_EXTRACTION_PROMPT = """Extract all companies, organizations, and individual people mentioned in the following synthesis text.
 
 For each entity:
-- name: The full formal name as it appears (e.g., "Affirm Inc", "Colin Roberts")
-- entity_type: "partner" for companies/organizations, "person" for individual people
+- name: The FULL name including last name whenever possible. If the text says "Colin" but context makes clear this is "Colin Roberts", use "Colin Roberts". Always prefer "FirstName LastName" over just "FirstName". Look at meeting titles, attendee lists, and context clues to infer last names. If only a first name is available, use just the first name.
+- entity_type: MUST be one of "partner" or "person"
+  - "person": ANY individual human being (e.g., "Colin Roberts", "Ohad Levy", "Shannon"). If it's a person's name, it is ALWAYS type "person" — even if they work at a partner company.
+  - "partner": ONLY companies, organizations, or products being discussed as business partners (e.g., "HubSpot", "Corecard")
 - confidence: 1.0 for explicitly named, 0.7 for contextually inferred, 0.4 for ambiguous
+
+CRITICAL: Individual people are NEVER type "partner". "Colin Roberts" is a person. "HubSpot" is a partner. Do not confuse a person who works at a partner with the partner company itself.
 
 EXCLUDE:
 - Internal team names (e.g., "engineering team", "product team")
-- Product names (e.g., "Slack", "Jira") unless they are the company being discussed as a partner
+- Software tools and vendors you USE but don't do business WITH (e.g., "Slack", "Notion", "Jira", "Metabase", "HubSpot" unless HubSpot is an actual business partner being discussed). If it's a tool in your tech stack, exclude it.
+- Product features or modules within tools (e.g., "ServiceHub", "MarketingHub", "Partner Hub")
+- Geographic locations, cities, states, event venues (e.g., "Delaware", "Wilmington", "New York")
 - Generic groups (e.g., "the board", "investors", "stakeholders")
 - Meeting room names
 - Your own organization's name
