@@ -22,12 +22,12 @@ See: .planning/PROJECT.md (updated 2026-04-08)
 
 ## Current Position
 
-Phase: 28 (Pipeline Run Management) -- Plan 02 complete (2/3 plans done)
-Plan: 02 complete
+Phase: 28 (Pipeline Run Management) -- Plan 02 complete (3/3 plans done)
+Plan: 03 ready
 Status: In progress
-Last activity: 2026-04-09 -- Frontend pipeline trigger and progress UI with SSE hook
+Last activity: 2026-04-09 -- Backend pipeline run infrastructure (subprocess, SSE, persistence)
 
-Progress: [##############################] 53/54 plans complete (51 prior + 2 Phase 28)
+Progress: [##############################] 54/54 plans complete (51 prior + 3 Phase 28)
 
 ## Performance Metrics
 
@@ -63,6 +63,10 @@ Progress: [##############################] 53/54 plans complete (51 prior + 2 Ph
 - [Phase 27-04]: Inline natural date parsing (no external library) for command palette date shortcuts
 - [Phase 27.1-01]: Lifted selectedDate/selectedViewType to Zustand store for command palette -> page.tsx bridge (NAV-05 fix)
 - [Phase 27.1]: All 6 orphaned/fixed requirements (SUM-01/02/04, NAV-01/05, UX-03) passed static code analysis verification
+- [Phase 28-01]: Subprocess isolation via sys.executable -m src.main with --json-progress for clean IPC
+- [Phase 28-01]: BEGIN EXCLUSIVE SQLite transaction for concurrent run mutex
+- [Phase 28-01]: 4 pipeline stages: ingest, synthesis, entity_processing, output
+- [Phase 28-01]: Connection-per-call pattern for pipeline_runner service (thread-safe)
 - [Phase 28-02]: Ephemeral Zustand store (no persist) for pipeline state -- run data is transient
 - [Phase 28-02]: EventSource native reconnection instead of custom retry logic
 - [Phase 28-02]: Fixed bottom status bar (40px) at z-50 with AppShell pb-10 offset
@@ -81,5 +85,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-04-09
-Stopped at: Completed 28-02-PLAN.md (Frontend pipeline trigger and progress UI)
+Stopped at: Completed 28-01-PLAN.md (Backend pipeline run infrastructure)
 Resume file: None
