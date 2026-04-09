@@ -150,3 +150,18 @@
 .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background-color: oklch(0.6 0 0 / 60%);
 }
+
+/* Markdown content scoped styles */
+.markdown-content > *:first-child {
+  margin-top: 0;
+}
+.markdown-content > *:last-child {
+  margin-bottom: 0;
+}
+.markdown-content li > ul,
+.markdown-content li > ol {
+  margin-top: 0.375rem;
+}
+.markdown-content li > p {
+  margin-bottom: 0.25rem;
+}

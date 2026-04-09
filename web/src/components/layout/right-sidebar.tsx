@@ -28,9 +28,9 @@ export function RightSidebar({
   const headerTitle = showEntity ? "Entity Details" : "Summary Info";
 
   return (
-    <div className="flex h-full flex-col border-l bg-background">
+    <div className="flex h-full flex-col bg-background">
       {/* Header */}
-      <div className="flex h-14 items-center justify-between border-b px-4">
+      <div className="flex h-14 items-center justify-between border-b border-border px-4">
         <span className="text-sm font-semibold">{headerTitle}</span>
         <button
           onClick={onCollapse}

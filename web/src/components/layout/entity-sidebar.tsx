@@ -31,7 +31,7 @@ export function EntitySidebar({ entityId }: EntitySidebarProps) {
     <div className="space-y-5">
       {/* Entity type */}
       <MetadataSection title="Type">
-        <span className="text-xs font-medium uppercase tracking-wider">
+        <span className="inline-block rounded-md bg-accent/10 px-2 py-0.5 text-xs font-medium uppercase tracking-wider text-accent-foreground">
           {entityData.entity_type}
         </span>
       </MetadataSection>
@@ -43,7 +43,7 @@ export function EntitySidebar({ entityId }: EntitySidebarProps) {
             {entityData.aliases.map((alias) => (
               <span
                 key={alias}
-                className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                className="rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground"
               >
                 {alias}
               </span>
@@ -85,7 +85,7 @@ export function EntitySidebar({ entityId }: EntitySidebarProps) {
               <button
                 key={r.entity_id}
                 onClick={() => selectEntity(r.entity_id)}
-                className="rounded-full bg-muted px-2 py-1 text-xs cursor-pointer transition-colors hover:bg-accent"
+                className="cursor-pointer rounded-full bg-muted px-2.5 py-1 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
               >
                 {r.name}{" "}
                 <span className="text-muted-foreground">

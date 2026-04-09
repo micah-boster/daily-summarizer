@@ -24,42 +24,60 @@ interface MarkdownRendererProps {
 }
 
 const components: Components = {
+  h1: ({ children, ...props }) => (
+    <h1
+      className="mt-8 mb-4 text-xl font-semibold tracking-tight"
+      {...props}
+    >
+      {children}
+    </h1>
+  ),
   h2: ({ children, ...props }) => (
     <h2
-      className="sticky top-0 z-10 border-b bg-background/95 py-2 text-lg font-semibold backdrop-blur-sm"
+      className="sticky top-0 z-10 mt-8 mb-3 border-b border-border bg-background/95 pb-2 text-lg font-semibold tracking-tight backdrop-blur-sm"
       {...props}
     >
       {children}
     </h2>
   ),
   h3: ({ children, ...props }) => (
-    <h3 className="mb-2 mt-4 text-base font-medium" {...props}>
+    <h3 className="mt-6 mb-2 text-base font-medium" {...props}>
       {children}
     </h3>
   ),
+  h4: ({ children, ...props }) => (
+    <h4 className="mt-4 mb-1.5 text-sm font-medium" {...props}>
+      {children}
+    </h4>
+  ),
   p: ({ children, ...props }) => (
-    <p className="mb-3 text-sm leading-relaxed" {...props}>
+    <p className="mb-4 text-sm leading-relaxed" {...props}>
       {children}
     </p>
   ),
+  strong: ({ children, ...props }) => (
+    <strong className="font-semibold" {...props}>
+      {children}
+    </strong>
+  ),
   ul: ({ children, ...props }) => (
-    <ul className="mb-3 list-disc pl-5 text-sm" {...props}>
+    <ul className="mb-4 list-disc space-y-1.5 pl-5 text-sm" {...props}>
       {children}
     </ul>
   ),
   ol: ({ children, ...props }) => (
-    <ol className="mb-3 list-decimal pl-5 text-sm" {...props}>
+    <ol className="mb-4 list-decimal space-y-1.5 pl-5 text-sm" {...props}>
       {children}
     </ol>
   ),
   li: ({ children, ...props }) => (
-    <li className="text-sm leading-relaxed" {...props}>
+    <li className="pl-1 text-sm leading-relaxed" {...props}>
       {children}
     </li>
   ),
   blockquote: ({ children, ...props }) => (
     <blockquote
-      className="mb-3 border-l-2 border-muted-foreground/30 bg-muted/30 py-1 pl-4 italic"
+      className="mb-4 border-l-2 border-primary/40 bg-primary/5 py-2 pl-4 text-sm italic text-muted-foreground"
       {...props}
     >
       {children}
@@ -71,7 +89,7 @@ const components: Components = {
     if (isBlock) {
       return (
         <code
-          className={`block overflow-x-auto rounded-md bg-muted p-4 text-xs ${className ?? ""}`}
+          className={`block text-[13px] font-mono leading-relaxed ${className ?? ""}`}
           {...props}
         >
           {children}
@@ -80,7 +98,7 @@ const components: Components = {
     }
     return (
       <code
-        className="rounded bg-muted px-1.5 py-0.5 text-xs"
+        className="rounded-md bg-muted px-1.5 py-0.5 text-[13px] font-mono"
         {...props}
       >
         {children}
@@ -88,13 +106,16 @@ const components: Components = {
     );
   },
   pre: ({ children, ...props }) => (
-    <pre className="mb-3 overflow-x-auto rounded-md bg-muted" {...props}>
+    <pre
+      className="mb-4 overflow-x-auto rounded-lg border border-border bg-muted/50 p-4"
+      {...props}
+    >
       {children}
     </pre>
   ),
   a: ({ children, ...props }) => (
     <a
-      className="text-primary underline hover:no-underline"
+      className="text-primary underline decoration-primary/30 transition-colors hover:decoration-primary"
       target="_blank"
       rel="noopener noreferrer"
       {...props}
@@ -102,8 +123,11 @@ const components: Components = {
       {children}
     </a>
   ),
+  hr: ({ ...props }) => (
+    <hr className="my-8 border-t border-border" {...props} />
+  ),
   table: ({ children, ...props }) => (
-    <div className="mb-3 overflow-x-auto">
+    <div className="mb-4 overflow-x-auto rounded-lg border border-border">
       <table className="w-full border-collapse text-sm" {...props}>
         {children}
       </table>
@@ -111,14 +135,14 @@ const components: Components = {
   ),
   th: ({ children, ...props }) => (
     <th
-      className="border border-border bg-muted px-3 py-2 text-left text-xs font-medium"
+      className="bg-muted/50 px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider"
       {...props}
     >
       {children}
     </th>
   ),
   td: ({ children, ...props }) => (
-    <td className="border border-border px-3 py-2 text-sm" {...props}>
+    <td className="border-t border-border px-4 py-2.5 text-sm" {...props}>
       {children}
     </td>
   ),

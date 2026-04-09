@@ -45,7 +45,7 @@ export function StatusBar() {
   const toggleConfigPanel = useUIStore((s) => s.toggleConfigPanel);
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 flex h-10 items-center justify-between border-t bg-muted/50 px-4 backdrop-blur-sm">
+    <div className="fixed bottom-0 left-0 right-0 z-50 flex h-10 items-center justify-between border-t border-border bg-card/80 px-4 backdrop-blur-sm">
       {/* Left: trigger + progress */}
       <div className="flex items-center gap-3">
         <RunTrigger />
