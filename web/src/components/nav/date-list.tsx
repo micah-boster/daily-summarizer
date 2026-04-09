@@ -28,6 +28,7 @@ export function DateListItem({
   return (
     <button
       onClick={onClick}
+      data-kb-item
       className={cn(
         "flex w-full flex-col gap-0.5 rounded-md px-3 py-2 text-left text-sm transition-colors",
         isSelected
@@ -74,6 +75,7 @@ export function WeeklyListItem({
   return (
     <button
       onClick={onClick}
+      data-kb-item
       className={cn(
         "flex w-full flex-col gap-0.5 rounded-md px-3 py-2 text-left text-sm transition-colors",
         isSelected
@@ -107,6 +109,7 @@ export function MonthlyListItem({
   return (
     <button
       onClick={onClick}
+      data-kb-item
       className={cn(
         "flex w-full rounded-md px-3 py-2 text-left text-sm font-medium transition-colors",
         isSelected

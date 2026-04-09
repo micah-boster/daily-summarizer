@@ -42,9 +42,9 @@
 
 ### Config Management
 
-- [ ] **CFG-01**: User can view current pipeline config (sources, channels, priorities) in the browser
-- [ ] **CFG-02**: User can edit config with full Pydantic validation -- invalid configs are rejected with structured errors
-- [ ] **CFG-03**: Config writes are atomic (temp file + rename) with backup of previous version
+- [x] **CFG-01**: User can view current pipeline config (sources, channels, priorities) in the browser
+- [x] **CFG-02**: User can edit config with full Pydantic validation -- invalid configs are rejected with structured errors
+- [x] **CFG-03**: Config writes are atomic (temp file + rename) with backup of previous version
 
 ### Quality & Polish
 
@@ -107,9 +107,9 @@
 | PIPE-01 | Phase 28 | Complete |
 | PIPE-02 | Phase 28 | Complete |
 | PIPE-03 | Phase 28 | Complete |
-| CFG-01 | Phase 29 | Pending |
-| CFG-02 | Phase 29 | Pending |
-| CFG-03 | Phase 29 | Pending |
+| CFG-01 | Phase 29 | Complete |
+| CFG-02 | Phase 29 | Complete |
+| CFG-03 | Phase 29 | Complete |
 | UX-01 | Phase 29 | Complete |
 | UX-02 | Phase 29 | Pending |
 | UX-03 | Phase 27.1 | Complete |

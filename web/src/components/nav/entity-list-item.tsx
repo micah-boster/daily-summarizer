@@ -26,6 +26,7 @@ export function EntityListItemRow({ entity }: EntityListItemProps) {
         selectEntity(entity.entity_id);
         setActiveTab("entities");
       }}
+      data-kb-item
       className={cn(
         "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors",
         isSelected

@@ -85,6 +85,7 @@ function RunRow({ run }: { run: RunResponse }) {
     <div>
       <button
         onClick={handleClick}
+        data-kb-item
         className={cn(
           "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs transition-colors",
           run.status === "running"
